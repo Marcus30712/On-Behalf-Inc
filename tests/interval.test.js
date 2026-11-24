@@ -144,13 +144,14 @@ test('research assignment adds research progress, not phone capacity', () => {
   // At 10:00 only the early phone agents (a0, a2) are on; late ones start at 12:00.
   assert.equal(baseline, 2);
   assert.equal(r.clients[A.id].agents, 2);
-  assert.equal(s.progress.research, 1);
+  const perInterval = 0.5 + (lead.skills.coaching + lead.skills.evaluation) / 2 / 20;
+  assert.ok(Math.abs(s.progress.research - perInterval) < 1e-9);
   assert.equal(s.progress.qa, 0); // QA is on the late shift, not on at 10:00
   assert.ok(lead.fatigue > fatigue);
   s.minute = H(15);
   stepInterval(s, flat);
   assert.equal(s.progress.qa, 1);
-  assert.equal(s.progress.research, 2);
+  assert.ok(Math.abs(s.progress.research - 2 * perInterval) < 1e-9);
 });
 
 test('same seed, same report', () => {

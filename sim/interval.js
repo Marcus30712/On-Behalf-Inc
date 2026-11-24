@@ -59,6 +59,9 @@ export function callsFor(client, day, minute, rng) {
   return client.callsPerDay * curve * weekMul * holiday * wobble;
 }
 
+// Research points per full interval of work: 0.5 + average(coaching, evaluation) / 20.
+const researchSkillMul = (p) => 0.5 + (p.skills.coaching + p.skills.evaluation) / 2 / 20;
+
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
 function isOpen(def, day, minute) {
@@ -148,7 +151,8 @@ export function stepInterval(state, rng) {
         if (openIds.has(a.clientId)) occupancy = results.get(a.clientId).occupancy;
         else share = 0;
       } else if (a && PROGRESS_KINDS.includes(a.kind) && share > 0) {
-        state.progress[a.kind] = (state.progress[a.kind] ?? 0) + share;
+        const gain = a.kind === 'research' ? share * researchSkillMul(p) : share;
+        state.progress[a.kind] = (state.progress[a.kind] ?? 0) + gain;
       }
       const worked = INTERVAL * share;
       if (worked > 0) applyWork(p, { minutes: worked, occupancy, mods });

@@ -9,7 +9,7 @@ import { endOfDay } from '../sim/day.js';
 import { resolveEvent } from '../sim/events.js';
 import { advanceHiring } from '../sim/hiring.js';
 import {
-  SALARY, monthEnd, dailyEconomy, reputation, isOver,
+  SALARY, monthEnd, dailyEconomy, reputation, isOver, lostClientMark, acceptClient,
 } from '../sim/economy.js';
 
 const GUREUM = 'gureum-travel';
@@ -162,13 +162,36 @@ test('reputation weighs met-rate, satisfaction and the penalty', () => {
   s.clients.forEach((c) => { c.satisfaction = 0; });
   assert.equal(reputation(s), 'D');
   // An inactive (lost) client's met-rate and satisfaction do not count, but
-  // each lost client keeps 15 off the score: 90 - 15 = 75 -> A, not S.
+  // a client lost in the last 180 days keeps 15 off the score: 90 - 15 = 75 -> A.
   s.clients[1].active = false;
+  s.clients[1].lostDay = s.day;
   s.clients[0].satisfaction = 75;
   s.history = monthHistory({ [GUREUM]: 22, [MULBIT]: 0 });
   assert.equal(reputation(s), 'A');
   s.clients[0].satisfaction = 74; // 74.6 -> B
   assert.equal(reputation(s), 'B');
+  s.clients[0].satisfaction = 75;
+  s.day += 179;
+  assert.equal(reputation(s), 'A', 'day 179 after the loss: still marked');
+  s.day += 1;
+  assert.equal(reputation(s), 'S', '180 days after the loss: the mark is gone');
+});
+
+test('a churned client is marked with the day it was lost, and the mark goes after 180 days', () => {
+  const s = makeState();
+  s.history = monthHistory({ [GUREUM]: 22, [MULBIT]: 22 });
+  s.clients[0].satisfaction = 15;
+  s.clients[1].satisfaction = 75;
+  s.churn = [{ clientId: GUREUM, workdaysLeft: 1 }];
+  dailyEconomy(s);
+  assert.equal(s.clients[0].active, false);
+  assert.equal(s.clients[0].lostDay, s.day);
+  assert.equal(lostClientMark(s), 15);
+  s.day += 180;
+  assert.equal(lostClientMark(s), 0);
+  // Taken back later (an accepted offer): no longer lost.
+  acceptClient(s, GUREUM);
+  assert.equal(s.clients[0].lostDay, undefined);
 });
 
 test('20 workdays at A or better bring one client offer; accepting adds the client', () => {

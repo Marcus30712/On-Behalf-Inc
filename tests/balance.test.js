@@ -1,6 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { runPolicy, wornDown, idleYearVerdict } from '../tools/autoplay.js';
+import {
+  runPolicy, wornDown, idleYearVerdict, fullFeeShare,
+} from '../tools/autoplay.js';
 
 const SEEDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 const SL_TARGET = 0.8; // both starting clients aim for 80%
@@ -56,4 +58,21 @@ test('hands-off play does not win a year', () => {
   assert.equal(v.poorer, SEEDS.length, `idle cash ${cash(idle)} vs sensible ${cash(sensible)}`);
   assert.ok(v.rankS <= 2, `idle reached the S milestone on ${v.rankS}/10 seeds`);
   assert.ok(v.lost >= 7, `idle lost someone or the game on ${v.lost}/10 seeds`);
+});
+
+test('sensible play that takes client offers can still reach S within a year', () => {
+  // Eight seats for three clients: every seed loses a client, which keeps 15
+  // off the reputation for 180 days; S comes back on the seeds that lose one early.
+  const runs = SEEDS.map((seed) => runPolicy({ seed, days: 360, policy: 'sensible', acceptOffers: true }));
+  const s = runs.filter((r) => r.rankS).length;
+  assert.ok(s >= 3, `S milestone on ${s}/10 seeds`);
+});
+
+test('sensible play keeps its fees over two years (calls stop growing after two quarters)', () => {
+  const runs = SEEDS.map((seed) => runPolicy({ seed, days: 720, policy: 'sensible' }));
+  assert.equal(runs.filter((r) => r.gameOver).length, 0);
+  for (const [from, to] of [[0, 360], [360, 720]]) {
+    const share = fullFeeShare(runs, from, to);
+    assert.ok(share >= 0.65, `full fee in ${(share * 100).toFixed(1)}% of client-months, days ${from}-${to}`);
+  }
 });

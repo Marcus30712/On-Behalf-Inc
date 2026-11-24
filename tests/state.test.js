@@ -67,6 +67,13 @@ test('a v1.0 save without the v1.1 fields still loads', () => {
   const s = deserialize(JSON.stringify(old));
   assert.ok(s);
   assert.equal(s.rankSStreak, undefined);
+  // A client lost before v1.1 has no lostDay: its mark runs from the load day.
+  const lost = structuredClone(old);
+  lost.day = 200;
+  lost.clients[1].active = false;
+  const t = deserialize(JSON.stringify(lost));
+  assert.equal(t.clients[1].lostDay, 200);
+  assert.equal(t.clients[0].lostDay, undefined);
 });
 
 test('broken or old saves load as null', () => {

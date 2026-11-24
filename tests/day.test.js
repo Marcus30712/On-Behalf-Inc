@@ -364,12 +364,15 @@ test('long-term wear: strained workdays add to it, other workdays ease it, weeke
   }
   assert.equal(tense.history.wear, 5, 'five workdays, not the weekend');
   assert.equal(calm.history.wear, 0);
-  const before = moraleOf(tense);
   tense.health = { kind: 'sick', daysLeft: 3 }; // off sick: not strained
   state.day = 7;
   endOfDay(state, never);
   assert.equal(tense.history.wear, 5 - WEAR.recover);
-  assert.ok(moraleOf(tense) > before - 1e-9);
+  // Morale is exactly WEAR.recover higher than it would be with yesterday's wear.
+  const unchanged = { ...tense, history: { ...tense.history, wear: 5 } };
+  assert.ok(moraleOf(tense) < 100 && moraleOf(unchanged) > 0);
+  assert.ok(Math.abs(moraleOf(tense) - moraleOf(unchanged) - WEAR.recover) < 1e-9);
+  assert.ok(Math.abs(tense.morale - moraleOf(tense)) < 1e-9, 'stored morale follows');
 });
 
 test('old saves without the new history field still work', () => {

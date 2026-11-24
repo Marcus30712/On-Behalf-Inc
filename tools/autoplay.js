@@ -17,7 +17,10 @@
 //   phone for the worst client while a client's recent met-rate is under 85%
 //   (calls grow every quarter, v1.1); hires into free seats, picks the first
 //   candidate, tries to keep people who hand in notice and declines new
-//   clients.
+//   clients (with acceptOffers, takes them).
+//
+// The checks also play sensible over 720 days (fees in years 1 and 2) and
+// sensible taking client offers (the S milestone after losing a client).
 import { pathToFileURL } from 'node:url';
 import { createGame, advance, act, view } from '../sim/game.js';
 
@@ -45,10 +48,12 @@ const mean = (xs) => (xs.length === 0 ? 0 : xs.reduce((s, x) => s + x, 0) / xs.l
 // decide at 09:00, play to 21:00 (the lead switches to research for two
 // hours), read the day's queues (on Fridays, plan next week's rest days),
 // then play through the night.
-export function runPolicy({ seed, days, policy }) {
+// `acceptOffers` (sensible only): take every new-client offer instead of
+// declining it.
+export function runPolicy({ seed, days, policy, acceptOffers = false }) {
   const state = createGame(seed);
   const sensible = policy === 'sensible';
-  const plan = sensible ? sensiblePlan(view(state)) : null;
+  const plan = sensible ? sensiblePlan(view(state), acceptOffers) : null;
   const tally = {
     seen: 0, sick: 0, sickDays: 0, burnouts: 0, burnoutLog: [], helped: 0, clinicHelped: 0, helpedNames: [], offers: 0, builtOn: {},
     left: 0, slSum: 0, slCount: 0, days: [], monthCash: [], minSatisfaction: 100,
@@ -107,7 +112,7 @@ export function runPolicy({ seed, days, policy }) {
 
 // Client-months that ended, and how many earned the full fee, by the month-end
 // rule of sim/economy.js applied to the recorded days.
-function feeMonths(days, today) {
+export function feeMonths(days, today) {
   const months = new Map();
   for (const d of days) {
     const month = Math.floor(d.day / MONTH);
@@ -131,6 +136,35 @@ function feeMonths(days, today) {
 export function wornDown(run, days = Infinity) {
   const burnouts = run.burnoutLog.filter((entry) => Number(entry.split(':')[0]) < days).length;
   return (!!run.gameOver && run.survivedDays < days) || burnouts >= 2;
+}
+
+// The first `days` days of a longer run, as a run of that length would report
+// them (the idle policy takes no decisions, so they are the same game).
+export function upTo(run, days) {
+  const survivedDays = Math.min(days, run.survivedDays);
+  const kept = run.days.filter((d) => d.day < days);
+  return {
+    ...run,
+    survivedDays,
+    gameOver: run.gameOver && run.survivedDays < days ? run.gameOver : null,
+    burnoutLog: run.burnoutLog.filter((entry) => Number(entry.split(':')[0]) < days),
+    days: kept,
+    feeMonths: feeMonths(kept, survivedDays),
+  };
+}
+
+// Share of ended client-months paid in full, over all runs, for months that
+// start in [from, to).
+export function fullFeeShare(runs, from = 0, to = Infinity) {
+  let full = 0;
+  let total = 0;
+  for (const r of runs) {
+    const end = Math.min(to, r.survivedDays);
+    const m = feeMonths(r.days.filter((d) => d.day >= from && d.day < end), end);
+    full += m.full;
+    total += m.total;
+  }
+  return total === 0 ? 0 : full / total;
 }
 
 // Hands-off play must not win a year (v1.1): on every seed it ends the year
@@ -179,8 +213,9 @@ function recordDay(v, tally) {
 
 // --- sensible policy -------------------------------------------------------
 
-function sensiblePlan(v) {
+function sensiblePlan(v, acceptOffers) {
   return {
+    acceptOffers,
     leadId: v.people.find((p) => p.role === 'lead')?.id,
     restOff: [], // [{ personId, shift }]: next Wednesday off, and the usual shift
     lastMove: -Infinity, // day of the last move by met-rate
@@ -190,7 +225,7 @@ function sensiblePlan(v) {
 const agentsOf = (v) => v.people.filter((p) => p.role === 'agent');
 
 function decide(state, v, plan, tally) {
-  answerInbox(state, v);
+  answerInbox(state, v, plan);
   moveToNeediest(state, view(state), plan, tally);
   balanceClients(state, view(state));
   qaOnPhone(state, view(state), tally);
@@ -201,14 +236,14 @@ function decide(state, v, plan, tally) {
   if (agentsOf(v).length < 8 && !v.hiring) act(state, { type: 'startHiring' });
 }
 
-function answerInbox(state, v) {
+function answerInbox(state, v, plan) {
   for (const e of v.inbox) {
     if (e.resolved) continue;
     let choice;
     if (e.id === 'holiday-leave') choice = 'grant';
     else if (e.id === 'resign-notice') choice = 'keep-trying';
     else if (e.id === 'candidate') choice = 'pick-1';
-    else if (e.id === 'client-offer') choice = 'decline';
+    else if (e.id === 'client-offer') choice = plan.acceptOffers ? 'accept' : 'decline';
     else if (e.id === 'friday-off') choice = 'keep';
     if (choice) act(state, { type: 'resolve', index: e.index, choiceId: choice });
   }
@@ -353,16 +388,19 @@ function main() {
     return ok;
   };
   const t0 = Date.now();
-  const idle = SEEDS.map((seed) => runPolicy({ seed, days: 180, policy: 'idle' }));
-  const sensible = SEEDS.map((seed) => runPolicy({ seed, days: 360, policy: 'sensible' }));
-  const firstMonth = SEEDS.map((seed) => runPolicy({ seed, days: 30, policy: 'idle' }));
   const idleYear = SEEDS.map((seed) => runPolicy({ seed, days: 360, policy: 'idle' }));
-  printRuns('idle, 180 days', idle);
-  printRuns('sensible, 360 days', sensible);
+  const idle = idleYear.map((r) => upTo(r, 180));
+  const firstMonth = idleYear.map((r) => upTo(r, 30));
+  const sensible = SEEDS.map((seed) => runPolicy({ seed, days: 360, policy: 'sensible' }));
+  const offers = SEEDS.map((seed) => runPolicy({ seed, days: 360, policy: 'sensible', acceptOffers: true }));
+  const twoYears = SEEDS.map((seed) => runPolicy({ seed, days: 720, policy: 'sensible' }));
   printRuns('idle, 360 days', idleYear);
+  printRuns('sensible, 360 days', sensible);
+  printRuns('sensible taking client offers, 360 days', offers);
+  printRuns('sensible, 720 days', twoYears);
 
   const target = 0.8;
-  const worn = idle.filter((r) => wornDown(r)).length;
+  const worn = idle.filter((r) => wornDown(r, 180)).length;
   const sensibleWorn = sensible.filter((r) => wornDown(r, 180)).length;
   const feeShare = (runs) => {
     const sum = runs.reduce((acc, r) => [acc[0] + r.feeMonths.full, acc[1] + r.feeMonths.total], [0, 0]);
@@ -376,6 +414,9 @@ function main() {
   const helpedPerSeed = mean(sensible.map((r) => r.helped));
   const cash12 = sensible.map((r) => r.monthCash[11] ?? r.cash);
   const year = idleYearVerdict(idleYear, sensible);
+  const offersS = offers.filter((r) => r.rankS).length;
+  const fee2 = [fullFeeShare(twoYears, 0, 360), fullFeeShare(twoYears, 360, 720)];
+  const over2 = twoYears.filter((r) => r.gameOver).length;
 
   console.log('\nfirst month, default roster (idle): met-share by weekday Mon..Fri',
     start.byWeekday.map(pct).join(' '), `| heavy days ${pct(start.heavy)} (${start.heavyDays}) vs ordinary ${pct(start.normal)}`);
@@ -407,6 +448,10 @@ function main() {
       `idle ends the year with less cash than sensible on every seed: ${year.poorer}/10 (idle ${idleYear.map((r) => Math.round(r.cash)).join(' ')})`),
     check(year.rankS <= 2, `idle reaches the S milestone on at most 2 seeds: ${year.rankS}/10`),
     check(year.lost >= 7, `idle loses someone (resignation) or the game within a year: ${year.lost}/10 seeds`),
+    check(offersS >= 3,
+      `sensible play that takes client offers still reaches the S milestone: ${offersS}/10 seeds (>= 3)`),
+    check(over2 === 0 && fee2.every((f) => f >= 0.65),
+      `sensible play over two years: fees in full year 1 ${pct(fee2[0])}, year 2 ${pct(fee2[1])} (each >= 65%), game over ${over2}/10`),
   ];
   console.log(`\n${results.filter(Boolean).length}/${results.length} checks pass (${((Date.now() - t0) / 1000).toFixed(1)} s)`);
   if (!results.every(Boolean)) process.exitCode = 1;

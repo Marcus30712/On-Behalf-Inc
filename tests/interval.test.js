@@ -53,7 +53,7 @@ test('weekday multipliers and wobble range', () => {
   assert.ok(Math.abs(callsFor(A, 1, H(11), { next: () => 1 }) - base * 1.15) < 1e-9);
 });
 
-test('calls grow a little every 90-day quarter, then hold after a year', () => {
+test('calls grow a little every 90-day quarter, then hold after two quarters', () => {
   const at = (day) => callsFor(A, day, H(11), flat) / (A.callsPerDay * CURVE[4]);
   const step = CALL_GROWTH.perQuarter;
   assert.ok(step > 0 && step <= 0.1, 'a little');
@@ -61,10 +61,11 @@ test('calls grow a little every 90-day quarter, then hold after a year', () => {
   const tuesday = (from) => from + ((8 - (from % 7)) % 7);
   assert.ok(Math.abs(at(1) - 1) < 1e-9);
   assert.ok(Math.abs(at(tuesday(84)) - 1) < 1e-9, 'day 85: still the first quarter');
+  assert.equal(CALL_GROWTH.quarters, 2, 'seats are fixed until v1.2: growth stops at two quarters');
   assert.ok(Math.abs(at(tuesday(90)) - (1 + step)) < 1e-9);
-  assert.ok(Math.abs(at(tuesday(270)) - (1 + 3 * step)) < 1e-9);
-  assert.ok(Math.abs(at(tuesday(360)) - (1 + CALL_GROWTH.quarters * step)) < 1e-9);
-  assert.ok(Math.abs(at(tuesday(900)) - (1 + CALL_GROWTH.quarters * step)) < 1e-9, 'holds');
+  assert.ok(Math.abs(at(tuesday(180)) - (1 + 2 * step)) < 1e-9);
+  assert.ok(Math.abs(at(tuesday(270)) - (1 + 2 * step)) < 1e-9, 'holds');
+  assert.ok(Math.abs(at(tuesday(900)) - (1 + 2 * step)) < 1e-9, 'holds');
 });
 
 test('outside opening hours nothing happens', () => {

@@ -32,9 +32,11 @@ export const CURVE = [
 const WEEKDAY_MUL = [1.15, 1.0, 1.0, 1.0, 0.9];
 
 // v1.1: clients grow. Each 90-day quarter of the game adds `perQuarter` of the
-// starting volume, for the first `quarters` quarters (then it holds), so a
-// roster that was enough in spring falls behind by winter unless it is run.
-export const CALL_GROWTH = { perQuarter: 0.07, quarters: 4 };
+// starting volume, for the first `quarters` quarters (then it holds at about
+// +14%), so a roster that was enough in spring falls behind by autumn unless
+// it is run. Seats are fixed until office expansion (v1.2), which will
+// revisit how long calls keep growing.
+export const CALL_GROWTH = { perQuarter: 0.07, quarters: 2 };
 const QUARTER_DAYS = 90;
 
 function growthMul(day) {

@@ -1,14 +1,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
-import { createGame, act, view, HIRE_COST } from '../sim/game.js';
+import { createGame, act, view, advance, HIRE_COST } from '../sim/game.js';
 import { UI_TEXT, fill } from '../ui/text.js';
 import { formatMoney } from '../ui/money.js';
-import { renderPanel, selectPerson, TABS } from '../ui/panels.js';
+import { renderPanel, selectPerson, resetPanels, TABS } from '../ui/panels.js';
 import { renderTopbar, renderMetrics } from '../ui/topbar.js';
 import { createClock } from '../ui/clock.js';
 
 function makeRoot() {
+  resetPanels(); // no panel state carries over between tests
   const { document } = new JSDOM('<!DOCTYPE html><div id="root"></div>').window;
   return document.getElementById('root');
 }
@@ -124,4 +125,59 @@ test('top bar shows date, speed buttons with aria-pressed, cash and grade tip', 
   assert.deepEqual(pressed(), ['false', 'false', 'true', 'false']);
   const grade = root.querySelector('[data-grade]');
   assert.equal(grade.getAttribute('title'), UI_TEXT.grade[v.reputation].text);
+});
+
+test('seat counter counts agents on the phone only', () => {
+  const state = createGame(11);
+  const lead = state.people.find((p) => p.role === 'lead');
+  assert.equal(act(state, { type: 'assign', personId: lead.id, kind: 'phone', clientId: state.clients[0].id }).ok, true);
+  const agentsOnPhone = state.people.filter((p) => p.role === 'agent' && state.assignment[p.id]?.kind === 'phone').length;
+  const root = makeRoot();
+  renderPanel(root, view(state), 'tasks', (a) => act(state, a));
+  assert.equal(root.querySelector('.seats').textContent.split(' · ')[0], fill(UI_TEXT.tasks.seats, { n: agentsOnPhone }));
+});
+
+test('a refusal notice clears once time passes or an action succeeds', () => {
+  const state = createGame(11);
+  const root = makeRoot();
+  const onAct = (a) => act(state, a);
+  const refused = () => renderPanel(root, view(state), 'research', () => ({ ok: false, reason: 'busy' }));
+  refused();
+  click(root.querySelector('button[data-action="startResearch"]'));
+  renderPanel(root, view(state), 'research', onAct);
+  assert.ok(root.textContent.includes(UI_TEXT.refuse.busy), 'kept while the clock has not moved');
+  advance(state, 30);
+  renderPanel(root, view(state), 'research', onAct);
+  assert.ok(!root.textContent.includes(UI_TEXT.refuse.busy), 'cleared after time passed');
+
+  refused();
+  click(root.querySelector('button[data-action="startResearch"]'));
+  renderPanel(root, view(state), 'roster', onAct);
+  click(root.querySelector('[data-weekday="0"]')); // a successful action on another tab
+  renderPanel(root, view(state), 'research', onAct);
+  assert.ok(!root.textContent.includes(UI_TEXT.refuse.busy), 'cleared after any ok action');
+});
+
+test('resetPanels closes the open card and forgets notices', () => {
+  const state = createGame(11);
+  const root = makeRoot();
+  const onAct = (a) => act(state, a);
+  selectPerson(state.people[0].id);
+  renderPanel(root, view(state), 'hiring', () => ({ ok: false, reason: 'already' }));
+  click(root.querySelector('button[data-action="startHiring"]'));
+  resetPanels();
+  renderPanel(root, view(state), 'people', onAct);
+  assert.ok(root.querySelector('.person-list'), 'list, not a card');
+  renderPanel(root, view(state), 'hiring', onAct);
+  assert.ok(!root.textContent.includes(UI_TEXT.refuse.already));
+});
+
+test('style.css lets the canvas set the stage row height and hides no overflow', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const css = await readFile(new URL('../style.css', import.meta.url), 'utf8');
+  const inbox = css.match(/\.inbox\s*\{([^}]*)\}/)[1];
+  assert.match(inbox, /height:\s*0/);
+  assert.match(inbox, /min-height:\s*100%/);
+  assert.match(inbox, /overflow-y:\s*auto/);
+  assert.doesNotMatch(css, /overflow-x:\s*hidden/);
 });

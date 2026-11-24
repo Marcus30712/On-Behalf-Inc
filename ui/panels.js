@@ -1,7 +1,9 @@
 // The seven bottom-tab panels and the person card. Each render rebuilds the
 // root it is given from the view; buttons call onAct(action) -> { ok, reason }.
-// A refusal is shown inside the panel (and kept for that tab until an action
-// there succeeds). After an ok action the caller re-renders with a fresh view.
+// A refusal is shown inside the panel; it stays while the clock stands still
+// and clears once time passes or any action succeeds. After an ok action the
+// caller re-renders with a fresh view. resetPanels() clears the panels' own
+// state (open card, notices, pending phone picks) for a new or loaded game.
 import { SEATS, HIRE_COST } from '../sim/game.js';
 import { RESEARCH } from '../world/research.js';
 import { TRAITS } from '../world/traits.js';
@@ -22,12 +24,25 @@ const HIGH = 70; // fatigue / stress danger zone
 const LOW = 30; // morale danger zone
 
 let selected = null; // person id whose card is open in the people panel
-const notices = {}; // tab -> refusal text
-const pendingPhone = new Set(); // people picked 'phone' in tasks, waiting for a client
+let notices = {}; // tab -> { text, day, minute } of the refusal
+let pendingPhone = new Set(); // people picked 'phone' in tasks, waiting for a client
 
 // Opens a person's card the next time the people panel renders (null closes it).
 export function selectPerson(id) {
   selected = id ?? null;
+}
+
+export function resetPanels() {
+  selected = null;
+  notices = {};
+  pendingPhone = new Set();
+}
+
+// The tab's refusal text if the clock has not moved since it was given.
+function noticeFor(tab, v) {
+  const n = notices[tab];
+  if (n && (n.day !== v.day || n.minute !== v.minute)) delete notices[tab];
+  return notices[tab]?.text ?? '';
 }
 
 export function refusalText(reason) {
@@ -42,15 +57,15 @@ const roleText = (p) => [UI_TEXT.role[p.role] ?? p.role,
 
 export function renderPanel(root, v, tab, onAct) {
   const h = builder(root.ownerDocument);
-  const notice = h('p', { class: 'notice', role: 'status' }, notices[tab] ?? '');
+  const notice = h('p', { class: 'notice', role: 'status' }, noticeFor(tab, v));
   const ctx = {
     h, v,
     rerender: () => renderPanel(root, v, tab, onAct),
     run(action) {
       const r = onAct(action);
-      if (r?.ok) delete notices[tab];
-      else notices[tab] = refusalText(r?.reason);
-      notice.textContent = notices[tab] ?? '';
+      if (r?.ok) notices = {};
+      else notices[tab] = { text: refusalText(r?.reason), day: v.day, minute: v.minute };
+      notice.textContent = notices[tab]?.text ?? '';
       return r;
     },
   };
@@ -148,6 +163,8 @@ function tasksPanel({ h, v, run, rerender }) {
   if (v.people.length === 0) return [title(h, T.title), h('p', {}, T.empty)];
   const active = v.clients.filter((c) => c.active);
   const onPhone = v.people.filter((p) => p.task?.kind === 'phone');
+  // Seats are for agents (sim/hiring.js); a lead or QA on the phone uses their own desk.
+  const seated = onPhone.filter((p) => p.role === 'agent').length;
   const byClient = active.map((c) => fill(T.byClient, { client: c.name, n: onPhone.filter((p) => p.task.clientId === c.id).length }));
   const rows = v.people.map((p) => {
     const phone = p.task?.kind === 'phone' || pendingPhone.has(p.id);
@@ -181,7 +198,7 @@ function tasksPanel({ h, v, run, rerender }) {
       h('td', {}, clientSelect || '', ended && h('span', { class: 'warn' }, ` ${T.clientEnded}`)));
   });
   return [title(h, T.title, T.help),
-    h('p', { class: 'seats' }, fill(T.seats, { n: onPhone.length }), byClient.length > 0 && ` · ${byClient.join(' · ')}`),
+    h('p', { class: 'seats' }, fill(T.seats, { n: seated }), byClient.length > 0 && ` · ${byClient.join(' · ')}`),
     h('table', { class: 'tasks' },
       h('thead', {}, h('tr', {}, [T.colName, T.colRole, T.colTask, T.colClient].map((c) => h('th', {}, c)))),
       h('tbody', {}, rows))];

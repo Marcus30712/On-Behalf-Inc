@@ -161,11 +161,14 @@ test('reputation weighs met-rate, satisfaction and the penalty', () => {
   assert.equal(reputation(s), 'C');
   s.clients.forEach((c) => { c.satisfaction = 0; });
   assert.equal(reputation(s), 'D');
-  // Inactive clients do not count.
+  // An inactive (lost) client's met-rate and satisfaction do not count, but
+  // each lost client keeps 15 off the score: 90 - 15 = 75 -> A, not S.
   s.clients[1].active = false;
   s.clients[0].satisfaction = 75;
   s.history = monthHistory({ [GUREUM]: 22, [MULBIT]: 0 });
-  assert.equal(reputation(s), 'S');
+  assert.equal(reputation(s), 'A');
+  s.clients[0].satisfaction = 74; // 74.6 -> B
+  assert.equal(reputation(s), 'B');
 });
 
 test('20 workdays at A or better bring one client offer; accepting adds the client', () => {
@@ -200,12 +203,33 @@ test('a dip below A restarts the offer count', () => {
   assert.equal(events(s, 'client-offer').length, 1);
 });
 
+test('the S milestone takes 30 workdays in a row at S', () => {
+  const s = makeState();
+  s.history = monthHistory({ [GUREUM]: 22, [MULBIT]: 22 });
+  s.clients.forEach((c) => { c.satisfaction = 80; }); // 92 -> S
+  for (let i = 0; i < 29; i++) dailyEconomy(s);
+  assert.equal(events(s, 'milestone-rank-s').length, 0, '29 workdays are not enough');
+  s.reputationPenalty = 5; // 87 -> A for a day: the run starts again
+  dailyEconomy(s);
+  s.reputationPenalty = 0;
+  for (let i = 0; i < 29; i++) dailyEconomy(s);
+  assert.equal(events(s, 'milestone-rank-s').length, 0);
+  dailyEconomy(s);
+  assert.equal(events(s, 'milestone-rank-s').length, 1);
+  // A v1.0 save has no rankSStreak: read as 0.
+  const old = makeState();
+  old.history = s.history;
+  old.clients.forEach((c) => { c.satisfaction = 80; });
+  delete old.rankSStreak;
+  dailyEconomy(old);
+  assert.equal(old.rankSStreak, 1);
+});
+
 test('milestones fire once', () => {
   const s = makeState();
   s.history = monthHistory({ [GUREUM]: 22, [MULBIT]: 22 });
   s.clients.forEach((c) => { c.satisfaction = 80; }); // 92 -> S
-  dailyEconomy(s);
-  dailyEconomy(s);
+  for (let i = 0; i < 31; i++) dailyEconomy(s); // six weeks of workdays at S, then one more
   assert.equal(events(s, 'milestone-rank-s').length, 1);
   assert.deepEqual(s.milestones, ['milestone-rank-s']);
 

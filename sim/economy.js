@@ -1,7 +1,8 @@
 // Money, reputation, churn, client offers, milestones and game over. Pure rules, no DOM.
 //
 // state.cash; state.churn = [{ clientId, workdaysLeft }]; state.offerStreak (workdays at A+);
-// state.offered = [clientId]; state.milestones = [eventId]; state.gameOver = { kind, day } | undefined.
+// state.offered = [clientId]; state.milestones = [eventId]; state.gameOver = { kind, day } | undefined;
+// state.rankSStreak (workdays in a row at S; missing in v1.0 saves, read as 0).
 // The game calls dailyEconomy after endOfDay on workdays, and monthEnd after
 // endOfDay on the last day of each 30-day month.
 import { DAYS_PER_MONTH } from './calendar.js';
@@ -23,6 +24,12 @@ const OFFER_STREAK = 20;
 const OFFER_DEADLINE_DAYS = 7;
 const NEW_CLIENT_SATISFACTION = 70;
 const BIG_CLIENT_COUNT = 3;
+// v1.1: the S milestone takes six weeks (30 workdays) at S in a row, not one
+// good day; and every client lost to churn (inactive in state.clients) keeps
+// LOST_CLIENT_MARK off the score, so a centre does not look better for having
+// lost one and putting everyone on the client that stayed.
+const RANK_S_WORKDAYS = 30;
+const LOST_CLIENT_MARK = 15;
 
 export const isOver = (state) => !!state.gameOver;
 
@@ -60,14 +67,16 @@ export function neediestClient(state) {
 }
 
 // Score = 60 x average met-rate (last 20 workdays, active clients)
-//       + 0.4 x average satisfaction (active clients) - reputationPenalty.
+//       + 0.4 x average satisfaction (active clients) - reputationPenalty
+//       - 15 per client lost (v1.1).
 // With no recorded workday yet the met-rate counts as 1.
 export function reputationScore(state) {
   const active = activeClients(state);
   const rates = active.flatMap((c) => dailyMetRates(state, c.id));
   const met = rates.length === 0 ? 1 : rates.reduce((s, r) => s + r, 0) / rates.length;
   const sat = active.length === 0 ? 0 : active.reduce((s, c) => s + c.satisfaction, 0) / active.length;
-  return 60 * met + 0.4 * sat - (state.reputationPenalty ?? 0);
+  const lost = state.clients.filter((c) => !c.active).length;
+  return 60 * met + 0.4 * sat - (state.reputationPenalty ?? 0) - LOST_CLIENT_MARK * lost;
 }
 
 export function reputation(state) {
@@ -151,7 +160,8 @@ export function dailyEconomy(state) {
   runChurn(state);
   if (state.gameOver) return;
   const grade = reputation(state);
-  if (grade === 'S') milestone(state, 'milestone-rank-s');
+  state.rankSStreak = grade === 'S' ? (state.rankSStreak ?? 0) + 1 : 0;
+  if (state.rankSStreak >= RANK_S_WORKDAYS) milestone(state, 'milestone-rank-s');
   checkBigClient(state);
   runOffers(state, grade);
 }

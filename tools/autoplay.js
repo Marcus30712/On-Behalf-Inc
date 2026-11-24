@@ -13,9 +13,11 @@
 //   and shift, and to the lead or QA if that stressed; researches clinic ->
 //   rest-room -> stress-training -> flexible-shifts with the team lead on
 //   research two hours a day; moves an agent toward the client with the lower
-//   recent met-rate, then evens out headcount per shift; hires into free
-//   seats, picks the first candidate, tries to keep people who hand in
-//   notice and declines new clients.
+//   recent met-rate, then evens out headcount per shift; puts QA on the
+//   phone for the worst client while a client's recent met-rate is under 85%
+//   (calls grow every quarter, v1.1); hires into free seats, picks the first
+//   candidate, tries to keep people who hand in notice and declines new
+//   clients.
 import { pathToFileURL } from 'node:url';
 import { createGame, advance, act, view } from '../sim/game.js';
 
@@ -35,6 +37,7 @@ const FULL_FEE_SHARE = 0.7; // ... and the fee is paid in full at 70% met days
 const MOVE_DAYS = 5; // recorded days compared when moving an agent by met-rate
 const MOVE_GAP = 0.1; // met-rate gap that justifies a move
 const MOVE_COOLDOWN = 10; // days between moves by met-rate
+const QA_PHONE_BELOW = 0.85; // QA answers the phone while a client's recent met-rate is under this
 
 const mean = (xs) => (xs.length === 0 ? 0 : xs.reduce((s, x) => s + x, 0) / xs.length);
 
@@ -95,6 +98,7 @@ export function runPolicy({ seed, days, policy }) {
     helpedNames: tally.helpedNames,
     minSatisfaction: tally.minSatisfaction,
     researched: v.research.done,
+    rankS: (v.milestones ?? []).includes('milestone-rank-s'),
     builtOn: tally.builtOn,
     feeMonths: feeMonths(tally.days, v.day),
     days: tally.days,
@@ -127,6 +131,17 @@ function feeMonths(days, today) {
 export function wornDown(run, days = Infinity) {
   const burnouts = run.burnoutLog.filter((entry) => Number(entry.split(':')[0]) < days).length;
   return (!!run.gameOver && run.survivedDays < days) || burnouts >= 2;
+}
+
+// Hands-off play must not win a year (v1.1): on every seed it ends the year
+// with less cash than sensible play, it reaches the S milestone on at most two
+// seeds, and on seven or more it loses someone (a resignation) or the game.
+export function idleYearVerdict(idle, sensible) {
+  return {
+    poorer: idle.filter((r, i) => r.cash < sensible[i].cash).length,
+    rankS: idle.filter((r) => r.rankS).length,
+    lost: idle.filter((r) => r.resigned >= 1 || r.gameOver).length,
+  };
 }
 
 // New inbox events since the last look.
@@ -178,6 +193,7 @@ function decide(state, v, plan, tally) {
   answerInbox(state, v);
   moveToNeediest(state, view(state), plan, tally);
   balanceClients(state, view(state));
+  qaOnPhone(state, view(state), tally);
   if (!v.research.current && !v.research.build) {
     const next = RESEARCH_ORDER.find((id) => !v.research.done.includes(id));
     if (next) act(state, { type: 'startResearch', researchId: next });
@@ -273,6 +289,23 @@ function balanceClients(state, v) {
   }
 }
 
+// Calls grow every quarter (v1.1): while a client's last MOVE_DAYS recorded
+// days ran under QA_PHONE_BELOW, QA answers the phone for the worst of them;
+// otherwise QA goes back to QA work.
+function qaOnPhone(state, v, tally) {
+  const qa = v.people.find((p) => p.role === 'qa');
+  const active = v.clients.filter((c) => c.active).map((c) => c.id);
+  if (!qa || active.length === 0) return;
+  const recent = tally.days.slice(-MOVE_DAYS);
+  const rate = (id) => mean(recent.map((d) => d.clients[id]?.met).filter((m) => m !== undefined));
+  const worst = [...active].sort((a, b) => rate(a) - rate(b))[0];
+  const behind = recent.length >= MOVE_DAYS && rate(worst) < QA_PHONE_BELOW;
+  const want = behind ? { kind: 'phone', clientId: worst } : { kind: 'qa' };
+  if (qa.task?.kind !== want.kind || qa.task?.clientId !== want.clientId) {
+    act(state, { type: 'assign', personId: qa.id, ...want });
+  }
+}
+
 // --- command line ----------------------------------------------------------
 
 const SEEDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
@@ -323,8 +356,10 @@ function main() {
   const idle = SEEDS.map((seed) => runPolicy({ seed, days: 180, policy: 'idle' }));
   const sensible = SEEDS.map((seed) => runPolicy({ seed, days: 360, policy: 'sensible' }));
   const firstMonth = SEEDS.map((seed) => runPolicy({ seed, days: 30, policy: 'idle' }));
+  const idleYear = SEEDS.map((seed) => runPolicy({ seed, days: 360, policy: 'idle' }));
   printRuns('idle, 180 days', idle);
   printRuns('sensible, 360 days', sensible);
+  printRuns('idle, 360 days', idleYear);
 
   const target = 0.8;
   const worn = idle.filter((r) => wornDown(r)).length;
@@ -337,14 +372,15 @@ function main() {
   const feeIdle = feeShare(idle);
   const survived = sensible.filter((r) => !r.gameOver && r.avgSL >= 0.9 * target).length;
   const start = weekdayProfile(firstMonth);
-  const year = weekdayProfile(sensible);
+  const sensibleYear = weekdayProfile(sensible);
   const helpedPerSeed = mean(sensible.map((r) => r.helped));
   const cash12 = sensible.map((r) => r.monthCash[11] ?? r.cash);
+  const year = idleYearVerdict(idleYear, sensible);
 
   console.log('\nfirst month, default roster (idle): met-share by weekday Mon..Fri',
     start.byWeekday.map(pct).join(' '), `| heavy days ${pct(start.heavy)} (${start.heavyDays}) vs ordinary ${pct(start.normal)}`);
   console.log('sensible year: met-share by weekday Mon..Fri',
-    year.byWeekday.map(pct).join(' '), `| heavy days ${pct(year.heavy)} (${year.heavyDays}) vs ordinary ${pct(year.normal)}`);
+    sensibleYear.byWeekday.map(pct).join(' '), `| heavy days ${pct(sensibleYear.heavy)} (${sensibleYear.heavyDays}) vs ordinary ${pct(sensibleYear.normal)}`);
   console.log('sensible cash at month ends (seed 1):', sensible[0].monthCash.map(Math.round).join(' '));
   console.log('research that helped someone (seed 1):', sensible[0].helpedNames.join(' | ') || '-');
   console.log('sensible year: clinic shortened a sick leave on', sensible.filter((r) => r.clinicHelped > 0).length,
@@ -359,14 +395,18 @@ function main() {
     check(survived >= 8, `sensible survives 360 days with avg SL >= 90% of target: ${survived}/10 seeds`),
     check(start.normal >= 0.7 && start.normal < 0.98,
       `default staffing mostly meets target on ordinary days, not always: ${pct(start.normal)}`),
-    check(start.byWeekday[0] < mean(start.byWeekday.slice(1, 4)) && year.heavy < year.normal - 0.05,
-      `Mondays and heavy days strain it: Mon ${pct(start.byWeekday[0])} vs Tue-Thu ${pct(mean(start.byWeekday.slice(1, 4)))}, heavy ${pct(year.heavy)} vs ${pct(year.normal)}`),
+    check(start.byWeekday[0] < mean(start.byWeekday.slice(1, 4)) && sensibleYear.heavy < sensibleYear.normal - 0.05,
+      `Mondays and heavy days strain it: Mon ${pct(start.byWeekday[0])} vs Tue-Thu ${pct(mean(start.byWeekday.slice(1, 4)))}, heavy ${pct(sensibleYear.heavy)} vs ${pct(sensibleYear.normal)}`),
     check(cash12.every((c) => c > 0) && mean(cash12) > 20000,
       `sensible cash after 12 months positive with growth: min ${Math.round(Math.min(...cash12))}, mean ${Math.round(mean(cash12))} (start 20000)`),
     check(firstMonth.every((r) => r.survivedDays >= 29 && !r.gameOver),
       `idle reaches the first month end on every seed: ${firstMonth.map((r) => r.survivedDays).join(' ')}`),
     check(helpedPerSeed >= 1,
       `research helps someone (build-done with names): ${helpedPerSeed.toFixed(1)} per seed`),
+    check(year.poorer === SEEDS.length,
+      `idle ends the year with less cash than sensible on every seed: ${year.poorer}/10 (idle ${idleYear.map((r) => Math.round(r.cash)).join(' ')})`),
+    check(year.rankS <= 2, `idle reaches the S milestone on at most 2 seeds: ${year.rankS}/10`),
+    check(year.lost >= 7, `idle loses someone (resignation) or the game within a year: ${year.lost}/10 seeds`),
   ];
   console.log(`\n${results.filter(Boolean).length}/${results.length} checks pass (${((Date.now() - t0) / 1000).toFixed(1)} s)`);
   if (!results.every(Boolean)) process.exitCode = 1;

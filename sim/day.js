@@ -5,7 +5,7 @@
 // every day; everything else only when the ending day was a workday. Rolls use
 // end-of-day values; overnight recovery comes last.
 import { dateOf, isWorkday, holidaysOn } from './calendar.js';
-import { moraleOf, overnight } from './people.js';
+import { moraleOf, overnight, wearDay, WEAR } from './people.js';
 import { pushEvent, expireEvents } from './events.js';
 import { SHIFTS } from './schedule.js';
 import { NATIONS } from '../world/nations.js';
@@ -143,7 +143,7 @@ function askHolidayLeave(state, person, rng) {
 }
 
 const FRIDAY_ASK_GAP = 28; // days between friday-off asks of one person
-const FRIDAY_ASK_CHANCE = 0.25;
+export const FRIDAY_ASK_CHANCE = 0.25;
 
 function askFridayOff(state, person, rng) {
   const nation = nationOf(person.nation);
@@ -218,6 +218,7 @@ export function endOfDay(state, rng) {
 
   if (workday) {
     for (const p of state.people) {
+      wearDay(p, wellAtStart.has(p) && p.stress >= WEAR.from);
       if (!wellAtStart.has(p)) {
         p.history.highStressDays = 0;
         continue;

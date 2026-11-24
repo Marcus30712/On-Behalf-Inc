@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import { createRng } from '../sim/rng.js';
 import { TRAITS } from '../world/traits.js';
 import { NAMES } from '../world/names.js';
-import { createPerson, ahtFor, applyWork, applyRest, overnight, moraleOf } from '../sim/people.js';
+import {
+  createPerson, ahtFor, applyWork, applyRest, overnight, moraleOf, wearDay, WEAR,
+} from '../sim/people.js';
 
 const client = { ahtMin: 6 };
 const make = (seed, over = {}) => createPerson(createRng(seed), { id: 'p1', role: 'agent', nation: 'veltora', ...over });
@@ -149,4 +151,20 @@ test('moraleOf uses moraleBoost', () => {
   assert.ok(Math.abs(moraleOf(p) - 96) < 1e-9);
   p.moraleBoost = 50;
   assert.equal(moraleOf(p), 100);
+});
+
+test('long-term wear builds on strained workdays, eases on others and costs morale', () => {
+  const p = bare({ fatigue: 20, stress: 10 });
+  p.history = { highStressDays: 0 }; // as in a v1.0 save: no wear yet
+  assert.ok(Math.abs(moraleOf(p) - 86) < 1e-9);
+  for (let i = 0; i < 5; i++) wearDay(p, true);
+  assert.equal(p.history.wear, 5);
+  assert.ok(Math.abs(p.morale - 81) < 1e-9, 'each point of wear costs a point of morale');
+  wearDay(p, false);
+  assert.equal(p.history.wear, 5 - WEAR.recover);
+  for (let i = 0; i < 100; i++) wearDay(p, true);
+  assert.equal(p.history.wear, WEAR.max);
+  for (let i = 0; i < 100; i++) wearDay(p, false);
+  assert.equal(p.history.wear, 0);
+  assert.ok(Math.abs(p.morale - 86) < 1e-9);
 });

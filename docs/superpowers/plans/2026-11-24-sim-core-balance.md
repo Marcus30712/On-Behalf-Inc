@@ -172,3 +172,115 @@ PASS  research helps someone (build-done with names): 2.4 per seed
 - 확률: 브리프의 0.35 대신 0.25(`FRIDAY_ASK_CHANCE`). 사람당 주 1회만 굴리므로 0.35에서는 360일에 평균 약 9번(2~8번 범위를 자주 넘음), 0.25에서는 약 7~8번.
 - 굴림은 금요일 휴무 나라이고 금요일 근무가 잡혀 있고 28일이 지난 사람에게만, 주 1회 굴려 난수열 이동을 최소화함(이 경우 난수열이 달라짐).
 - `node tools/autoplay.js`: 9/9 통과.
+
+### Task 2 — 손 놓고 하기는 이기지 못하게
+
+조정 전(계획 2 최종 검토와 Task 1 뒤): 손 놓고 하기(idle) 360일에 현금 20,000 → 40,000~85,000, 평판 S 이정표 9/10 시드(10~96일째), 떠난 사람 0명(10/10 시드). 원인은 두 가지였다. 사기가 25 아래로 떨어지는 날이 한 번도 없어 한계 사건(퇴사 예고 포함)이 일어나지 않았고, S 이정표는 S등급 하루만으로 열려 갓 시작한 팀의 좋은 며칠이면 충분했다.
+
+**새 점검 (시드 1~10, 360일, `tools/autoplay.js`와 `tests/balance.test.js`):**
+
+| 점검 | 조정 전 | 조정 후 |
+|---|---|---|
+| 손 놓고 하기의 연말 현금이 같은 시드의 잘 운영하기보다 낮다: 모든 시드 | 10/10 | 10/10 |
+| 손 놓고 하기가 평판 S 이정표를 얻는 시드: 2개 이하 | 9/10 (실패) | 0/10 |
+| 손 놓고 하기에서 1년 안에 한 명 이상 퇴사 또는 게임 오버: 7개 이상 | 0/10 (실패) | 10/10 |
+
+기존 점검 9개는 그대로 통과한다. `tests/balance.test.js`는 정책마다 360일 게임을 한 번만 돌려 세 테스트가 나눠 쓴다. 180일 점검은 같은 게임의 앞 180일을 `wornDown(r, 180)`으로 읽는다(idle은 결정을 하지 않으므로 180일 게임과 앞 180일이 같다).
+
+**바꾼 값:**
+
+| 파일 | 값 | 전 → 후 | 이유 |
+|---|---|---|---|
+| `sim/people.js`, `sim/day.js` | 장기 피로 `person.history.wear` (새 값) | 없음 → 근무일 끝 스트레스가 75 이상이면 +1, 아니면(쉬는 날·병가·휴가 포함) −3, 0~30. 사기 = 100 − 0.4×피로 − 0.6×스트레스 − **wear** + 격려 | 브리프의 "시간이 지나면 사기가 서서히 떨어지게". 하룻밤 회복으로는 보이지 않는 몇 주의 부담이 사기를 깎아, 돌보지 않으면 사기가 25 아래로 내려가 기존 한계 사건(결근·언쟁·퇴사 예고)이 일어난다. 잘 운영하기는 쉬는 날·연구로 스트레스가 1분기 뒤 대부분 40 아래라 wear가 거의 0이다. 기준 60/회복 2는 idle을 4~8명 잃고 6/10 시드가 4~9달 안에 문을 닫게 해서 너무 셌다. 75/3/30이면 idle은 1~5명을 잃는다. 옛 저장에는 `wear`가 없으며 0으로 읽는다. 난수를 새로 쓰지 않는다. |
+| `sim/day.js` | 퇴사 예고 확률 | 그대로(사기 25 미만에서 8%, 셋 중 하나) | 브리프의 "사기가 낮은 사람의 퇴사 예고 확률을 키우고"는 확률을 바꾸지 않고 wear로 사기가 낮은 날을 늘려서 이뤘다. 기본 처리 "보내 준다"는 이미 그 사람을 실제로 내보낸다(예고 10근무일 뒤 `processLeaving`). |
+| `sim/interval.js` | 콜 양 증가 `CALL_GROWTH` (새 값) | 없음 → 90일 분기마다 시작 콜 양의 7%씩, 4분기까지(그 뒤 유지). 1년 차 안에서는 0%, +7%, +14%, +21% | 브리프의 "고객사 콜 양이 분기마다 조금씩 늘어". 그대로 두면 근무조 혼자 있는 시간(2명)이 무너진다. 5%와 6%에서는 시드 11~40 중 하나에서 idle이 사람을 줄여 급여를 아낀 덕에 잘 운영하기보다 돈이 많았다(시드 18). 7%에서 시드 1~40 모두 idle이 더 가난하다. 대신 잘 운영하기의 계약금 전액 비율이 77% → 74%로 내려갔다(기준 70%). |
+| `sim/economy.js` | 평판 S 이정표 | S등급 하루 → S등급 30근무일(6주) 연속, `state.rankSStreak`(새 값, 옛 저장엔 없음 = 0) | idle은 갓 시작한 팀이 좋은 며칠을 보내면 10~96일째에 S를 얻었다. 20근무일로는 시드 1~40 중 6개에서 idle이 얻었고, 30이면 1개다. 잘 운영하기는 시드 40개 모두 100~138일째에 얻는다. 문구("평판이 S등급에 올랐어요")는 그대로 맞다. |
+| `sim/economy.js` | 잃은 고객사 | 평판에서 빠짐 → 빠지고, 잃은 고객사(비활성) 하나마다 평판 점수 −15 (`LOST_CLIENT_MARK`) | idle은 고객사 하나를 잃은 뒤 모든 상담사가 남은 고객사로 옮겨져 그 고객사 만족도가 100이 되고 평판이 S로 올라갔다(남은 S의 대부분). 이제 고객사를 잃은 센터는 A까지다. 비활성 고객사는 계약 해지로만 생긴다. 월말마다 반으로 줄어드는 `reputationPenalty`에 15·30을 더하는 방식도 해 봤지만 서너 달이면 사라져 막지 못했다. |
+| `tools/autoplay.js` | 잘 운영하기 정책 | (없음) → 최근 5일 달성률이 85% 미만인 고객사가 있으면 QA가 가장 나쁜 고객사의 전화를 받고, 아니면 QA 업무로 돌아간다 | 브리프의 "잘 운영하기는 업무 배치와 팀장·QA 전화 응대로 버틸 수 있는 정도". 콜이 늘어도 계약금 전액 비율 74%, 평균 SL 82~88%를 지킨다(QA 없이 5% 증가에서는 72.1%로 아슬아슬했다). 팀장은 그대로 코칭과 연구를 한다. |
+
+바꾸지 않은 값: 계약금, 급여, 채용비, 시작 현금, 한계 사건 확률과 기준(25), 번아웃·병, 연구, 운영 시간·근무조·인원·좌석.
+
+**고친 기존 테스트:**
+
+| 테스트 | 전 → 후 |
+|---|---|
+| `tests/economy.test.js` 평판 | "비활성 고객사는 세지 않는다"(S) → 비활성 고객사의 달성률·만족도는 세지 않지만 잃은 고객사 하나에 −15(90 − 15 = 75 → A, 74.6 → B) |
+| `tests/economy.test.js` 이정표 한 번 | S를 두 번 확인 → 31번(30근무일 연속 + 한 번 더) |
+| `tests/day.test.js` 금요일 휴무 확률 | 0.25를 직접 씀 → `FRIDAY_ASK_CHANCE`를 가져와 씀(Task 1에서 넘긴 일) |
+| `tests/day.test.js` "friday-off is still asked sometimes" | 시드 5 하나에서 2~8번 → 시드 1~10의 평균이 2~8번이고 모든 시드에서 1번 이상(지금 6~9번, 평균 7.4). 사람마다 주 1번, 28일 간격, 0.25 확률이라 기댓값이 약 7.3번이다(Task 1에서 넘긴 일) |
+| `tests/balance.test.js` | 정책마다 360일 게임을 한 번만 돌려 나눠 씀. 180일 idle 점검은 `wornDown(r, 180)` |
+
+새 테스트: `tests/people.test.js` 장기 피로가 쌓이고 풀리고 사기를 깎음, `tests/day.test.js` 근무일 끝에 wear가 움직이고 주말에는 그대로이며 옛 저장(wear 없음)도 돈다, `tests/interval.test.js` 콜 양이 분기마다 늘고 1년 뒤 멈춘다, `tests/economy.test.js` S 이정표는 30근무일 연속이 필요하고 옛 저장(`rankSStreak` 없음)도 돈다, `tests/state.test.js` 새 값이 없는 v1.0 저장도 불러와진다, `tests/balance.test.js` "hands-off play does not win a year".
+
+**시드 11~40(확인용):** 새 점검 셋과 기존 점검 모두 통과. idle이 더 가난한 시드 30/30, idle S 1/30, idle 퇴사·게임 오버 30/30. 잘 운영하기 계약금 전액 76.5%, 12개월 현금 최저 80,000·평균 99,000.
+
+**남은 걱정:**
+- **idle이 꽤 빨리 무너진다:** 시드 10개 중 4개가 176~329일째에 게임 오버다(고객사 둘을 다 잃거나 돈이 바닥). 아무 결정도 안 한 1년이라 의도에 맞지만, 사람을 1명만 잃는 시드(1, 2, 4)도 있어 "사람이 하나둘 떠난다"와 "센터가 무너진다"의 정도는 시드마다 다르다.
+- **잃은 고객사 −15는 영구적이다:** 해지된 시작 고객사는 다시 제안되지 않으므로 그 게임에서는 S등급(이정표가 아니라 등급)도 다시 볼 수 없다. A까지는 가능해 새 고객사 제안은 계속 받을 수 있다. v1.0 저장에 이미 잃은 고객사가 있으면 불러온 뒤 평판이 15 내려간다.
+- **잘 운영하기 계약금 여유가 줄었다:** 시드 1~10에서 73.8%(기준 70%). 콜이 늘어 하루하루가 빡빡해진 대가다.
+- **의무실이 병가를 줄이는 순간:** 시드 1~10에서 0/10이다. Task 1 커밋(HEAD) 상태에서도 0/10이었다(계획 2 때는 4/10). 점검 대상은 아니고 "연구가 누군가를 돕는다"는 시드당 2.0번으로 통과한다(휴게실·교육).
+- **`tools/browser_check.py` 두 항목이 실패한다(이번 변경 전부터):** "long inbox"는 시드 7의 30일 뒤 알림이 20개 이상이어야 하는데 Task 1 커밋(HEAD) 상태에서도 13개다(금요일 휴무 요청이 줄어서). "no choice event to answer by day 5"는 새 게임 시드가 `Date.now()`라 매번 다르고, 5일 안에 선택 알림이 올 확률이 HEAD와 지금 모두 약 72%다. 이번 작업에서는 도구를 고치지 않았다.
+
+**`node tools/autoplay.js` 출력 (v1.1 Task 2 뒤):**
+
+```
+idle, 180 days
+seed  days  over                 avgSL   sick(days)  burnout  left  helped  minSat  cash
+1     180   -                    79.9%   21(104)     4        1     0       70      54000
+2     180   -                    75.1%   14(61)      1        1     0       31      55200
+3     180   -                    68.5%   18(82)      7        2     0       0       44800
+4     180   -                    71.9%   15(61)      9        1     0       0       28400
+5     180   -                    63.8%   19(89)      8        2     0       0       47600
+6     180   -                    70.1%   10(46)      13       2     0       0       45600
+7     176   game-over-clients    47.6%   21(89)      22       3     0       0       39000
+8     180   -                    70.5%   17(77)      12       1     0       0       28800
+9     180   -                    66.7%   12(55)      18       2     0       51      38800
+10    180   -                    74.6%   26(117)     4        1     0       71      45400
+
+sensible, 360 days
+seed  days  over                 avgSL   sick(days)  burnout  left  helped  minSat  cash
+1     360   -                    87.5%   14(43)      0        0     2       70      97600
+2     360   -                    87.9%   21(69)      0        0     2       71      97600
+3     360   -                    86.3%   25(76)      0        0     2       70      101200
+4     360   -                    86.4%   17(51)      0        0     2       70      94400
+5     360   -                    83.7%   24(76)      0        0     2       71      87600
+6     360   -                    85.7%   21(62)      0        0     2       71      98000
+7     360   -                    82.4%   33(99)      0        0     2       67      84400
+8     360   -                    87.2%   22(64)      0        0     2       68      94000
+9     360   -                    87.5%   17(49)      0        0     2       71      108000
+10    360   -                    87.8%   23(79)      0        0     2       69      104800
+
+idle, 360 days
+seed  days  over                 avgSL   sick(days)  burnout  left  helped  minSat  cash
+1     360   -                    73.5%   39(187)     6        1     0       0       49200
+2     360   -                    78.0%   28(124)     4        1     0       0       22000
+3     360   -                    75.2%   29(130)     7        3     0       0       34000
+4     299   game-over-cash       79.0%   23(102)     9        1     0       0       -1200
+5     360   -                    73.0%   27(128)     8        4     0       0       44000
+6     360   -                    71.9%   24(106)     13       3     0       0       10000
+7     176   game-over-clients    47.6%   21(89)      22       3     0       0       39000
+8     329   game-over-cash       79.4%   27(123)     12       2     0       0       -1000
+9     256   game-over-clients    57.8%   20(90)      22       5     0       0       48800
+10    360   -                    71.5%   35(163)     7        3     0       0       75400
+
+first month, default roster (idle): met-share by weekday Mon..Fri 72.0% 81.1% 84.3% 79.1% 76.8% | heavy days 26.0% (20) vs ordinary 81.0%
+sensible year: met-share by weekday Mon..Fri 81.9% 89.1% 79.0% 90.1% 91.2% | heavy days 54.1% (458) vs ordinary 89.4%
+sensible cash at month ends (seed 1): 24600 32800 41000 49200 57400 62000 67000 75200 79800 88000 93000 97600
+research that helped someone (seed 1): rest-room: 토 테산, 유라밋, 펠 지벨, 세토, 케피, 메른 이르덴 | stress-training: 토 테산, 펠 지벨, 세토, 토 리셀, 메른 이르덴
+sensible year: clinic shortened a sick leave on 0 of 10 seeds; client offers per seed: 1 1 1 1 1 1 1 1 1 1
+
+PASS  idle wears people down within 180 days: 9/10 seeds (burnouts>=2 or game over)
+PASS  sensible play is not worn down by day 180 (same rule): 0/10 seeds worn
+PASS  fees paid in full: sensible 73.8% of client-months (>= 70%), idle 33.6%
+PASS  sensible survives 360 days with avg SL >= 90% of target: 10/10 seeds
+PASS  default staffing mostly meets target on ordinary days, not always: 81.0%
+PASS  Mondays and heavy days strain it: Mon 72.0% vs Tue-Thu 81.5%, heavy 54.1% vs 89.4%
+PASS  sensible cash after 12 months positive with growth: min 84400, mean 96760 (start 20000)
+PASS  idle reaches the first month end on every seed: 30 30 30 30 30 30 30 30 30 30
+PASS  research helps someone (build-done with names): 2.0 per seed
+PASS  idle ends the year with less cash than sensible on every seed: 10/10 (idle 49200 22000 34000 -1200 44000 10000 39000 -1000 48800 75400)
+PASS  idle reaches the S milestone on at most 2 seeds: 0/10
+PASS  idle loses someone (resignation) or the game within a year: 10/10 seeds
+
+12/12 checks pass (12.0 s)
+```

@@ -31,6 +31,16 @@ export const CURVE = [
 // Monday = weekday 0.
 const WEEKDAY_MUL = [1.15, 1.0, 1.0, 1.0, 0.9];
 
+// v1.1: clients grow. Each 90-day quarter of the game adds `perQuarter` of the
+// starting volume, for the first `quarters` quarters (then it holds), so a
+// roster that was enough in spring falls behind by winter unless it is run.
+export const CALL_GROWTH = { perQuarter: 0.07, quarters: 4 };
+const QUARTER_DAYS = 90;
+
+function growthMul(day) {
+  return 1 + CALL_GROWTH.perQuarter * Math.min(CALL_GROWTH.quarters, Math.floor(day / QUARTER_DAYS));
+}
+
 const nationOf = (id) => NATIONS.find((n) => n.id === id);
 
 // Product of the nation's holiday call effects for `day`: `during` while a
@@ -50,7 +60,7 @@ function holidayMul(nation, day) {
   return mul;
 }
 
-// Expected calls for one interval: callsPerDay x curve x weekday x holiday x wobble.
+// Expected calls for one interval: callsPerDay x growth x curve x weekday x holiday x wobble.
 // Spikes (state.spikes) are not applied here; stepInterval multiplies them in.
 export function callsFor(client, day, minute, rng) {
   const slot = Math.floor((minute - CURVE_START) / INTERVAL);
@@ -58,7 +68,7 @@ export function callsFor(client, day, minute, rng) {
   const wobble = 0.85 + 0.3 * rng.next();
   const curve = CURVE[slot] ?? 0;
   const holiday = holidayMul(nationOf(client.nation), day);
-  return client.callsPerDay * curve * weekMul * holiday * wobble;
+  return client.callsPerDay * growthMul(day) * curve * weekMul * holiday * wobble;
 }
 
 // Research points per full interval of work: 1 + average(coaching, evaluation) / 10.

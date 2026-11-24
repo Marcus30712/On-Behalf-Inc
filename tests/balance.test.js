@@ -1,23 +1,35 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { runPolicy, wornDown } from '../tools/autoplay.js';
+import { runPolicy, wornDown, idleYearVerdict } from '../tools/autoplay.js';
 
 const SEEDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 const SL_TARGET = 0.8; // both starting clients aim for 80%
+
+// A whole year of each policy, played once and shared by the tests below.
+// The idle game takes no decisions, so its first 180 days are the same as a
+// 180-day game: the 180-day checks read them with wornDown(r, 180).
+let played;
+function year() {
+  played ??= {
+    idle: SEEDS.map((seed) => runPolicy({ seed, days: 360, policy: 'idle' })),
+    sensible: SEEDS.map((seed) => runPolicy({ seed, days: 360, policy: 'sensible' })),
+  };
+  return played;
+}
 
 // "Worn down" (tools/autoplay.js wornDown): a game over, or two or more
 // burnouts. The same rule is applied to sensible play below, which must
 // mostly stay clear of it, so this test cannot pass for any policy.
 test('doing nothing wears people down within a few months', () => {
-  const runs = SEEDS.map((seed) => runPolicy({ seed, days: 180, policy: 'idle' }));
-  const worn = runs.filter((r) => wornDown(r));
+  const runs = year().idle;
+  const worn = runs.filter((r) => wornDown(r, 180));
   assert.ok(worn.length >= 8, `worn down on ${worn.length}/10 seeds`);
   // Not a collapse: every idle game reaches its first month end.
   for (const r of runs) assert.ok(r.survivedDays >= 30, `idle game over on day ${r.survivedDays}`);
 });
 
 test('sensible play survives a year', () => {
-  const runs = SEEDS.map((seed) => runPolicy({ seed, days: 360, policy: 'sensible' }));
+  const runs = year().sensible;
   const ok = runs.filter((r) => !r.gameOver && r.avgSL >= 0.9 * SL_TARGET);
   assert.ok(ok.length >= 8, `survived on ${ok.length}/10 seeds: ${runs.map((r) => r.avgSL.toFixed(2)).join(' ')}`);
   // Taking care works: by the same rule as the idle test, at most 2 seeds
@@ -35,4 +47,13 @@ test('sensible play survives a year', () => {
   // The core moment: a finished research helps someone who is worn or ill.
   const helped = runs.reduce((s, r) => s + r.helped, 0) / runs.length;
   assert.ok(helped >= 1, `research helped ${helped} times per seed`);
+});
+
+test('hands-off play does not win a year', () => {
+  const { idle, sensible } = year();
+  const v = idleYearVerdict(idle, sensible);
+  const cash = (runs) => runs.map((r) => Math.round(r.cash)).join(' ');
+  assert.equal(v.poorer, SEEDS.length, `idle cash ${cash(idle)} vs sensible ${cash(sensible)}`);
+  assert.ok(v.rankS <= 2, `idle reached the S milestone on ${v.rankS}/10 seeds`);
+  assert.ok(v.lost >= 7, `idle lost someone or the game on ${v.lost}/10 seeds`);
 });

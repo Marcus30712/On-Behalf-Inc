@@ -1,18 +1,18 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRng } from '../sim/rng.js';
-import { createPerson, moraleOf } from '../sim/people.js';
+import { createPerson, moraleOf, WEAR } from '../sim/people.js';
 import { defaultRoster } from '../sim/schedule.js';
 import { isWorkday } from '../sim/calendar.js';
-import { endOfDay } from '../sim/day.js';
+import { endOfDay, FRIDAY_ASK_CHANCE } from '../sim/day.js';
 import { resolveEvent } from '../sim/events.js';
 
 const GUREUM = 'gureum-travel';
 const MULBIT = 'mulbit-telecom';
 const never = { next: () => 0.99, int: (a) => a, pick: (a) => a[0], chance: () => false };
 // Fires only chances of at least `min` (staffLeave 0.2 yes; sickness, spikes, breaking point no).
-// Fires only the friday-off roll (chance 0.25).
-const asking = { ...never, chance: (p) => p === 0.25 };
+// Fires only the friday-off roll.
+const asking = { ...never, chance: (p) => p === FRIDAY_ASK_CHANCE };
 const above = (min) => ({ ...never, chance: (p) => p >= min });
 
 function makeState({ day = 0, nations = ['veltora', 'kamuen'] } = {}) {
@@ -333,15 +333,43 @@ test('friday-off is asked at most once per person per 4 weeks', () => {
 });
 
 test('friday-off is still asked sometimes', () => {
-  const rng = createRng(5);
-  const state = makeState({ day: 0 });
-  for (let d = 0; d < 360; d++) {
-    state.day = d;
-    endOfDay(state, rng);
+  // Over a year a Friday-resting person is asked a few times: 2-8 on average
+  // over ten seeds (one seed alone hangs on its rng sequence), and never
+  // fewer than once on any of them.
+  const counts = [];
+  for (let seed = 1; seed <= 10; seed++) {
+    const rng = createRng(seed);
+    const state = makeState({ day: 0 });
+    for (let d = 0; d < 360; d++) {
+      state.day = d;
+      endOfDay(state, rng);
+    }
+    counts.push(ids(state, 'friday-off').filter((e) => e.personId === 'p1').length);
+    assert.equal(ids(state, 'friday-off').filter((e) => e.personId === 'p0').length, 0);
   }
-  const n = ids(state, 'friday-off').filter((e) => e.personId === 'p1').length;
-  assert.ok(n >= 2 && n <= 8, `asked ${n} times`);
-  assert.equal(ids(state, 'friday-off').filter((e) => e.personId === 'p0').length, 0);
+  const mean = counts.reduce((s, n) => s + n, 0) / counts.length;
+  assert.ok(mean >= 2 && mean <= 8, `asked ${counts.join(' ')} times`);
+  assert.ok(counts.every((n) => n >= 1), `asked ${counts.join(' ')} times`);
+});
+
+test('long-term wear: strained workdays add to it, other workdays ease it, weekends leave it', () => {
+  const state = makeState({ day: 0, nations: ['veltora', 'veltora'] });
+  const [tense, calm] = state.people;
+  delete tense.history.wear; // a v1.0 save: no wear yet
+  for (let d = 0; d < 7; d++) {
+    state.day = d;
+    set(tense, { stress: WEAR.from, fatigue: 0 });
+    set(calm, { stress: WEAR.from - 1, fatigue: 0 });
+    endOfDay(state, never);
+  }
+  assert.equal(tense.history.wear, 5, 'five workdays, not the weekend');
+  assert.equal(calm.history.wear, 0);
+  const before = moraleOf(tense);
+  tense.health = { kind: 'sick', daysLeft: 3 }; // off sick: not strained
+  state.day = 7;
+  endOfDay(state, never);
+  assert.equal(tense.history.wear, 5 - WEAR.recover);
+  assert.ok(moraleOf(tense) > before - 1e-9);
 });
 
 test('old saves without the new history field still work', () => {

@@ -76,6 +76,7 @@ export function newGame(seed) {
     nextId: 1,
     churn: [],
     offerStreak: 0,
+    rankSStreak: 0, // v1.1; not in REQUIRED, so v1.0 saves still load (read as 0)
     offered: [],
     reputationPenalty: 0,
     lastEndedDay: null,

@@ -18,9 +18,13 @@ function deadlineText(event, day) {
 }
 
 // onAct(action) -> { ok, reason }; options.onOpen(event) hears each expansion.
-export function renderInbox(root, v, onAct, { onOpen } = {}) {
+export function renderInbox(root, v, onAct, { onOpen, getView } = {}) {
   const h = builder(root.ownerDocument);
-  const rerender = () => renderInbox(root, v, onAct, { onOpen });
+  // After an action the sim has changed, so redraw from a fresh view when given one.
+  const rerender = (focusIndex) => {
+    renderInbox(root, getView ? getView() : v, onAct, { onOpen, getView });
+    if (focusIndex !== undefined) root.querySelector(`[data-index="${focusIndex}"] .inbox-head`)?.focus?.();
+  };
   const notice = h('p', { class: 'notice', role: 'status' });
 
   const toggle = (event) => {
@@ -32,13 +36,13 @@ export function renderInbox(root, v, onAct, { onOpen } = {}) {
       if (!event.resolved && !eventText(event).choices) onAct({ type: 'resolve', index: event.index, choiceId: undefined });
       onOpen?.(event);
     }
-    rerender();
+    rerender(event.index);
   };
 
   const choose = (event, choiceId) => {
     const r = onAct({ type: 'resolve', index: event.index, choiceId });
     if (!r?.ok) notice.textContent = refusalText(r?.reason);
-    else rerender();
+    else rerender(event.index);
   };
 
   const item = (event) => {
@@ -59,7 +63,7 @@ export function renderInbox(root, v, onAct, { onOpen } = {}) {
       class: ['inbox-item', unread && 'unread', needsAnswer && 'needs-answer', event.resolved && 'resolved'].filter(Boolean).join(' '),
       'data-id': event.id, 'data-index': event.index,
     },
-    h('button', { type: 'button', class: 'inbox-head', 'aria-expanded': isOpen, onclick: () => toggle(event) },
+    h('button', { type: 'button', class: 'inbox-head', 'aria-expanded': String(isOpen), 'aria-controls': isOpen ? `inbox-body-${event.index}` : null, onclick: () => toggle(event) },
       h('span', { class: 'inbox-title' }, t.title),
       needsAnswer && h('span', { class: 'badge' }, UI_TEXT.inbox.needsAnswer),
       deadline && h('span', { class: 'inbox-deadline' }, deadline)),
@@ -77,7 +81,8 @@ export function renderInbox(root, v, onAct, { onOpen } = {}) {
 // Kim Miso's speech bubble for an event (null: nothing opened yet).
 export function renderAdvisor(root, event, { drawer }) {
   const h = builder(root.ownerDocument);
-  const line = (event ? eventText(event).advisor : '') || UI_TEXT.inbox.empty;
+  const line = event ? eventText(event).advisor : '';
+  if (!line) { root.replaceChildren(); return; } // nothing to say: no bubble
   const face = h('canvas', { class: 'advisor-face', width: 16, height: 16, role: 'img', 'aria-label': UI_TEXT.advisor.name });
   const source = drawer.spriteCanvas('miso');
   face.getContext('2d')?.drawImage(source, 0, 0);

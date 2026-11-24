@@ -81,7 +81,7 @@ test('advisor line matches the opened event', () => {
   assert.equal(root.querySelector('.advisor-line').textContent, eventText(event).advisor);
   assert.ok(root.querySelector('canvas'));
   renderAdvisor(root, null, { drawer: createDrawer(fakeCanvas) });
-  assert.equal(root.querySelector('.advisor-line').textContent, UI_TEXT.inbox.empty);
+  assert.equal(root.querySelector('.advisor'), null, 'no event: no bubble');
 });
 
 test('first-run intro steps through the lines and finishes', () => {
@@ -97,5 +97,41 @@ test('first-run intro steps through the lines and finishes', () => {
     else click(btn);
     if (i === 3) assert.equal(root.querySelector('.intro-line').textContent, lines[4]);
   }
+  assert.equal(done, 1);
+});
+
+test('choosing updates the DOM from a fresh view without the caller re-rendering', () => {
+  const { state, calls, onAct } = setup();
+  const root = makeRoot();
+  renderInbox(root, view(state), onAct, { getView: () => view(state) });
+  const head = () => root.querySelector('[data-id="client-offer"] .inbox-head');
+  assert.equal(head().getAttribute('aria-expanded'), 'false');
+  click(head());
+  assert.equal(head().getAttribute('aria-expanded'), 'true');
+  assert.equal(head().getAttribute('aria-controls'), root.querySelector('.inbox-body').id);
+  click(root.querySelector('.choice-btn'));
+  assert.equal(root.querySelectorAll('.choice-btn').length, 0);
+  assert.ok(root.querySelector('.choice-result'));
+  assert.equal(calls.filter((c) => c.type === 'resolve').length, 1);
+  assert.equal(root.ownerDocument.activeElement, head(), 'focus stays on the head');
+  const info = root.querySelector('[data-id="call-spike"]');
+  click(info.querySelector('.inbox-head'));
+  assert.ok(!root.querySelector('[data-id="call-spike"]').classList.contains('unread'));
+});
+
+test('a refused resolve shows the notice', () => {
+  const { state } = setup();
+  const root = makeRoot();
+  renderInbox(root, view(state), () => ({ ok: false, reason: 'bad-choice' }));
+  click(root.querySelector('[data-id="client-offer"] .inbox-head'));
+  click(root.querySelector('.choice-btn'));
+  assert.equal(root.querySelector('.notice').textContent, UI_TEXT.refuse['bad-choice']);
+});
+
+test('intro skip calls onDone', () => {
+  const root = makeRoot();
+  let done = 0;
+  firstRunIntro(root, () => { done++; });
+  click(root.querySelector('.intro-skip'));
   assert.equal(done, 1);
 });

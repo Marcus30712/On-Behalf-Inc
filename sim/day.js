@@ -12,10 +12,10 @@ import { NATIONS } from '../world/nations.js';
 
 const SICK_DAYS = [3, 6];
 // Chance per workday of falling ill: a base plus more with stress and fatigue.
-const SICK = { base: 0.004, perStress: 0.02, perFatigue: 0.006 };
+const SICK = { base: 0.003, perStress: 0.015, perFatigue: 0.006 };
 const BURNOUT_DAYS = [5, 10];
 const BURNOUT_STRESS = 80;
-const BURNOUT_STREAK = 5;
+const BURNOUT_STREAK = 10;
 const BREAKING_MORALE = 25;
 const BREAKING_CHANCE = 0.08;
 const BREAKING_EVENTS = ['no-show', 'argument', 'resign-notice'];

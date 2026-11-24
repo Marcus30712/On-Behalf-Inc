@@ -50,10 +50,12 @@ test('save and load round trip mid-game', () => {
   assert.deepEqual([s.day, s.minute], [33, 0]);
   assert.ok(s.research.done.includes('rest-room'));
   assert.equal(s.people.some((p) => p.id === 'p7'), false);
-  assert.deepEqual(act(s, { type: 'startResearch', researchId: 'clinic' }), { ok: true });
   playDays(s, 2);
   assert.deepEqual(act(s, { type: 'startHiring' }), { ok: true });
-  playDays(s, 5);
+  playDays(s, 4);
+  // One workday of research (day 39): the clinic is under way, not done.
+  assert.deepEqual(act(s, { type: 'startResearch', researchId: 'clinic' }), { ok: true });
+  playDays(s, 1);
   assert.deepEqual([s.day, s.minute], [40, 0]);
   // Patched: no holiday falls in the first 45 days, so p3 is put on leave directly.
   s.people.find((p) => p.id === 'p3').health = { kind: 'leave', daysLeft: 3 };

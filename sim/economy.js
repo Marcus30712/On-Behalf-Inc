@@ -12,7 +12,7 @@ import { CLIENTS } from '../world/clients.js';
 export const SALARY = { agent: 2400, lead: 3600, qa: 3000 };
 
 const MET_DAY = 0.8; // share of a day's intervals at target for the day to count as met
-const FEE_CUT_BELOW = 0.8; // share of met workdays in the month
+const FEE_CUT_BELOW = 0.7; // share of met workdays in the month
 const FEE_CUT = 0.8;
 const RECENT_WORKDAYS = 20;
 const GRADES = [['S', 90], ['A', 75], ['B', 60], ['C', 40]];

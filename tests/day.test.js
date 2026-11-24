@@ -64,16 +64,18 @@ test('sickness lasts 3-6 days and pushes a sick event; the clinic shortens it', 
   assert.equal(clinic.people[0].health.daysLeft, 4); // round(6 x 0.6)
 });
 
-test('five high-stress days in a row cause burnout', () => {
+test('ten high-stress workdays in a row cause burnout', () => {
   const state = makeState({ nations: ['veltora'] });
   const p = state.people[0];
-  for (let day = 0; day < 4; day++) {
+  const workdays = [0, 1, 2, 3, 4, 7, 8, 9, 10, 11]; // two weeks, Mon-Fri
+  for (const day of workdays.slice(0, 9)) {
     state.day = day;
     set(p, { stress: 85 });
     endOfDay(state, never);
   }
   assert.equal(p.health.kind, 'well');
-  state.day = 4;
+  assert.equal(p.history.highStressDays, 9);
+  state.day = workdays[9];
   set(p, { stress: 85 });
   endOfDay(state, { ...never, int: (a, b) => b });
   assert.deepEqual(p.health, { kind: 'burnout', daysLeft: 10 });
@@ -355,7 +357,7 @@ test('overnight recovery comes after the rolls and the morale boost halves each 
   set(p, { stress: 60, fatigue: 60, moraleBoost: 8 });
   endOfDay(state, never);
   assert.equal(p.fatigue, 20);
-  assert.equal(p.stress, 49); // 60 - 8 - 5% of 60
+  assert.ok(Math.abs(p.stress - (60 - 4 - 0.12 * 60)) < 1e-9); // flat 4 + 12% of 60
   assert.equal(p.moraleBoost, 4);
   assert.equal(p.morale, moraleOf(p));
   assert.equal(state.lastEndedDay, 0);

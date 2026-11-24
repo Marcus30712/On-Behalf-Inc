@@ -7,8 +7,19 @@ export const SHIFTS = {
 };
 
 const INTERVAL = 30;
-// Automatic breaks as [offset from shift start, length], in minutes.
-const BREAKS = [[120, 15], [240, 60], [420, 15]];
+// Automatic breaks as [offset from shift start, length], in minutes, per shift
+// and break group. All breaks fall in 12:00-18:00, while both shifts are on,
+// so the hours one shift covers alone (09:00-12:00, 18:00-21:00) keep every
+// person. Two people on the same shift and client are put in different groups
+// (sim/interval.js), so they never break at the same time.
+//   early group 0: 12:00 (15), lunch 13:00, 16:00 (15)
+//   early group 1: 12:30 (15), lunch 14:00, 16:30 (15)
+//   late group 0:  13:00 (15), lunch 16:00, 17:30 (15)
+//   late group 1:  13:30 (15), lunch 15:00, 17:00 (15)
+const BREAKS = {
+  early: [[[180, 15], [240, 60], [420, 15]], [[210, 15], [300, 60], [450, 15]]],
+  late: [[[60, 15], [240, 60], [330, 15]], [[90, 15], [180, 60], [300, 15]]],
+};
 
 const overlap = (a0, a1, b0, b1) => Math.max(0, Math.min(a1, b1) - Math.max(a0, b0));
 
@@ -28,23 +39,25 @@ export function defaultRoster(people) {
   return roster;
 }
 
-// Share (0, 0.5 or 1) of the 30-minute interval starting at `minute` actually worked.
-export function workShare(minute, shiftId) {
+// Share (0, 0.5 or 1) of the 30-minute interval starting at `minute` actually
+// worked, for break group 0 (default) or 1.
+export function workShare(minute, shiftId, group = 0) {
   const shift = SHIFTS[shiftId];
   if (!shift) return 0;
   const end = minute + INTERVAL;
   let worked = overlap(minute, end, shift.start, shift.end);
-  for (const [offset, length] of BREAKS) {
+  const plans = BREAKS[shiftId];
+  for (const [offset, length] of plans[group] ?? plans[0]) {
     const b0 = shift.start + offset;
     worked -= overlap(minute, end, b0, b0 + length);
   }
   return Math.max(0, worked) / INTERVAL;
 }
 
-export function onBreak(minute, shiftId) {
+export function onBreak(minute, shiftId, group = 0) {
   const shift = SHIFTS[shiftId];
   if (!shift || minute < shift.start || minute >= shift.end) return false;
-  return workShare(minute, shiftId) < 1;
+  return workShare(minute, shiftId, group) < 1;
 }
 
 export function onShift(state, person, day, minute) {

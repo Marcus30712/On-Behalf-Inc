@@ -31,9 +31,10 @@ const NULLABLE = new Set(['gameOver', 'hiring', 'lastEndedDay']);
 export function newGame(seed) {
   const rng = createRng(seed);
   const roles = [...Array(AGENTS).fill('agent'), 'lead', 'qa'];
-  const people = roles.map((role, i) => createPerson(rng, {
-    id: `p${i}`, role, nation: NATIONS[i % NATIONS.length].id,
-  }));
+  const people = [];
+  roles.forEach((role, i) => people.push(createPerson(rng, {
+    id: `p${i}`, role, nation: NATIONS[i % NATIONS.length].id, takenNames: people.map((p) => p.name),
+  })));
   const clients = CLIENTS.filter((c) => c.start).map((c) => c.id);
 
   // defaultRoster alternates agents early/late, so clients alternate in pairs:

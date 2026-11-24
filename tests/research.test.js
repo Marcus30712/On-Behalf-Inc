@@ -90,7 +90,7 @@ test('rest-room changes rest recovery from then on', () => {
   assert.equal(a.morale, moraleOf(a));
   assert.equal(b.fatigue, 0);
   assert.equal(b.stress, 10);
-  assert.deepEqual(s.inbox.at(-1).data.names, [a.name]); // only stress >= 50 before
+  assert.deepEqual(s.inbox.at(-1).data.names, [a.name]); // only stress >= 40 (HIGH_STRESS) before
   // From then on, rest recovers 30% faster.
   a.fatigue = 50;
   applyRest(a, { minutes: 30, mods: mods(s) });

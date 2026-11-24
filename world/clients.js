@@ -8,12 +8,12 @@ export const CLIENTS = [
   {
     id: 'gureum-travel', name: '구름다리 여행', industry: '온라인 여행 예약', nation: 'veltora', start: true,
     slTarget: { pct: 80, sec: 20 }, monthlyFee: 18000,
-    callsPerDay: 90, ahtMin: 5, patienceSec: 90, hours: { ...WEEKDAY_HOURS },
+    callsPerDay: 100, ahtMin: 5, patienceSec: 90, hours: { ...WEEKDAY_HOURS },
   },
   {
     id: 'mulbit-telecom', name: '물빛 통신', industry: '인터넷·휴대폰 통신', nation: 'kamuen', start: true,
     slTarget: { pct: 80, sec: 30 }, monthlyFee: 16000,
-    callsPerDay: 75, ahtMin: 6, patienceSec: 75, hours: { ...WEEKDAY_HOURS },
+    callsPerDay: 80, ahtMin: 6, patienceSec: 75, hours: { ...WEEKDAY_HOURS },
   },
   {
     id: 'dalbit-mall', name: '달빛몰', industry: '온라인 쇼핑', nation: 'kamuen', start: false,

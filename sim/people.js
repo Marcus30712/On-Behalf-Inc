@@ -14,11 +14,11 @@ const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 // Stress per 30 minutes of work: a base for a working day with customers, more
 // the busier the queue keeps the person, and a steep extra once occupancy
 // passes overloadFrom (no breathing room between calls).
-const STRESS = { base: 1.2, perOccupancy: 1.6, overload: 2, overloadFrom: 0.7 };
+const STRESS = { base: 1.45, perOccupancy: 1.6, overload: 2, overloadFrom: 0.7 };
 // A night's sleep takes off a flat amount plus a share of what is left, so
 // stress settles where the week's strain and recovery balance instead of
 // drifting without end.
-const NIGHT_STRESS = { flat: 8, share: 0.05 };
+const NIGHT_STRESS = { flat: 4, share: 0.12 };
 
 function traitMul(person, key) {
   let m = 1;
@@ -35,8 +35,10 @@ export function moraleOf(person) {
 }
 
 // Draw order is fixed and nation-independent: trait count, trait 1, trait 2,
-// four skills, then the name (one draw whatever the nation).
-export function createPerson(rng, { id, role, nation }) {
+// four skills, then the name (one draw whatever the nation). A name in
+// `takenNames` (colleagues') is drawn again from the names still free, so the
+// extra draw only happens on a clash and never touches traits or skills.
+export function createPerson(rng, { id, role, nation, takenNames = [] }) {
   const count = rng.int(1, 2);
   const first = rng.int(0, TRAITS.length - 1);
   const second = rng.int(0, TRAITS.length - 2);
@@ -49,7 +51,12 @@ export function createPerson(rng, { id, role, nation }) {
     skills[key] = rng.int(lo * 10, hi * 10) / 10;
   }
 
-  const name = rng.pick(NAMES[nation]);
+  let name = rng.pick(NAMES[nation]);
+  const taken = new Set(takenNames);
+  if (taken.has(name)) {
+    const free = NAMES[nation].filter((n) => !taken.has(n));
+    if (free.length > 0) name = rng.pick(free);
+  }
 
   const person = {
     id, name, role, nation,

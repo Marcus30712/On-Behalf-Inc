@@ -122,3 +122,16 @@ test('holding, or not answering, hires nobody and ends the search', () => {
   assert.equal(s.hiring, null);
   assert.equal(startHiring(s).ok, true);
 });
+
+test('candidates never share a name with each other or with current staff', () => {
+  for (let seed = 1; seed <= 60; seed++) {
+    const s = makeState({ agents: 7, cash: 10000 });
+    const rng = createRng(seed);
+    startHiring(s);
+    for (let i = 0; i < 6 && !s.hiring?.candidates; i++) advanceHiring(s, rng);
+    const [c1, c2] = s.hiring.candidates;
+    const staff = new Set(s.people.map((p) => p.name));
+    assert.notEqual(c1.name, c2.name, `seed ${seed}`);
+    assert.ok(!staff.has(c1.name) && !staff.has(c2.name), `seed ${seed}: ${c1.name}, ${c2.name}`);
+  }
+});

@@ -97,7 +97,7 @@ test('applyWork matches the formula', () => {
   const p = bare();
   applyWork(p, { minutes: 30, occupancy: 1 });
   assert.ok(Math.abs(p.fatigue - (10 + 4)) < 1e-9);
-  assert.ok(Math.abs(p.stress - (15 + 1.2 + 1.6 + 2)) < 1e-9); // base + occupancy + overload
+  assert.ok(Math.abs(p.stress - (15 + 1.45 + 1.6 + 2)) < 1e-9); // base + occupancy + overload
 });
 
 test('values stay within 0-100', () => {
@@ -123,7 +123,7 @@ test('rest and overnight recover', () => {
   assert.ok(Math.abs(p.fatigue - 42) < 1e-9);
   overnight(p);
   assert.ok(Math.abs(p.fatigue - 2) < 1e-9);
-  assert.ok(Math.abs(p.stress - (46 - 8 - 0.05 * 46)) < 1e-9);
+  assert.ok(Math.abs(p.stress - (46 - 4 - 0.12 * 46)) < 1e-9);
 });
 
 test('steel-nerves trait lowers stress gain', () => {

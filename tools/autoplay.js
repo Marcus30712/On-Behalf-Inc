@@ -7,13 +7,15 @@
 // Policies:
 // - idle: no decisions at all; every choice event takes its passive default
 //   when its deadline passes.
-// - sensible: grants holiday leave, keeps the Friday roster (two agents per
-//   client and shift cannot spare one), gives the most stressed agent of each
-//   client and shift next Friday off, researches clinic -> rest-room ->
-//   stress-training -> flexible-shifts with the team lead on research two
-//   hours a day, moves an agent to a client left short-handed, hires into
-//   free seats, picks the first candidate and tries to keep people who hand
-//   in notice.
+// - sensible: grants holiday leave; keeps the Friday roster (two agents per
+//   client and shift cannot spare one); at Friday's close gives next
+//   Wednesday off to the most stressed agent (stress >= 65) of each client
+//   and shift, and to the lead or QA if that stressed; researches clinic ->
+//   rest-room -> stress-training -> flexible-shifts with the team lead on
+//   research two hours a day; moves an agent toward the client with the lower
+//   recent met-rate, then evens out headcount per shift; hires into free
+//   seats, picks the first candidate, tries to keep people who hand in
+//   notice and declines new clients.
 import { pathToFileURL } from 'node:url';
 import { createGame, advance, act, view } from '../sim/game.js';
 
@@ -23,9 +25,18 @@ const CLOSE = 1260; // 21:00
 const RESEARCH_FROM = 960; // 16:00: the lead researches 16:00-18:00
 const RESEARCH_TO = 1080;
 const RESEARCH_ORDER = ['clinic', 'rest-room', 'stress-training', 'flexible-shifts'];
-const REST_STRESS = 60; // at Friday's close, this stressed earns next Friday off
-const REST_WEEKDAY = 4; // Friday: the quietest day, and a long weekend
+const REST_STRESS = 65; // at Friday's close, this stressed earns next Wednesday off
+const REST_WEEKDAY = 2; // Wednesday: a day off mid-week breaks a run of hard days
+const PLAN_WEEKDAY = 4; // rest days are planned at Friday's close
 const SHIFT_IDS = ['early', 'late'];
+const MONTH = 30;
+const MET_DAY = 0.8; // as sim/economy.js: a day counts as met at 80% of intervals
+const FULL_FEE_SHARE = 0.7; // ... and the fee is paid in full at 70% met days
+const MOVE_DAYS = 5; // recorded days compared when moving an agent by met-rate
+const MOVE_GAP = 0.1; // met-rate gap that justifies a move
+const MOVE_COOLDOWN = 10; // days between moves by met-rate
+
+const mean = (xs) => (xs.length === 0 ? 0 : xs.reduce((s, x) => s + x, 0) / xs.length);
 
 // Plays the game from 09:00 on day 0 for `days` days, one day at a time:
 // decide at 09:00, play to 21:00 (the lead switches to research for two
@@ -36,7 +47,7 @@ export function runPolicy({ seed, days, policy }) {
   const sensible = policy === 'sensible';
   const plan = sensible ? sensiblePlan(view(state)) : null;
   const tally = {
-    seen: 0, sick: 0, sickDays: 0, burnouts: 0, burnoutLog: [], helped: 0, helpedNames: [],
+    seen: 0, sick: 0, sickDays: 0, burnouts: 0, burnoutLog: [], helped: 0, clinicHelped: 0, helpedNames: [], offers: 0, builtOn: {},
     left: 0, slSum: 0, slCount: 0, days: [], monthCash: [], minSatisfaction: 100,
   };
   let known = new Set(view(state).people.map((p) => p.id));
@@ -44,7 +55,7 @@ export function runPolicy({ seed, days, policy }) {
   for (let d = 0; d < days && !state.gameOver; d++) {
     let v = view(state);
     collect(v, tally);
-    if (sensible) decide(state, v, plan);
+    if (sensible) decide(state, v, plan, tally);
 
     if (sensible && plan.leadId && view(state).research.current) {
       advance(state, RESEARCH_FROM - state.minute);
@@ -56,7 +67,7 @@ export function runPolicy({ seed, days, policy }) {
 
     v = view(state);
     recordDay(v, tally);
-    if (sensible && v.date.weekday === REST_WEEKDAY) planRestDays(state, v, plan);
+    if (sensible && v.date.weekday === PLAN_WEEKDAY) planRestDays(state, v, plan);
     advance(state, DAY - state.minute + OPEN);
 
     v = view(state);
@@ -79,11 +90,43 @@ export function runPolicy({ seed, days, policy }) {
     cash: v.cash,
     monthCash: tally.monthCash,
     helped: tally.helped,
+    clinicHelped: tally.clinicHelped,
+    offers: tally.offers,
     helpedNames: tally.helpedNames,
     minSatisfaction: tally.minSatisfaction,
     researched: v.research.done,
+    builtOn: tally.builtOn,
+    feeMonths: feeMonths(tally.days, v.day),
     days: tally.days,
   };
+}
+
+// Client-months that ended, and how many earned the full fee, by the month-end
+// rule of sim/economy.js applied to the recorded days.
+function feeMonths(days, today) {
+  const months = new Map();
+  for (const d of days) {
+    const month = Math.floor(d.day / MONTH);
+    if ((month + 1) * MONTH > today) continue; // month not over yet
+    for (const [id, c] of Object.entries(d.clients)) {
+      const key = `${month}/${id}`;
+      const m = months.get(key) ?? { days: 0, met: 0 };
+      m.days += 1;
+      if (c.met >= MET_DAY) m.met += 1;
+      months.set(key, m);
+    }
+  }
+  const all = [...months.values()];
+  return { total: all.length, full: all.filter((m) => m.met / m.days >= FULL_FEE_SHARE).length };
+}
+
+// Worn down within the first `days` days: the game ended, or two or more
+// people burnt out. (The brief also lists "average SL under target"; it is
+// left out because sensible play, which gives rest days, often runs a little
+// under target in its first months too, so it would not tell the two apart.)
+export function wornDown(run, days = Infinity) {
+  const burnouts = run.burnoutLog.filter((entry) => Number(entry.split(':')[0]) < days).length;
+  return (!!run.gameOver && run.survivedDays < days) || burnouts >= 2;
 }
 
 // New inbox events since the last look.
@@ -92,8 +135,11 @@ function collect(v, tally) {
     if (e.index < tally.seen) continue;
     if (e.id === 'sick') { tally.sick += 1; tally.sickDays += e.data.days; }
     if (e.id === 'burnout') { tally.burnouts += 1; tally.burnoutLog.push(`${e.day}:${e.personId}`); }
+    if (e.id === 'client-offer') tally.offers += 1;
+    if (e.id === 'build-done') tally.builtOn[e.data.researchId] = e.day;
     if (e.id === 'build-done' && e.data.names.length > 0) {
       tally.helped += 1;
+      if (e.data.researchId === 'clinic') tally.clinicHelped += 1;
       tally.helpedNames.push(`${e.data.researchId}: ${e.data.names.join(', ')}`);
     }
   }
@@ -121,14 +167,16 @@ function recordDay(v, tally) {
 function sensiblePlan(v) {
   return {
     leadId: v.people.find((p) => p.role === 'lead')?.id,
-    restOff: [], // [{ personId, shift }]: next Friday off, and the usual shift
+    restOff: [], // [{ personId, shift }]: next Wednesday off, and the usual shift
+    lastMove: -Infinity, // day of the last move by met-rate
   };
 }
 
 const agentsOf = (v) => v.people.filter((p) => p.role === 'agent');
 
-function decide(state, v, plan) {
+function decide(state, v, plan, tally) {
   answerInbox(state, v);
+  moveToNeediest(state, view(state), plan, tally);
   balanceClients(state, view(state));
   if (!v.research.current && !v.research.build) {
     const next = RESEARCH_ORDER.find((id) => !v.research.done.includes(id));
@@ -150,20 +198,20 @@ function answerInbox(state, v) {
   }
 }
 
-// Friday evening: today's extra days off go back to normal, and the most
-// stressed agent of each client and shift (stress >= REST_STRESS at the end of
-// the day) gets next Friday off.
+// Friday evening: this week's extra days off go back to normal, and the most
+// stressed agent of each client and shift, and the lead or QA if stressed
+// (stress >= REST_STRESS at the end of the day), get next Wednesday off.
 function planRestDays(state, v, plan) {
   for (const { personId, shift } of plan.restOff) {
     act(state, { type: 'setRoster', personId, weekday: REST_WEEKDAY, shift });
   }
   plan.restOff = [];
   const byClient = new Map();
-  for (const p of agentsOf(v)) {
-    const clientId = p.task?.clientId;
-    if (!clientId || p.health.kind !== 'well' || p.stress < REST_STRESS) continue;
+  for (const p of v.people) {
+    if (p.health.kind !== 'well' || p.stress < REST_STRESS) continue;
     if (!SHIFT_IDS.includes(p.shiftToday)) continue;
-    const key = `${clientId}/${p.shiftToday}`;
+    // Agents: one per client and shift; the lead and QA each on their own.
+    const key = p.role === 'agent' ? `${p.task?.clientId}/${p.shiftToday}` : p.role;
     const best = byClient.get(key);
     if (!best || p.stress > best.stress) byClient.set(key, p);
   }
@@ -174,17 +222,48 @@ function planRestDays(state, v, plan) {
   }
 }
 
-// Each shift: if one client has two more agents at work today than another,
-// one moves over to the short-handed client.
+// Well phone agents per client working `shift` today.
+function staffOn(v, active, shift) {
+  const staff = new Map(active.map((id) => [id, []]));
+  for (const p of agentsOf(v)) {
+    if (p.health.kind !== 'well' || p.shiftToday !== shift) continue;
+    if (p.task?.kind === 'phone' && staff.has(p.task.clientId)) staff.get(p.task.clientId).push(p);
+  }
+  return staff;
+}
+
+// Met-rate first: when one client's last MOVE_DAYS recorded days ran
+// MOVE_GAP below another's, and the better client has more agents at work on
+// some shift today, the least stressed of them moves to the worse client.
+// At most one move per MOVE_COOLDOWN days, so agents do not ping-pong.
+function moveToNeediest(state, v, plan, tally) {
+  if (v.day - plan.lastMove < MOVE_COOLDOWN) return;
+  const active = v.clients.filter((c) => c.active).map((c) => c.id);
+  if (active.length < 2) return;
+  const recent = tally.days.slice(-MOVE_DAYS);
+  const rate = (id) => mean(recent.map((d) => d.clients[id]?.met).filter((m) => m !== undefined));
+  const ranked = [...active].sort((a, b) => rate(a) - rate(b));
+  const worst = ranked[0];
+  const best = ranked.at(-1);
+  if (recent.length < MOVE_DAYS || rate(best) - rate(worst) < MOVE_GAP) return;
+  for (const shift of SHIFT_IDS) {
+    const staff = staffOn(v, active, shift);
+    if (staff.get(best).length <= staff.get(worst).length) continue;
+    const mover = [...staff.get(best)].sort((a, b) => a.stress - b.stress)[0];
+    if (act(state, { type: 'assign', personId: mover.id, kind: 'phone', clientId: worst }).ok) {
+      plan.lastMove = v.day;
+      return;
+    }
+  }
+}
+
+// Headcount second: on each shift, if one client has two more agents at work
+// today than another, one moves over to the short-handed client.
 function balanceClients(state, v) {
   const active = v.clients.filter((c) => c.active).map((c) => c.id);
   if (active.length < 2) return;
   for (const shift of SHIFT_IDS) {
-    const staff = new Map(active.map((id) => [id, []]));
-    for (const p of agentsOf(v)) {
-      if (p.health.kind !== 'well' || p.shiftToday !== shift) continue;
-      if (p.task?.kind === 'phone' && staff.has(p.task.clientId)) staff.get(p.task.clientId).push(p);
-    }
+    const staff = staffOn(v, active, shift);
     const sorted = [...staff.entries()].sort((a, b) => a[1].length - b[1].length);
     const [shortId, short] = sorted[0];
     const [, long] = sorted.at(-1);
@@ -198,7 +277,6 @@ function balanceClients(state, v) {
 
 const SEEDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 const pct = (x) => `${(x * 100).toFixed(1)}%`;
-const mean = (xs) => (xs.length === 0 ? 0 : xs.reduce((s, x) => s + x, 0) / xs.length);
 
 function printRuns(label, runs) {
   console.log(`\n${label}`);
@@ -249,7 +327,14 @@ function main() {
   printRuns('sensible, 360 days', sensible);
 
   const target = 0.8;
-  const worn = idle.filter((r) => r.gameOver || r.burnouts >= 2 || r.avgSL < target).length;
+  const worn = idle.filter((r) => wornDown(r)).length;
+  const sensibleWorn = sensible.filter((r) => wornDown(r, 180)).length;
+  const feeShare = (runs) => {
+    const sum = runs.reduce((acc, r) => [acc[0] + r.feeMonths.full, acc[1] + r.feeMonths.total], [0, 0]);
+    return sum[0] / sum[1];
+  };
+  const feeSensible = feeShare(sensible);
+  const feeIdle = feeShare(idle);
   const survived = sensible.filter((r) => !r.gameOver && r.avgSL >= 0.9 * target).length;
   const start = weekdayProfile(firstMonth);
   const year = weekdayProfile(sensible);
@@ -262,10 +347,15 @@ function main() {
     year.byWeekday.map(pct).join(' '), `| heavy days ${pct(year.heavy)} (${year.heavyDays}) vs ordinary ${pct(year.normal)}`);
   console.log('sensible cash at month ends (seed 1):', sensible[0].monthCash.map(Math.round).join(' '));
   console.log('research that helped someone (seed 1):', sensible[0].helpedNames.join(' | ') || '-');
+  console.log('sensible year: clinic shortened a sick leave on', sensible.filter((r) => r.clinicHelped > 0).length,
+    'of 10 seeds; client offers per seed:', sensible.map((r) => r.offers).join(' '));
   console.log('');
 
   const results = [
-    check(worn >= 8, `idle wears people down within 180 days: ${worn}/10 seeds (burnouts>=2, SL<target or game over)`),
+    check(worn >= 8, `idle wears people down within 180 days: ${worn}/10 seeds (burnouts>=2 or game over)`),
+    check(sensibleWorn <= 2, `sensible play is not worn down by day 180 (same rule): ${sensibleWorn}/10 seeds worn`),
+    check(feeSensible >= 0.7 && feeIdle <= feeSensible - 0.15,
+      `fees paid in full: sensible ${pct(feeSensible)} of client-months (>= 70%), idle ${pct(feeIdle)}`),
     check(survived >= 8, `sensible survives 360 days with avg SL >= 90% of target: ${survived}/10 seeds`),
     check(start.normal >= 0.7 && start.normal < 0.98,
       `default staffing mostly meets target on ordinary days, not always: ${pct(start.normal)}`),

@@ -41,9 +41,13 @@ export function advanceHiring(state, rng) {
   h.waitDays ??= rng.int(...WAIT_WORKDAYS);
   h.workdays += 1;
   if (h.workdays < h.waitDays) return;
-  h.candidates = [0, 1].map(() => createPerson(rng, {
-    id: newId(state), role: 'agent', nation: rng.pick(NATIONS).id,
-  }));
+  h.candidates = [];
+  for (let i = 0; i < 2; i++) {
+    const takenNames = [...state.people, ...h.candidates].map((p) => p.name);
+    h.candidates.push(createPerson(rng, {
+      id: newId(state), role: 'agent', nation: rng.pick(NATIONS).id, takenNames,
+    }));
+  }
   pushEvent(state, {
     id: 'candidate',
     data: { cand1: h.candidates[0].name, cand2: h.candidates[1].name },

@@ -48,8 +48,8 @@ const payroll = 8 * SALARY.agent + SALARY.lead + SALARY.qa;
 test('month end pays fees and salaries; missing SL cuts the fee', () => {
   assert.deepEqual(SALARY, { agent: 2400, lead: 3600, qa: 3000 });
   const s = makeState();
-  // 22 workdays in days 0-29. gureum meets 18 (0.82), mulbit 17 (0.77 < 0.8).
-  s.history = [{ day: -3, clients: { [MULBIT]: { intervals: 24, intervalsMet: 24 } } }, ...monthHistory({ [GUREUM]: 18, [MULBIT]: 17 })];
+  // 22 workdays in days 0-29. gureum meets 16 (0.73), mulbit 15 (0.68 < 0.7).
+  s.history = [{ day: -3, clients: { [MULBIT]: { intervals: 24, intervalsMet: 24 } } }, ...monthHistory({ [GUREUM]: 16, [MULBIT]: 15 })];
   assert.equal(s.history.length, 23);
   s.reputationPenalty = 4;
   monthEnd(s);

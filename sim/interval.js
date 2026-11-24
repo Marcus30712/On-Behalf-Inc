@@ -17,15 +17,15 @@ const NON_PHONE_OCCUPANCY = 0.2;
 const PROGRESS_KINDS = ['coaching', 'qa', 'research', 'training'];
 
 // Share of a day's calls per interval, 09:00-21:00 (24 intervals, sum 1).
-// A morning peak at 10:30 (0.044), a lunch dip at 12:30 (0.036), the day's
-// peak at 15:00 (0.066) while both shifts overlap, then an evening tail. The
-// default roster (half early, half late) covers this shape; the breaks still
-// leave thin intervals.
+// A morning rise to 0.037 at 10:30-11:00, a lunch dip at 12:30 (0.035), the day's
+// peak at 15:00 (0.067) and a second one at 17:00 (0.065) while both shifts
+// are on, then an evening tail. Shaped to the default roster: one shift alone
+// before 12:00 and after 18:00, breaks staggered over 12:00-18:00.
 export const CURVE = [
-  28, 34, 40, 44, 40, 38, // 09:00-12:00
-  48, 36, 36, 44,         // 12:00-14:00
-  54, 62, 66, 62, 50, 52, // 14:00-17:00
-  58, 52, 36, 32, 28, 24, 20, 16, // 17:00-21:00
+  28, 33, 35, 37, 37, 35, // 09:00-12:00
+  48, 35, 42, 44,         // 12:00-14:00
+  58, 63, 67, 61, 45, 45, // 14:00-17:00
+  65, 58, 38, 33, 30, 26, 21, 16, // 17:00-21:00
 ].map((w) => w / 1000);
 
 // Monday = weekday 0.
@@ -61,8 +61,8 @@ export function callsFor(client, day, minute, rng) {
   return client.callsPerDay * curve * weekMul * holiday * wobble;
 }
 
-// Research points per full interval of work: 0.5 + average(coaching, evaluation) / 20.
-const researchSkillMul = (p) => 0.5 + (p.skills.coaching + p.skills.evaluation) / 2 / 20;
+// Research points per full interval of work: 1 + average(coaching, evaluation) / 10.
+const researchSkillMul = (p) => 1 + (p.skills.coaching + p.skills.evaluation) / 2 / 10;
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
@@ -92,6 +92,23 @@ function staffAvail(person, day) {
   return Math.min(1, ...holidaysOn(day, nation).map(({ holiday }) => holiday.staffAvail ?? 1));
 }
 
+// Break group (0 or 1) per person: phone agents of the same client and shift
+// alternate in state.people order, so a pair never breaks together. Everyone
+// else is group 0.
+function breakGroups(state, shiftOf) {
+  const seen = new Map();
+  const groups = new Map();
+  for (const p of state.people) {
+    const a = state.assignment[p.id];
+    if (a?.kind !== 'phone') continue;
+    const key = `${a.clientId}/${shiftOf(p)}`;
+    const n = seen.get(key) ?? 0;
+    seen.set(key, n + 1);
+    groups.set(p.id, n % 2);
+  }
+  return groups;
+}
+
 function todayEntry(state, id) {
   state.today ??= { clients: {} };
   state.today.clients ??= {};
@@ -113,13 +130,15 @@ export function stepInterval(state, rng) {
   if (open.length > 0) {
     const openIds = new Set(open.map((o) => o.def.id));
     const shiftOf = (p) => state.roster[p.id]?.[dateOf(day).weekday];
+    const groups = breakGroups(state, shiftOf);
+    const shareOf = (p) => workShare(minute, shiftOf(p), groups.get(p.id) ?? 0);
 
     // Phone staff per open client.
     const staff = new Map(open.map((o) => [o.def.id, []]));
     for (const p of state.people) {
       const a = state.assignment[p.id];
       if (a?.kind !== 'phone' || !openIds.has(a.clientId) || !onShift(state, p, day, minute)) continue;
-      const share = workShare(minute, shiftOf(p));
+      const share = shareOf(p);
       if (share > 0) staff.get(a.clientId).push({ person: p, share });
     }
 
@@ -161,7 +180,7 @@ export function stepInterval(state, rng) {
     for (const p of state.people) {
       const a = state.assignment[p.id];
       let share = 0;
-      if (a && onShift(state, p, day, minute)) share = workShare(minute, shiftOf(p));
+      if (a && onShift(state, p, day, minute)) share = shareOf(p);
       let occupancy = NON_PHONE_OCCUPANCY;
       if (a?.kind === 'phone') {
         if (openIds.has(a.clientId)) occupancy = results.get(a.clientId).occupancy;

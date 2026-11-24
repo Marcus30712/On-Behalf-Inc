@@ -65,10 +65,10 @@ test('outside opening hours nothing happens', () => {
 });
 
 test('agents split by client', () => {
-  const s = makeState({ day: 1, minute: H(14), phoneA: 6, phoneB: 0 });
-  // Make agents all work this interval regardless of early/late.
+  const s = makeState({ day: 1, minute: H(11), phoneA: 6, phoneB: 0 });
+  // Make agents all work this interval regardless of early/late (no breaks
+  // before 12:00).
   for (const id of Object.keys(s.roster)) for (const d in s.roster[id]) s.roster[id][d] = 'early';
-  s.minute = H(14);
   const r = stepInterval(s, createRng(3));
   assert.equal(r.clients[A.id].agents, 6);
   assert.equal(r.clients[B.id].agents, 0);
@@ -117,7 +117,7 @@ test('people working get tired, people on break recover', () => {
   const late = s.people[1]; // a1 late shift
   early.fatigue = 50; late.fatigue = 50;
   // 10:00-10:30 is a full work interval for the early agent: on shift (09:00-18:00)
-  // and the first break only starts at 11:00 (shift start + 120 min).
+  // and the first break only starts at 12:00.
   s.minute = H(10);
   stepInterval(s, flat);
   assert.ok(early.fatigue > 50, 'working agent tires');
@@ -144,7 +144,7 @@ test('research assignment adds research progress, not phone capacity', () => {
   // At 10:00 only the early phone agents (a0, a2) are on; late ones start at 12:00.
   assert.equal(baseline, 2);
   assert.equal(r.clients[A.id].agents, 2);
-  const perInterval = 0.5 + (lead.skills.coaching + lead.skills.evaluation) / 2 / 20;
+  const perInterval = 1 + (lead.skills.coaching + lead.skills.evaluation) / 2 / 10;
   assert.ok(Math.abs(s.progress.research - perInterval) < 1e-9);
   assert.equal(s.progress.qa, 0); // QA is on the late shift, not on at 10:00
   assert.ok(lead.fatigue > fatigue);
@@ -178,7 +178,7 @@ test('satisfaction stays within 0-100', () => {
 });
 
 test('quiet-month staffAvail scales capacity for that nation\'s staff', () => {
-  const s = makeState({ day: 154, minute: H(14), phoneA: 4 });
+  const s = makeState({ day: 154, minute: H(11), phoneA: 4 });
   assert.equal(dateOf(154).weekday, 0);
   for (const id of Object.keys(s.roster)) for (const d in s.roster[id]) s.roster[id][d] = 'early';
   s.people.forEach((p) => { p.nation = 'kamuen'; });
@@ -202,4 +202,16 @@ test('client satisfaction moves over days, not single intervals', () => {
   }
   assert.ok(70 - afterDay[0] >= 3 && 70 - afterDay[0] <= 15, `one bad day: ${afterDay[0]}`);
   assert.ok(70 - afterDay[4] >= 25, `one bad week: ${afterDay[4]}`);
+});
+
+test('two agents on the same client and shift take their breaks at different times', () => {
+  // Client A: a0 (group 0) and a2 (group 1) early, a1 (group 0) and a3 (group 1) late.
+  const at = (minute) => {
+    const s = makeState({ day: 1, minute, phoneA: 4 });
+    return stepInterval(s, flat).clients[A.id].agents;
+  };
+  assert.equal(at(H(12)), 3.5); // a0 on a short break
+  assert.equal(at(H(13)), 2.5); // a0 at lunch, a1 on a short break
+  assert.equal(at(H(14) + 30), 3); // a2 at lunch
+  assert.equal(at(H(10)), 2); // only the early pair, both working
 });

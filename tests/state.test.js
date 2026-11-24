@@ -88,3 +88,10 @@ test('broken or old saves load as null', () => {
   }
   assert.equal(deserialize(undefined), null);
 });
+
+test('nobody in a new game shares a name with a colleague', () => {
+  for (let seed = 1; seed <= 100; seed++) {
+    const names = newGame(seed).people.map((p) => p.name);
+    assert.equal(new Set(names).size, names.length, `seed ${seed}: ${names.join(', ')}`);
+  }
+});

@@ -194,6 +194,7 @@ function planSpikes(state, rng) {
 }
 
 export function endOfDay(state, rng) {
+  if (state.gameOver) return;
   const workday = isWorkday(state.day);
   state.spikes = (state.spikes ?? []).filter((s) => s.day >= state.day);
   state.absences ??= [];

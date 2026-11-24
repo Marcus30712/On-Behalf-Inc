@@ -5,6 +5,8 @@
 // client-offer, ...) get their entries there. A choice with no entry just resolves.
 import { EVENTS } from '../world/events.js';
 import { moraleOf } from './people.js';
+import { hireCandidate, dropHiring } from './hiring.js';
+import { acceptClient } from './economy.js';
 
 const LEAVE_REFUSED_ABSENCE = 0.3;
 const RESIGN_WITHDRAW_MORALE = 50;
@@ -61,6 +63,15 @@ export const EVENT_EFFECTS = {
     'let-go'(state, event, person) {
       (state.leaving ??= []).push({ personId: person.id, day: event.data.leaveDay });
     },
+  },
+  candidate: {
+    'pick-1'(state) { hireCandidate(state, 0); },
+    'pick-2'(state) { hireCandidate(state, 1); },
+    hold(state) { dropHiring(state); },
+  },
+  'client-offer': {
+    accept(state, event) { acceptClient(state, event.clientId); },
+    // decline: nothing changes.
   },
 };
 

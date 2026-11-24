@@ -87,6 +87,7 @@ function todayEntry(state, id) {
 export function stepInterval(state, rng) {
   const { day, minute } = state;
   const report = { day, minute, clients: {} };
+  if (state.gameOver) return report;
   const open = [];
   for (const c of state.clients) {
     const def = CLIENTS.find((d) => d.id === c.id);

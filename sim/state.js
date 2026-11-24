@@ -78,6 +78,7 @@ export function newGame(seed) {
     offerStreak: 0,
     rankSStreak: 0, // v1.1; not in REQUIRED, so v1.0 saves still load (read as 0)
     offered: [],
+    office: { level: 0, build: null }, // v1.2; not in REQUIRED, so v1.1 saves load at level 0
     reputationPenalty: 0,
     lastEndedDay: null,
   };
@@ -119,6 +120,7 @@ export function deserialize(text) {
     // v1.0 saves: a client lost before v1.1 has no lostDay; its reputation
     // mark fades from the day the save is loaded.
     for (const c of s.clients) if (!c.active && c.lostDay === undefined) c.lostDay = s.day;
+    s.office ??= { level: 0, build: null };
     return s;
   } catch {
     return null;

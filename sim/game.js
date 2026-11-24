@@ -9,6 +9,7 @@ import { endOfDay } from './day.js';
 import { advanceResearch, advanceBuild, startResearch } from './research.js';
 import { dailyEconomy, monthEnd, reputation } from './economy.js';
 import { advanceHiring, startHiring } from './hiring.js';
+import { advanceExpansion, startExpansion, officeView } from './office.js';
 import { resolveEvent } from './events.js';
 import { SHIFTS, isAbsent, onShift, onBreak } from './schedule.js';
 import { EVENTS } from '../world/events.js';
@@ -21,6 +22,7 @@ export const SAVE_KEY = 'on-behalf-inc:save:v1';
 // Agent seats and the hiring cost, for the screen.
 export { SEATS, HIRE_COST } from './hiring.js';
 export { SHIFTS } from './schedule.js';
+export { seatsOf, OFFICE_LEVELS } from './office.js';
 
 const INTERVAL = 30;
 const DAY_MINUTES = 1440;
@@ -57,6 +59,7 @@ export function advance(state, minutes) {
     if (isWorkday(state.day)) {
       dailyEconomy(state);
       advanceHiring(state, rng);
+      advanceExpansion(state);
     }
     if (state.day % DAYS_PER_MONTH === DAYS_PER_MONTH - 1) monthEnd(state);
     if (state.gameOver) { done++; break; }
@@ -96,6 +99,9 @@ const ACTIONS = {
   },
   startHiring(state) {
     return startHiring(state);
+  },
+  startExpansion(state) {
+    return startExpansion(state);
   },
   resolve(state, { index, choiceId }) {
     if (!Number.isInteger(index) || !state.inbox[index]) return refuse('unknown-event');
@@ -282,6 +288,7 @@ export function view(state) {
       build: state.research.build,
     },
     hiring: state.hiring,
+    office: officeView(state),
     calendar: calendarAhead(state),
     gameOver: state.gameOver,
     milestones: state.milestones,

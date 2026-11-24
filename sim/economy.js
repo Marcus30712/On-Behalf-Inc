@@ -8,6 +8,7 @@
 import { DAYS_PER_MONTH } from './calendar.js';
 import { pushEvent } from './events.js';
 import { CLIENTS } from '../world/clients.js';
+import { rentOf } from './office.js';
 
 // Placeholder monthly salaries.
 export const SALARY = { agent: 2400, lead: 3600, qa: 3000 };
@@ -111,7 +112,7 @@ export function monthEnd(state) {
     income += def.monthlyFee * (metDays / days.length < FEE_CUT_BELOW ? FEE_CUT : 1);
   }
   const salaries = state.people.reduce((s, p) => s + (SALARY[p.role] ?? 0), 0);
-  state.cash = (state.cash ?? 0) + income - salaries;
+  state.cash = (state.cash ?? 0) + income - salaries - rentOf(state);
   state.reputationPenalty = (state.reputationPenalty ?? 0) / 2;
   if (state.cash < 0) endGame(state, 'game-over-cash');
 }

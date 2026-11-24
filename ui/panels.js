@@ -4,7 +4,7 @@
 // and clears once time passes or any action succeeds. After an ok action the
 // caller re-renders with a fresh view. resetPanels() clears the panels' own
 // state (open card, notices, pending phone picks) for a new or loaded game.
-import { SEATS, HIRE_COST, SHIFTS } from '../sim/game.js';
+import { HIRE_COST, SHIFTS } from '../sim/game.js';
 import { RESEARCH } from '../world/research.js';
 import { TRAITS } from '../world/traits.js';
 import { NATIONS } from '../world/nations.js';
@@ -248,7 +248,7 @@ function researchPanel({ h, v, run }) {
 
 function hiringPanel({ h, v, run }) {
   const H = UI_TEXT.hiring;
-  const free = Math.max(0, SEATS - v.people.filter((p) => p.role === 'agent').length);
+  const free = Math.max(0, v.office.seats - v.people.filter((p) => p.role === 'agent').length);
   let state;
   if (!v.hiring) state = free > 0 ? H.state.ready : H.noSeats;
   else if (v.hiring.candidates) state = H.state.arrived;

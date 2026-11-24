@@ -3,8 +3,9 @@
 // A refusal is shown inside the panel; it stays while the clock stands still
 // and clears once time passes or any action succeeds. After an ok action the
 // caller re-renders with a fresh view. resetPanels() clears the panels' own
-// state (open card, notices, pending phone picks) for a new or loaded game.
-import { HIRE_COST, SHIFTS } from '../sim/game.js';
+// state (open card, notices, pending phone picks, an open expansion question)
+// for a new or loaded game.
+import { HIRE_COST, SHIFTS, OFFICE_LEVELS } from '../sim/game.js';
 import { RESEARCH } from '../world/research.js';
 import { TRAITS } from '../world/traits.js';
 import { NATIONS } from '../world/nations.js';
@@ -16,8 +17,11 @@ import { builder } from './dom.js';
 
 export const TABS = ['people', 'roster', 'tasks', 'research', 'hiring', 'clients', 'calendar'];
 
-const WEEKDAYS = 5;
+const WEEKDAYS = 5; // Monday to Friday; Saturday and Sunday too with a weekend client
+const WEEK = 7;
 const CYCLE = { early: 'late', late: 'off', off: 'early' };
+const WEEKEND_CYCLE = { weekend: 'off', off: 'weekend' };
+const SIX_DAYS = 6; // sim/interval.js: six rostered days or more tire faster
 const TASK_KINDS = ['phone', 'coaching', 'qa', 'research', 'training'];
 const SKILLS = ['handling', 'systems', 'coaching', 'evaluation'];
 const HIGH = 70; // fatigue / stress danger zone
@@ -26,6 +30,7 @@ const LOW = 30; // morale danger zone
 let selected = null; // person id whose card is open in the people panel
 let notices = {}; // tab -> { text, day, minute } of the refusal
 let pendingPhone = new Set(); // people picked 'phone' in tasks, waiting for a client
+let confirming = false; // the hiring tab asks before an expansion starts
 
 // Opens a person's card the next time the people panel renders (null closes it).
 export function selectPerson(id) {
@@ -36,6 +41,7 @@ export function resetPanels() {
   selected = null;
   notices = {};
   pendingPhone = new Set();
+  confirming = false;
 }
 
 // The tab's refusal text if the clock has not moved since it was given.
@@ -45,9 +51,14 @@ function noticeFor(tab, v) {
   return notices[tab]?.text ?? '';
 }
 
-export function refusalText(reason) {
-  const t = UI_TEXT.refuse[reason] ?? UI_TEXT.refuse.default;
-  return fill(t, { cost: formatMoney(HIRE_COST) }) || UI_TEXT.refuse.default;
+// An expansion's refusals use the office copy first (its no-cash names the
+// build cost, not the hiring cost); v gives that cost.
+export function refusalText(reason, action, v) {
+  const office = action?.type === 'startExpansion';
+  const own = office ? UI_TEXT.refuse.office[reason] : undefined;
+  const t = [own, UI_TEXT.refuse[reason]].find((x) => typeof x === 'string') ?? UI_TEXT.refuse.default;
+  const cost = office ? v?.office?.next?.cost : HIRE_COST;
+  return fill(t, { cost: cost === undefined ? undefined : formatMoney(cost) }) || UI_TEXT.refuse.default;
 }
 
 const nationName = (id) => NATIONS.find((n) => n.id === id)?.name ?? '';
@@ -65,7 +76,7 @@ export function renderPanel(root, v, tab, onAct, { onClose } = {}) {
     run(action) {
       const r = onAct(action);
       if (r?.ok) notices = {};
-      else notices[tab] = { text: refusalText(r?.reason), day: v.day, minute: v.minute };
+      else notices[tab] = { text: refusalText(r?.reason, action, v), day: v.day, minute: v.minute };
       notice.textContent = notices[tab]?.text ?? '';
       return r;
     },
@@ -152,21 +163,48 @@ function peoplePanel(ctx) {
   return [title(h, P.title, fill(P.count, { n: v.people.length })), h('div', { class: 'person-list' }, cards)];
 }
 
+const shiftRunsOn = (shift, w) => !!SHIFTS[shift]?.days.includes(w);
+
+// Days in the person's week on a shift that runs that day while the center
+// opens (as sim/schedule.js rosteredDays counts them).
+function workedDays(v, p) {
+  return (p.week ?? []).filter((shift, w) => shiftRunsOn(shift, w) && (w < WEEKDAYS || v.flags?.weekend)).length;
+}
+
 function rosterPanel({ h, v, run }) {
   const R = UI_TEXT.roster;
   if (v.people.length === 0) return [title(h, R.title), h('p', {}, R.empty)];
   const today = v.date.weekday;
-  const head = h('tr', {}, h('th', {}, R.colName), PLANET.weekdays.slice(0, WEEKDAYS).map((d, w) =>
+  const weekend = !!v.flags?.weekend;
+  const days = weekend ? WEEK : WEEKDAYS;
+  const head = h('tr', {}, h('th', {}, R.colName), PLANET.weekdays.slice(0, days).map((d, w) =>
     h('th', { class: w === today ? 'today' : null, title: w === today ? R.todayMark : null }, d)));
-  const rows = v.people.map((p) => h('tr', {}, h('th', { scope: 'row' }, p.name),
-    (p.week ?? []).slice(0, WEEKDAYS).map((shift, w) => h('td', {},
+  const rows = v.people.map((p) => {
+    const worked = workedDays(v, p);
+    const six = worked >= SIX_DAYS;
+    const cells = (p.week ?? []).slice(0, days).map((shift, w) => h('td', {},
       h('button', {
         type: 'button', class: `shift shift-${shift}`, 'data-person': p.id, 'data-weekday': w,
         title: UI_TEXT.shift[shift]?.full,
-        onclick: () => run({ type: 'setRoster', personId: p.id, weekday: w, shift: CYCLE[shift] ?? 'early' }),
-      }, UI_TEXT.shift[shift]?.short ?? shift)))));
-  return [title(h, R.title, R.help), h('p', { class: 'help' }, R.hours),
-    h('table', { class: 'roster' }, h('thead', {}, head), h('tbody', {}, rows))];
+        onclick: () => run({
+          type: 'setRoster', personId: p.id, weekday: w,
+          shift: w >= WEEKDAYS ? WEEKEND_CYCLE[shift] ?? 'weekend' : CYCLE[shift] ?? 'early',
+        }),
+      }, UI_TEXT.shift[shift]?.short ?? shift)));
+    return h('tr', { 'data-person': p.id, class: six ? 'six-days' : null },
+      h('th', { scope: 'row' }, p.name,
+        six && h('small', { class: 'warn six-days-mark', title: R.sixDays }, ' ', fill(R.sixDaysShort, { n: worked }))),
+      cells,
+      six && h('td', { class: 'warn six-days-note' }, R.sixDays));
+  });
+  const count = (w) => v.people.filter((p) => p.week?.[w] === 'weekend').length;
+  const foot = weekend && h('tfoot', {}, h('tr', {}, h('th', {}),
+    PLANET.weekdays.slice(0, WEEKDAYS).map(() => h('td', {})),
+    [WEEKDAYS, WEEKDAYS + 1].map((w) => h('td', { 'data-weekend-count': w }, fill(R.weekendCount, { n: count(w) })))));
+  return [title(h, R.title, R.help),
+    weekend && h('p', { class: 'help' }, R.weekendHelp),
+    h('p', { class: 'help' }, R.hours),
+    h('table', { class: 'roster' }, h('thead', {}, head), h('tbody', {}, rows), foot)];
 }
 
 function tasksPanel({ h, v, run, rerender }) {
@@ -209,7 +247,7 @@ function tasksPanel({ h, v, run, rerender }) {
       h('td', {}, clientSelect || '', ended && h('span', { class: 'warn' }, ` ${T.clientEnded}`)));
   });
   return [title(h, T.title, T.help),
-    h('p', { class: 'seats' }, fill(T.seats, { n: seated }), byClient.length > 0 && ` · ${byClient.join(' · ')}`),
+    h('p', { class: 'seats' }, fill(T.seatsOf, { n: seated, seats: v.office.seats }), byClient.length > 0 && ` · ${byClient.join(' · ')}`),
     h('table', { class: 'tasks' },
       h('thead', {}, h('tr', {}, [T.colName, T.colRole, T.colTask, T.colClient].map((c) => h('th', {}, c)))),
       h('tbody', {}, rows))];
@@ -246,7 +284,58 @@ function researchPanel({ h, v, run }) {
     h('ul', { class: 'research-list' }, items)];
 }
 
-function hiringPanel({ h, v, run }) {
+// One expansion stage (OFFICE_LEVELS index 1, 2): done, building, the next
+// one to start (with its numbers and button), or locked behind the one before.
+function officeStage(ctx, level) {
+  const { h, v, run, rerender } = ctx;
+  const O = UI_TEXT.office;
+  const o = v.office;
+  const def = OFFICE_LEVELS[level];
+  const name = O.stages[level]?.name;
+  let body;
+  if (level <= o.level) body = h('p', { class: 'done' }, O.done);
+  else if (o.build?.level === level) body = h('p', {}, fill(O.building, { days: o.build.workdaysLeft }));
+  else if (level === o.level + 1 && !o.build) {
+    const next = o.next ?? def;
+    const cost = formatMoney(next.cost);
+    const ask = confirming
+      ? h('div', { class: 'confirm', role: 'alertdialog', 'aria-label': fill(O.confirmTitle, { stage: name }) },
+        h('strong', {}, fill(O.confirmTitle, { stage: name })),
+        h('p', {}, fill(O.confirmText, { cost })),
+        h('button', {
+          type: 'button', 'data-action': 'confirmExpansion',
+          onclick: () => { confirming = false; run({ type: 'startExpansion' }); rerender(); },
+        }, UI_TEXT.common.yes), ' ',
+        h('button', { type: 'button', 'data-action': 'cancelExpansion', onclick: () => { confirming = false; rerender(); } },
+          UI_TEXT.common.no))
+      : h('button', { type: 'button', 'data-action': 'startExpansion', onclick: () => { confirming = true; rerender(); } }, O.start);
+    body = [h('ul', { class: 'office-numbers' },
+      h('li', {}, fill(O.cost, { cost })),
+      h('li', {}, fill(O.buildTime, { days: next.buildWorkdays })),
+      h('li', {}, fill(O.rent, { rent: formatMoney(next.rent) })),
+      h('li', {}, fill(O.seatsAfter, { seats: def.seats }))), ask];
+  } else body = h('p', { class: 'help' }, O.locked);
+  return h('li', { class: 'office-stage', 'data-stage': level },
+    h('strong', {}, name), h('p', {}, O.stages[level]?.blurb), body);
+}
+
+// The office: expansion lives in the hiring tab (no eighth tab).
+function officeSection(ctx) {
+  const { h, v } = ctx;
+  const O = UI_TEXT.office;
+  let rent = 0;
+  for (let i = 1; i <= v.office.level; i++) rent += OFFICE_LEVELS[i].rent;
+  const stages = OFFICE_LEVELS.slice(1).map((_, i) => officeStage(ctx, i + 1));
+  return h('section', { class: 'office' },
+    h('h3', {}, O.title),
+    h('p', { class: 'help' }, O.help),
+    h('p', {}, fill(O.seatsNow, { seats: v.office.seats }), rent > 0 && ` · ${fill(O.rentTotal, { rent: formatMoney(rent) })}`),
+    !v.office.next && h('p', {}, O.allDone),
+    h('ul', { class: 'office-list' }, stages));
+}
+
+function hiringPanel(ctx) {
+  const { h, v, run } = ctx;
   const H = UI_TEXT.hiring;
   const free = Math.max(0, v.office.seats - v.people.filter((p) => p.role === 'agent').length);
   let state;
@@ -259,7 +348,8 @@ function hiringPanel({ h, v, run }) {
     (free > 0 || v.hiring) && h('p', {}, free > 0 ? fill(H.seats, { n: free }) : H.noSeats),
     !v.hiring && free > 0 && h('button', { type: 'button', 'data-action': 'startHiring', onclick: () => run({ type: 'startHiring' }) }, H.start),
     h('p', { class: 'help' }, H.probationNote),
-    h('p', { class: 'help' }, H.noRefund)];
+    h('p', { class: 'help' }, H.noRefund),
+    officeSection(ctx)];
 }
 
 function clientsPanel({ h, v }) {

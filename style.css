@@ -113,6 +113,7 @@ small { color: var(--muted); }
 .topbar .when { font-variant-numeric: tabular-nums; }
 .topbar .time { font-weight: 700; }
 .topbar .shut { margin-left: 8px; color: var(--muted); }
+.topbar .weekend-open { margin-left: 8px; color: var(--good); }
 .topbar .speeds { display: flex; gap: 4px; }
 .topbar .speed {
   min-width: 40px;
@@ -142,6 +143,7 @@ small { color: var(--muted); }
 .metric { display: flex; gap: 10px; font-variant-numeric: tabular-nums; }
 .metric.below strong { color: var(--warn); }
 .metric .target { color: var(--muted); }
+.metric.weekend-only span { color: var(--muted); cursor: help; }
 
 /* ---------- tab bar ---------- */
 .tabs { display: flex; flex-wrap: wrap; gap: 2px; padding: 4px 8px 0; background: var(--bg); border-bottom: 1px solid var(--line); }
@@ -207,6 +209,24 @@ tr.ended { opacity: .55; }
 .shift-early { color: var(--good); }
 .shift-late { color: var(--accent); }
 .shift-off { color: var(--muted); }
+.shift-weekend { color: var(--warn); }
+.roster tr.six-days > th { color: var(--warn); }
+.six-days-mark::before { content: ''; display: inline-block; width: 7px; height: 7px; margin: 0 3px 1px 4px; border-radius: 50%; background: var(--bad); }
+.six-days-mark { font-size: .8rem; cursor: help; }
+.six-days-note { font-size: .85rem; }
+.roster tfoot td { color: var(--muted); font-size: .85rem; border-bottom: none; }
+
+/* office (in the hiring tab) */
+.office { margin-top: 12px; padding-top: 8px; border-top: 1px solid var(--line); }
+.office h3 { margin: 0 0 .2em; font-size: 1rem; }
+.office-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; }
+.office-stage { padding: 8px 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; }
+.office-stage p { margin: .3em 0; }
+.office-stage > p:first-of-type { color: var(--muted); font-size: .9rem; }
+.office-stage .done { color: var(--good); }
+.office-numbers { margin: .3em 0; padding-left: 1.2em; font-size: .9rem; }
+.office .confirm { margin-top: 6px; padding: 6px 8px; border: 1px solid var(--warn); border-radius: 6px; }
+.office .confirm p { margin: .3em 0; }
 
 /* research */
 .research-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; }

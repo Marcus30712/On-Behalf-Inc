@@ -7,7 +7,8 @@ Serves the repo root on a free local port and drives /usr/bin/google-chrome
 through Playwright at 1280x720 and 1024x640: new game, 3x speed to game day 5,
 no console or page errors, no raw template text, no sideways scroll, a click
 at 1x, a choice answered, continue after reload, a game-over save, a long
-inbox, every open panel fully on screen. Screenshots go to tools/out/. Prints only failures; the last line is
+inbox, every open panel fully on screen, an office expansion started from the
+hiring tab and a weekend client's roster, metrics and Saturday hours. Screenshots go to tools/out/. Prints only failures; the last line is
 ALL CHECKS PASSED when there are none.
 """
 import functools
@@ -324,6 +325,69 @@ def check_long_inbox(browser):
     page.context.close()
 
 
+def check_expansion_weekend(browser):
+    """v1.2: expansion from the hiring tab; a weekend client's screens."""
+    tag = 'expansion+weekend'
+    size = VIEWPORTS[1]  # the smaller screen: the busiest panels must still fit
+    weekend = "game.clients.push({ id: 'baram-delivery', satisfaction: 70, active: true }); game.cash = 100000;"
+    page = open_page(browser, size, node_save(weekend))
+    page.click('.start-continue')
+    page.wait_for_selector('.overlay', state='hidden')
+    page.keyboard.press(' ')
+    metric = page.locator('.metrics [data-client="baram-delivery"]')
+    if '주말 운영' not in metric.inner_text():
+        fail(f'{tag}: weekday metrics for the weekend client do not say 주말 운영: {metric.inner_text()!r}')
+
+    page.click('[data-tab="hiring"]')
+    page.wait_for_selector('.panel .office')
+    page.click('[data-action="startExpansion"]')
+    page.click('[data-action="confirmExpansion"]')
+    page.wait_for_timeout(300)
+    stage1 = page.locator('.office [data-stage="1"]').inner_text()
+    if '공사 중' not in stage1:
+        fail(f'{tag}: starting expansion 1 did not show it building: {stage1!r}')
+    check_panel_visible(page, size, f'{tag} hiring')
+    page.screenshot(path=str(OUT / 'office-expansion.png'))
+    check_text(page, f'{tag} hiring')
+    check_no_sideways(page, f'{tag} hiring')
+
+    page.click('[data-tab="roster"]')
+    page.wait_for_timeout(100)
+    cols = page.locator('.roster thead th').count()
+    if cols != 8 or page.locator('.roster tfoot [data-weekend-count]').count() != 2:
+        fail(f'{tag}: roster with a weekend client has {cols} head cells (want 8) or no weekend counts')
+    check_panel_visible(page, size, f'{tag} roster')
+    page.screenshot(path=str(OUT / 'roster-weekend.png'))
+    check_text(page, f'{tag} roster')
+    check_no_sideways(page, f'{tag} roster')
+    check_errors(page, tag)
+    page.context.close()
+
+    # Saturday 10:00 with the weekend client: open, numbers shown, 1x pace.
+    page = open_page(browser, size, node_save(weekend + 'advance(game, 1440 * 5 + 600 - (game.day * 1440 + game.minute));'
+                                              "if (game.gameOver) throw new Error('game ended');"))
+    page.click('.start-continue')
+    page.wait_for_selector('.overlay', state='hidden')
+    page.keyboard.press(' ')
+    if page.locator('.topbar .weekend-open').count() != 1 or page.locator('.topbar .shut').count() != 0:
+        fail(f'{tag}: Saturday 10:00 top bar is not 주말 운영: {page.inner_text(".topbar .when")!r}')
+    metric = page.locator('.metrics [data-client="baram-delivery"]')
+    if '서비스 레벨' not in metric.inner_text():
+        fail(f'{tag}: Saturday metrics for the weekend client show no numbers: {metric.inner_text()!r}')
+    before = page.inner_text('.topbar .time')
+    page.keyboard.press('1')
+    page.clock.run_for(2000)
+    page.keyboard.press(' ')
+    after = page.inner_text('.topbar .time')
+    mins = lambda t: int(t[:2]) * 60 + int(t[3:5])
+    if mins(after) - mins(before) > 30:
+        fail(f'{tag}: open Saturday ran at the fast rate at 1x ({before} -> {after} in 2 s)')
+    page.screenshot(path=str(OUT / 'weekend-saturday.png'))
+    check_text(page, f'{tag} saturday')
+    check_errors(page, f'{tag} saturday')
+    page.context.close()
+
+
 def main():
     global base_url
     OUT.mkdir(parents=True, exist_ok=True)
@@ -337,6 +401,7 @@ def main():
                     play_viewport(browser, size)
                 check_game_over(browser)
                 check_long_inbox(browser)
+                check_expansion_weekend(browser)
             finally:
                 browser.close()
     except Exception as e:  # a broken step is a failure, not a crash

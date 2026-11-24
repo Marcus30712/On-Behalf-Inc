@@ -1,6 +1,6 @@
 // Real time -> game time. Pure: no timers, no DOM; the caller passes the real
 // clock into tick(). Only sim/game.js and read-only copy from world/ are used.
-import { advance, view } from '../sim/game.js';
+import { advance, view, SHIFTS } from '../sim/game.js';
 import { EVENTS } from '../world/events.js';
 
 export const SPEEDS = [0, 1, 2, 3];
@@ -11,11 +11,17 @@ const OPEN_RATE = 6; // game minutes per real second at 1x, in opening hours
 const FAST_RATE = 120; // outside opening hours and on weekends
 const MAX_TICK_MINUTES = 240; // a tab that was paused must not run away
 
-const isOpenNow = ({ day, minute }) => ((day % 7) + 7) % 7 < 5 && minute >= OPEN && minute < CLOSE;
+// Weekdays 09-21; with a weekend client (view flags.weekend) also Saturday and
+// Sunday for the weekend shift's hours.
+function isOpenNow({ day, minute, flags }) {
+  const weekday = ((day % 7) + 7) % 7;
+  if (weekday < 5) return minute >= OPEN && minute < CLOSE;
+  return !!flags?.weekend && minute >= SHIFTS.weekend.start && minute < SHIFTS.weekend.end;
+}
 
-export function gameMinutesFor(realMs, speed, { day, minute }) {
+export function gameMinutesFor(realMs, speed, { day, minute, flags }) {
   if (!(speed > 0) || !(realMs > 0)) return 0;
-  const rate = isOpenNow({ day, minute }) ? OPEN_RATE : FAST_RATE;
+  const rate = isOpenNow({ day, minute, flags }) ? OPEN_RATE : FAST_RATE;
   return (realMs / 1000) * rate * speed;
 }
 

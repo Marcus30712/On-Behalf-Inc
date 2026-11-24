@@ -136,7 +136,7 @@ test('seat counter counts agents on the phone only', () => {
   const agentsOnPhone = state.people.filter((p) => p.role === 'agent' && state.assignment[p.id]?.kind === 'phone').length;
   const root = makeRoot();
   renderPanel(root, view(state), 'tasks', (a) => act(state, a));
-  assert.equal(root.querySelector('.seats').textContent.split(' · ')[0], fill(UI_TEXT.tasks.seats, { n: agentsOnPhone }));
+  assert.equal(root.querySelector('.seats').textContent.split(' · ')[0], fill(UI_TEXT.tasks.seatsOf, { n: agentsOnPhone, seats: view(state).office.seats }));
 });
 
 test('a refusal notice clears once time passes or an action succeeds', () => {

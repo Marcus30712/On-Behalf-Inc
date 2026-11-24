@@ -185,3 +185,21 @@ test('quiet-month staffAvail scales capacity for that nation\'s staff', () => {
   const r = stepInterval(s, flat);
   assert.ok(Math.abs(r.clients[A.id].agents - 3.2) < 1e-9);
 });
+
+test('client satisfaction moves over days, not single intervals', () => {
+  // Nobody on client A's phone: every interval misses and calls are lost.
+  const s = makeState({ day: 0, minute: H(11), phoneA: 0 });
+  stepInterval(s, flat);
+  assert.ok(70 - s.clients[0].satisfaction <= 1, `one bad interval: ${s.clients[0].satisfaction}`);
+
+  const t = makeState({ day: 0, minute: H(9), phoneA: 0 });
+  const afterDay = [];
+  for (let day = 0; day < 5; day++) {
+    t.day = day;
+    t.minute = H(9);
+    for (let i = 0; i < 24; i++) stepInterval(t, flat);
+    afterDay.push(t.clients[0].satisfaction);
+  }
+  assert.ok(70 - afterDay[0] >= 3 && 70 - afterDay[0] <= 15, `one bad day: ${afterDay[0]}`);
+  assert.ok(70 - afterDay[4] >= 25, `one bad week: ${afterDay[4]}`);
+});

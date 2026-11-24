@@ -11,6 +11,15 @@ const SKILL_ORDER = ['handling', 'systems', 'coaching', 'evaluation'];
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
+// Stress per 30 minutes of work: a base for a working day with customers, more
+// the busier the queue keeps the person, and a steep extra once occupancy
+// passes overloadFrom (no breathing room between calls).
+const STRESS = { base: 1.2, perOccupancy: 1.6, overload: 2, overloadFrom: 0.7 };
+// A night's sleep takes off a flat amount plus a share of what is left, so
+// stress settles where the week's strain and recovery balance instead of
+// drifting without end.
+const NIGHT_STRESS = { flat: 8, share: 0.05 };
+
 function traitMul(person, key) {
   let m = 1;
   for (const id of person.traits) {
@@ -69,8 +78,9 @@ export function applyWork(person, { minutes, occupancy, mods = {} }) {
   const fMul = (mods.fatigueGainMul ?? 1) * traitMul(person, 'fatigueGainMul');
   const sMul = (mods.stressGainMul ?? 1) * traitMul(person, 'stressGainMul');
   person.fatigue = clamp(person.fatigue + slots * (1.5 + 2.5 * occupancy) * fMul, 0, 100);
-  person.stress = clamp(
-    person.stress + slots * (0.5 + (3 * Math.max(0, occupancy - 0.7)) / 0.3) * sMul, 0, 100);
+  const strain = STRESS.base + STRESS.perOccupancy * occupancy
+    + (STRESS.overload * Math.max(0, occupancy - STRESS.overloadFrom)) / (1 - STRESS.overloadFrom);
+  person.stress = clamp(person.stress + slots * strain * sMul, 0, 100);
   person.morale = moraleOf(person);
 }
 
@@ -84,6 +94,6 @@ export function applyRest(person, { minutes, mods = {} }) {
 
 export function overnight(person) {
   person.fatigue = clamp(person.fatigue - 40, 0, 100);
-  person.stress = clamp(person.stress - 8, 0, 100);
+  person.stress = clamp(person.stress - NIGHT_STRESS.flat - NIGHT_STRESS.share * person.stress, 0, 100);
   person.morale = moraleOf(person);
 }

@@ -57,7 +57,7 @@ test('finished research starts construction, finished construction applies the e
   advanceBuild(s, def('rest-room').buildHours * 60);
   assert.equal(s.research.build, null);
   assert.deepEqual(s.research.done, ['rest-room']);
-  assert.equal(mods(s).restRecoveryMul, 1.3);
+  assert.equal(mods(s).restRecoveryMul, 1.5);
   assert.equal(s.inbox.at(-1).id, 'build-done');
 });
 
@@ -94,7 +94,7 @@ test('rest-room changes rest recovery from then on', () => {
   // From then on, rest recovers 30% faster.
   a.fatigue = 50;
   applyRest(a, { minutes: 30, mods: mods(s) });
-  assert.ok(Math.abs(a.fatigue - (50 - 2 * 1.3)) < 1e-9);
+  assert.ok(Math.abs(a.fatigue - (50 - 2 * 1.5)) < 1e-9);
 });
 
 test('stress-training lowers everyone stress; flexible-shifts sets the flag', () => {
@@ -106,7 +106,7 @@ test('stress-training lowers everyone stress; flexible-shifts sets the flag', ()
   assert.equal(person(s, 'a1').stress, 55);
   assert.equal(person(s, 'a2').stress, 0);
   assert.deepEqual(s.inbox.at(-1).data.names, [person(s, 'a1').name]);
-  assert.equal(mods(s).stressGainMul, 0.85);
+  assert.equal(mods(s).stressGainMul, 0.8);
   s.research.build = { researchId: 'flexible-shifts', minutesLeft: 30 };
   advanceBuild(s, 30);
   assert.equal(s.flags.flexibleShifts, true);

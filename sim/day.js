@@ -10,7 +10,9 @@ import { pushEvent, expireEvents } from './events.js';
 import { SHIFTS } from './schedule.js';
 import { NATIONS } from '../world/nations.js';
 
-const SICK_DAYS = [2, 5];
+const SICK_DAYS = [3, 6];
+// Chance per workday of falling ill: a base plus more with stress and fatigue.
+const SICK = { base: 0.004, perStress: 0.02, perFatigue: 0.006 };
 const BURNOUT_DAYS = [5, 10];
 const BURNOUT_STRESS = 80;
 const BURNOUT_STREAK = 5;
@@ -21,8 +23,8 @@ const ARGUMENT_SATISFACTION = 3;
 const RESIGN_WORKDAYS = 10;
 const FRIDAY = 4;
 const SPIKE_CHANCE = 0.05;
-const COACH = { handling: 0.05, stress: 3, morale: 2 };
-const QA_SATISFACTION = 0.1;
+const COACH = { handling: 0.05, stress: 1, morale: 2 };
+const QA_SATISFACTION = 0.03;
 const TRAINING_HANDLING = 0.15;
 const MAX_SKILL = 10;
 
@@ -71,7 +73,7 @@ const phoneClient = (state, person) => {
 };
 
 function rollHealth(state, person, rng) {
-  const sickChance = 0.002 + (person.stress / 100) * 0.01 + (person.fatigue / 100) * 0.006;
+  const sickChance = SICK.base + (person.stress / 100) * SICK.perStress + (person.fatigue / 100) * SICK.perFatigue;
   if (rng.chance(sickChance)) {
     const days = Math.max(1, Math.round(rng.int(...SICK_DAYS) * (state.mods?.sickDaysMul ?? 1)));
     person.health = { kind: 'sick', daysLeft: days };

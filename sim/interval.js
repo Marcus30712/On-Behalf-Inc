@@ -13,17 +13,19 @@ import { NATIONS } from '../world/nations.js';
 const INTERVAL = 30;
 const CURVE_START = 540; // 09:00
 const SPIKE_MUL = 1.6;
-const NON_PHONE_OCCUPANCY = 0.5;
+const NON_PHONE_OCCUPANCY = 0.2;
 const PROGRESS_KINDS = ['coaching', 'qa', 'research', 'training'];
 
 // Share of a day's calls per interval, 09:00-21:00 (24 intervals, sum 1).
-// Late-morning peak at 11:00 (0.066), a lunch dip at 12:30 (0.034), an
-// early-afternoon peak at 15:00 (0.060), then an evening tail.
+// A morning peak at 10:30 (0.044), a lunch dip at 12:30 (0.036), the day's
+// peak at 15:00 (0.066) while both shifts overlap, then an evening tail. The
+// default roster (half early, half late) covers this shape; the breaks still
+// leave thin intervals.
 export const CURVE = [
-  36, 44, 52, 60, 66, 62, // 09:00-12:00
-  38, 34, 36, 44,         // 12:00-14:00
-  52, 58, 60, 56, 50, 44, // 14:00-17:00
-  40, 36, 32, 28, 24, 20, 16, 12, // 17:00-21:00
+  28, 34, 40, 44, 40, 38, // 09:00-12:00
+  48, 36, 36, 44,         // 12:00-14:00
+  54, 62, 66, 62, 50, 52, // 14:00-17:00
+  58, 52, 36, 32, 28, 24, 20, 16, // 17:00-21:00
 ].map((w) => w / 1000);
 
 // Monday = weekday 0.
@@ -63,6 +65,20 @@ export function callsFor(client, day, minute, rng) {
 const researchSkillMul = (p) => 0.5 + (p.skills.coaching + p.skills.evaluation) / 2 / 20;
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+
+// Client satisfaction per interval, sized so it moves over days: an interval
+// at target adds SAT_MET (about +1 over a good day); a miss costs up to
+// SAT_MISS by how far the service level fell short, plus up to SAT_LOST by the
+// share of calls lost. A wholly unanswered day costs about 8, a bad week 40.
+const SAT_MET = 0.04;
+const SAT_MISS = 0.15;
+const SAT_LOST = 0.2;
+
+function satisfactionDelta(q, target) {
+  const lost = q.offered > 0 ? q.abandoned / q.offered : 0;
+  if (q.serviceLevel >= target) return SAT_MET - SAT_LOST * lost;
+  return -SAT_MISS * ((target - q.serviceLevel) / target) - SAT_LOST * lost;
+}
 
 function isOpen(def, day, minute) {
   const h = def.hours;
@@ -125,8 +141,7 @@ export function stepInterval(state, rng) {
 
       const target = def.slTarget.pct / 100;
       const met = q.serviceLevel >= target;
-      const delta = (met ? 0.2 : -(target - q.serviceLevel) * 2) - 0.05 * q.abandoned;
-      cs.satisfaction = clamp(cs.satisfaction + delta, 0, 100);
+      cs.satisfaction = clamp(cs.satisfaction + satisfactionDelta(q, target), 0, 100);
 
       const t = todayEntry(state, def.id);
       t.offered += q.offered;

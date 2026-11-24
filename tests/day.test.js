@@ -49,19 +49,19 @@ test('stress raises the chance of getting sick', () => {
   assert.ok(high > low * 2, `high ${high} low ${low}`);
 });
 
-test('sickness lasts 2-5 days and pushes a sick event; the clinic shortens it', () => {
+test('sickness lasts 3-6 days and pushes a sick event; the clinic shortens it', () => {
   const state = makeState({ nations: ['veltora'] });
   const always = { ...never, chance: (p) => p > 0 && p < 0.05, int: (a, b) => b };
   endOfDay(state, always);
   const p = state.people[0];
-  assert.deepEqual(p.health, { kind: 'sick', daysLeft: 5 });
+  assert.deepEqual(p.health, { kind: 'sick', daysLeft: 6 });
   assert.equal(ids(state, 'sick')[0].personId, 'p0');
-  assert.equal(ids(state, 'sick')[0].data.days, 5);
+  assert.equal(ids(state, 'sick')[0].data.days, 6);
 
   const clinic = makeState({ nations: ['veltora'] });
   clinic.mods.sickDaysMul = 0.6;
   endOfDay(clinic, always);
-  assert.equal(clinic.people[0].health.daysLeft, 3);
+  assert.equal(clinic.people[0].health.daysLeft, 4); // round(6 x 0.6)
 });
 
 test('five high-stress days in a row cause burnout', () => {
@@ -315,7 +315,7 @@ test('QA progress lifts every active client, training lifts probationers', () =>
   const h = [rookie.skills.handling, vet.skills.handling];
   state.progress = { coaching: 0, qa: 5, research: 0, training: 2 };
   endOfDay(state, never);
-  assert.ok(Math.abs(state.clients[0].satisfaction - 70.5) < 1e-9);
+  assert.ok(Math.abs(state.clients[0].satisfaction - 70.15) < 1e-9); // 5 x 0.03
   assert.equal(state.clients[1].satisfaction, 70);
   assert.ok(Math.abs(rookie.skills.handling - (h[0] + 0.3)) < 1e-9);
   assert.equal(vet.skills.handling, h[1]);
@@ -355,7 +355,7 @@ test('overnight recovery comes after the rolls and the morale boost halves each 
   set(p, { stress: 60, fatigue: 60, moraleBoost: 8 });
   endOfDay(state, never);
   assert.equal(p.fatigue, 20);
-  assert.equal(p.stress, 52);
+  assert.equal(p.stress, 49); // 60 - 8 - 5% of 60
   assert.equal(p.moraleBoost, 4);
   assert.equal(p.morale, moraleOf(p));
   assert.equal(state.lastEndedDay, 0);

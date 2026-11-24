@@ -63,3 +63,22 @@ test('zero handle time is trivially served', () => {
   assert.equal(q.serviceLevel, 1);
   assert.equal(q.abandoned, 0);
 });
+
+test('staffing up always helps, even deep in overload', () => {
+  let prev = null;
+  for (let agents = 5; agents <= 14; agents += 1) {
+    const q = intervalQueue({ calls: 100, ahtMin: 4, agents, targetSec: 20, patienceSec: 120 });
+    if (prev) assert.ok(q.abandoned < prev.abandoned, `abandoned at ${agents}: ${q.abandoned} vs ${prev.abandoned}`);
+    prev = q;
+  }
+});
+
+test('part-time agents count in part (an agent at 60% is not nobody)', () => {
+  const run = (agents) => intervalQueue({ calls: 8, ahtMin: 6, agents, targetSec: 30, patienceSec: 75 });
+  const one = run(1); const part = run(1.6); const two = run(2);
+  assert.ok(part.abandoned < one.abandoned, `abandoned ${part.abandoned} vs ${one.abandoned}`);
+  assert.ok(part.abandoned >= two.abandoned);
+  assert.ok(part.serviceLevel > one.serviceLevel && part.serviceLevel < two.serviceLevel);
+  assert.equal(part.handled + part.abandoned, part.offered);
+  for (const v of Object.values(part)) assert.ok(Number.isFinite(v));
+});

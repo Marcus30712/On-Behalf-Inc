@@ -18,15 +18,9 @@ function memoryStorage() {
   };
 }
 
-// Patched: with the starting balance (tuned in Task 13) every game loses both
-// clients on day 29, so holding active clients at satisfaction 70 just before
-// each midnight keeps the game going; everything else is played. Ends at 00:00.
+// Plays whole days with no decisions. Ends at 00:00.
 function playDays(state, days) {
-  for (let d = 0; d < days; d++) {
-    advance(state, 1410 - state.minute);
-    for (const c of state.clients) if (c.active) c.satisfaction = 70;
-    advance(state, 30);
-  }
+  for (let d = 0; d < days; d++) advance(state, DAY - state.minute);
 }
 
 // Advances in 30-minute steps until `done(state)` or `maxDays` pass.

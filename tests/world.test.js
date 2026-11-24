@@ -68,7 +68,7 @@ test('two starting clients and one offer, hours Mon-Fri 09:00-21:00', () => {
     assert.equal(c.hours.open, 540);
     assert.equal(c.hours.close, 1260);
     assert.ok(NATIONS.some((n) => n.id === c.nation), c.id);
-    assert.ok(c.callsPerDay >= 300 && c.callsPerDay <= 450, c.id);
+    assert.ok(c.callsPerDay >= 60 && c.callsPerDay <= 150, c.id);
     assert.ok(c.ahtMin >= 4 && c.ahtMin <= 6, c.id);
     assert.ok(c.patienceSec >= 60 && c.patienceSec <= 120, c.id);
   }

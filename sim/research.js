@@ -9,7 +9,7 @@ import { moraleOf } from './people.js';
 
 const REST_ROOM_RELIEF = 10;
 const TRAINING_RELIEF = 15;
-const HIGH_STRESS = 50;
+const HIGH_STRESS = 40;
 const MUL_KEYS = ['restRecoveryMul', 'stressGainMul', 'sickDaysMul', 'fatigueGainMul'];
 
 const defOf = (id) => RESEARCH.find((r) => r.id === id);

@@ -116,7 +116,8 @@ test('people working get tired, people on break recover', () => {
   const early = s.people[0]; // a0 early shift
   const late = s.people[1]; // a1 late shift
   early.fatigue = 50; late.fatigue = 50;
-  // 11:00 early works (no break until 11:00-11:15 => offset 120 from 09:00 = 11:00).
+  // 10:00-10:30 is a full work interval for the early agent: on shift (09:00-18:00)
+  // and the first break only starts at 11:00 (shift start + 120 min).
   s.minute = H(10);
   stepInterval(s, flat);
   assert.ok(early.fatigue > 50, 'working agent tires');
@@ -134,9 +135,15 @@ test('research assignment adds research progress, not phone capacity', () => {
   s.assignment.q1 = { kind: 'qa' };
   const lead = s.people.find((p) => p.id === 'l1');
   const fatigue = lead.fatigue;
-  const withoutAgents = stepInterval(structuredClone(s), flat).clients[A.id].agents;
+  // Baseline: same state without the lead/QA assignments.
+  const base = structuredClone(s);
+  delete base.assignment.l1;
+  delete base.assignment.q1;
+  const baseline = stepInterval(base, flat).clients[A.id].agents;
   const r = stepInterval(s, flat);
-  assert.equal(r.clients[A.id].agents, withoutAgents);
+  // At 10:00 only the early phone agents (a0, a2) are on; late ones start at 12:00.
+  assert.equal(baseline, 2);
+  assert.equal(r.clients[A.id].agents, 2);
   assert.equal(s.progress.research, 1);
   assert.equal(s.progress.qa, 0); // QA is on the late shift, not on at 10:00
   assert.ok(lead.fatigue > fatigue);

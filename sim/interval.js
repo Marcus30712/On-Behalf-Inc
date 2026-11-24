@@ -48,6 +48,8 @@ function holidayMul(nation, day) {
   return mul;
 }
 
+// Expected calls for one interval: callsPerDay x curve x weekday x holiday x wobble.
+// Spikes (state.spikes) are not applied here; stepInterval multiplies them in.
 export function callsFor(client, day, minute, rng) {
   const slot = Math.floor((minute - CURVE_START) / INTERVAL);
   const weekMul = WEEKDAY_MUL[dateOf(day).weekday] ?? 0;

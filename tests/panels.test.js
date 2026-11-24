@@ -1,0 +1,127 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { JSDOM } from 'jsdom';
+import { createGame, act, view, HIRE_COST } from '../sim/game.js';
+import { UI_TEXT, fill } from '../ui/text.js';
+import { formatMoney } from '../ui/money.js';
+import { renderPanel, selectPerson, TABS } from '../ui/panels.js';
+import { renderTopbar, renderMetrics } from '../ui/topbar.js';
+import { createClock } from '../ui/clock.js';
+
+function makeRoot() {
+  const { document } = new JSDOM('<!DOCTYPE html><div id="root"></div>').window;
+  return document.getElementById('root');
+}
+
+const click = (el) => el.dispatchEvent(new el.ownerDocument.defaultView.MouseEvent('click', { bubbles: true }));
+
+test('roster cell cycles early → late → off and calls setRoster', () => {
+  const state = createGame(11);
+  const person = state.people.find((p) => state.roster[p.id]?.[0] === 'early');
+  assert.ok(person, 'someone works early on Monday');
+  const root = makeRoot();
+  const calls = [];
+  const onAct = (a) => { calls.push(a); return act(state, a); };
+  const cell = () => root.querySelector(`[data-person="${person.id}"][data-weekday="0"]`);
+
+  renderPanel(root, view(state), 'roster', onAct);
+  assert.equal(cell().textContent, UI_TEXT.shift.early.short);
+  for (const next of ['late', 'off', 'early']) {
+    click(cell());
+    assert.deepEqual(calls.at(-1), { type: 'setRoster', personId: person.id, weekday: 0, shift: next });
+    assert.equal(state.roster[person.id][0], next);
+    renderPanel(root, view(state), 'roster', onAct);
+    assert.equal(cell().textContent, UI_TEXT.shift[next].short);
+  }
+  assert.equal(root.querySelectorAll('thead th').length, 6, 'name + Mon..Fri');
+});
+
+test('refused action shows the reason text and changes nothing', () => {
+  const state = createGame(11);
+  state.cash = 0;
+  state.people.splice(state.people.findIndex((p) => p.role === 'agent'), 1); // a free seat
+  const before = JSON.stringify(state);
+  const root = makeRoot();
+  const onAct = (a) => act(state, a);
+  renderPanel(root, view(state), 'hiring', onAct);
+  click(root.querySelector('button[data-action="startHiring"]'));
+  assert.equal(JSON.stringify(state), before);
+  const msg = fill(UI_TEXT.refuse['no-cash'], { cost: formatMoney(HIRE_COST) });
+  assert.ok(root.textContent.includes(msg), root.textContent);
+
+  // An unknown reason falls back to the default refusal.
+  renderPanel(root, view(state), 'research', () => ({ ok: false, reason: 'no-such-reason' }));
+  click(root.querySelector('button[data-action="startResearch"]'));
+  assert.ok(root.textContent.includes(UI_TEXT.refuse.default));
+});
+
+test('research panel warns when nobody is assigned to research', () => {
+  const state = createGame(11);
+  const root = makeRoot();
+  const onAct = (a) => act(state, a);
+  renderPanel(root, view(state), 'research', onAct);
+  assert.ok(root.textContent.includes(UI_TEXT.research.nobody));
+  assert.equal(root.querySelectorAll('[data-research]').length, 4);
+
+  const lead = state.people.find((p) => p.role === 'lead');
+  assert.equal(act(state, { type: 'assign', personId: lead.id, kind: 'research' }).ok, true);
+  renderPanel(root, view(state), 'research', onAct);
+  assert.ok(!root.textContent.includes(UI_TEXT.research.nobody));
+  assert.ok(root.textContent.includes(fill(UI_TEXT.research.assigned, { n: 1 })));
+});
+
+test('people panel survives a person who left and an inactive client', () => {
+  const state = createGame(11);
+  const gone = state.people.pop();
+  const phoneAgent = state.people.find((p) => state.assignment[p.id]?.kind === 'phone');
+  const ended = state.clients.find((c) => c.id === state.assignment[phoneAgent.id].clientId);
+  ended.active = false;
+  const v = view(state);
+  const root = makeRoot();
+  const onAct = (a) => act(state, a);
+
+  for (const tab of TABS) assert.doesNotThrow(() => renderPanel(root, v, tab, onAct), tab);
+
+  renderPanel(root, v, 'people', onAct);
+  click(root.querySelector(`[data-person="${phoneAgent.id}"]`));
+  assert.ok(root.textContent.includes(UI_TEXT.card.traits), 'card opened from the list');
+
+  selectPerson(gone.id);
+  renderPanel(root, v, 'people', onAct);
+  assert.ok(root.textContent.includes(UI_TEXT.people.leftNote));
+
+  renderPanel(root, v, 'tasks', onAct);
+  assert.ok(root.textContent.includes(UI_TEXT.tasks.clientEnded));
+  renderPanel(root, v, 'clients', onAct);
+  assert.ok(root.textContent.includes(UI_TEXT.clients.ended));
+  selectPerson(null);
+});
+
+test('metrics show — when nothing has happened today', () => {
+  const state = createGame(11);
+  const root = makeRoot();
+  const v = view(state);
+  renderMetrics(root, v);
+  const items = root.querySelectorAll('[data-client]');
+  assert.equal(items.length, v.clients.filter((c) => c.active).length);
+  for (const item of items) {
+    assert.ok(item.textContent.includes(UI_TEXT.metrics.serviceLevel));
+    assert.ok(item.textContent.includes(UI_TEXT.metrics.none));
+  }
+});
+
+test('top bar shows date, speed buttons with aria-pressed, cash and grade tip', () => {
+  const state = createGame(11);
+  const clock = createClock({ state });
+  const root = makeRoot();
+  const v = view(state);
+  renderTopbar(root, v, clock);
+  assert.ok(root.textContent.includes(formatMoney(v.cash)));
+  const pressed = () => [...root.querySelectorAll('button[data-speed]')].map((b) => b.getAttribute('aria-pressed'));
+  assert.deepEqual(pressed(), ['true', 'false', 'false', 'false']);
+  click(root.querySelector('button[data-speed="2"]'));
+  assert.equal(clock.speed, 2);
+  assert.deepEqual(pressed(), ['false', 'false', 'true', 'false']);
+  const grade = root.querySelector('[data-grade]');
+  assert.equal(grade.getAttribute('title'), UI_TEXT.grade[v.reputation].text);
+});

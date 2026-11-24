@@ -12,11 +12,13 @@
 <body>
 <!-- Not linked from the game: a fake view to check the pixel art. Serve the
      project folder over http (ES modules do not load from file://). -->
-<div>1) Nothing built yet, rest-room under construction</div>
+<div>1) Office level 0: nothing built yet, rest-room under construction</div>
 <canvas id="before" width="960" height="576"></canvas>
-<div>2) Rest room, training and clinic done (sparkle over one person)</div>
+<div>2) Rest room, training and clinic done (sparkle over one person); expansion 1 under construction</div>
 <canvas id="after" width="960" height="576"></canvas>
-<div>3) Kim Miso</div>
+<div>3) Office level 2: both expansion areas open, 16 agents seated and 2 waiting</div>
+<canvas id="full" width="960" height="576"></canvas>
+<div>4) Kim Miso</div>
 <canvas id="miso" class="miso" width="144" height="144"></canvas>
 <script type="module">
 import { MAP } from './map.js';
@@ -46,22 +48,37 @@ const actors = people.map((p) => {
   return { id: p.id, x, y, path: [], target: [x, y], gone: false };
 });
 const walk = (id, x, y, path) => Object.assign(actors.find((a) => a.id === id), { x, y, path });
-walk('p6', 12, 8, [[13, 8], [14, 8], [14, 9]]); // heading to the break room
-walk('p7', 10, 9, [[10, 10], [10, 11]]); // sick, leaving by the door
+walk('p6', 12, 9, [[13, 9], [14, 9]]); // heading to the break room
+walk('p7', 11, 9, [[11, 10], [10, 10], [10, 11]]); // sick, leaving by the door
 
 const drawer = createDrawer((w, h) => Object.assign(document.createElement('canvas'), { width: w, height: h }));
 
-function scene(id, research, extra) {
+function scene(id, research, extra, office, cast = people, castActors = actors) {
   const ctx = document.getElementById(id).getContext('2d');
-  drawer.drawOffice(ctx, MAP, research);
-  drawer.drawActors(ctx, actors, people, 0);
-  ctx.drawImage(drawer.spriteCanvas('miso'), 14 * 48, 6 * 48 - 9, 48, 48);
-  drawer.drawBubbles(ctx, actors, people, extra);
+  drawer.drawOffice(ctx, MAP, research, office);
+  drawer.drawActors(ctx, castActors, cast, 0);
+  ctx.drawImage(drawer.spriteCanvas('miso'), 18 * 48, 5 * 48 - 9, 48, 48);
+  drawer.drawBubbles(ctx, castActors, cast, extra);
 }
 
-scene('before', { done: [], build: { researchId: 'rest-room', minutesLeft: 300 } });
+scene('before', { done: [], build: { researchId: 'rest-room', minutesLeft: 300 } }, undefined,
+  { level: 0, build: null });
 scene('after', { done: ['rest-room', 'stress-training', 'clinic'], build: null },
-  { sparkles: new Map([['p5', 0]]), timeMs: 400 });
+  { sparkles: new Map([['p5', 0]]), timeMs: 400 }, { level: 0, build: { level: 1, workdaysLeft: 6 } });
+
+// Level 2: 18 agents for 16 seats, plus the lead and QA at their desks.
+const crowd = [
+  ...Array.from({ length: 18 }, (_, i) => person(`a${i}`, 'agent', i % 5 === 4 ? 'idle' : 'phone')),
+  person('lead', 'lead', 'idle'),
+  person('qa', 'qa', 'task', { task: { kind: 'qa' } }),
+];
+const crowdTargets = planTargets(crowd, MAP, 16);
+const crowdActors = crowd.map((p) => {
+  const [x, y] = crowdTargets.get(p.id);
+  return { id: p.id, x, y, path: [], target: [x, y], gone: false };
+});
+scene('full', { done: ['rest-room', 'stress-training', 'clinic'], build: null }, undefined,
+  { level: 2, build: null }, crowd, crowdActors);
 
 const m = document.getElementById('miso').getContext('2d');
 m.imageSmoothingEnabled = false;

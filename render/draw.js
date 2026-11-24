@@ -80,11 +80,45 @@ export function createDrawer(makeCanvas = defaultMakeCanvas) {
     if (bottom && tileAt(map, x, y + 1) !== ch) g.fillRect(px, py + TILE_PX - U, TILE_PX, U);
   }
 
-  function drawTile(g, map, x, y, fac) {
+  // Expansion areas not built yet: Map 'x,y' -> 'empty' | 'building'.
+  function unbuiltTiles(map, office) {
+    const level = office?.level ?? 0;
+    const building = office?.build?.level ?? null;
+    const tiles = new Map();
+    for (const e of map.expansions ?? []) {
+      if (e.level <= level) continue;
+      const mode = e.level === building ? 'building' : 'empty';
+      for (const [x, y] of e.tiles) tiles.set(`${x},${y}`, mode);
+    }
+    return tiles;
+  }
+
+  // A low rug edge around an unbuilt area, two sprite pixels inside its tiles.
+  function areaOutline(g, area) {
+    const xs = area.tiles.map((t) => t[0]);
+    const ys = area.tiles.map((t) => t[1]);
+    const x0 = Math.min(...xs) * TILE_PX + 2 * U;
+    const y0 = Math.min(...ys) * TILE_PX + 2 * U;
+    const w = (Math.max(...xs) + 1) * TILE_PX - 2 * U - x0;
+    const h = (Math.max(...ys) + 1) * TILE_PX - 2 * U - y0;
+    g.fillStyle = PALETTES.office.c;
+    g.fillRect(x0, y0, w, U);
+    g.fillRect(x0, y0 + h - U, w, U);
+    g.fillRect(x0, y0, U, h);
+    g.fillRect(x0 + w - U, y0, U, h);
+  }
+
+  function drawTile(g, map, x, y, fac, unbuilt) {
     const ch = tileAt(map, x, y);
     const px = x * TILE_PX;
     const py = y * TILE_PX;
     const put = (name) => blit(g, name, px, py);
+    const area = unbuilt.get(`${x},${y}`);
+    if (area) {
+      put('floor');
+      if (area === 'building' && ch === 'D') put('construction');
+      return;
+    }
     if (ch === '#') {
       const below = tileAt(map, x, y + 1);
       const face = y + 1 < map.height && below !== '#';
@@ -131,16 +165,22 @@ export function createDrawer(makeCanvas = defaultMakeCanvas) {
     if (!fac.done.has(fac.building) && underConstruction(ch, fac.building)) put('construction');
   }
 
-  function drawOffice(ctx, map = MAP, research = null) {
+  // officeState: view.office ({ level, build }); expansion areas above the
+  // level draw as empty floor, or under construction while their level builds.
+  function drawOffice(ctx, map = MAP, research = null, officeState = null) {
     const fac = facilityState(research);
-    const key = `${map.tiles.join('/')}|${[...fac.done].sort().join(',')}|${fac.building ?? ''}`;
+    const level = officeState?.level ?? 0;
+    const buildLevel = officeState?.build?.level ?? '';
+    const key = `${map.tiles.join('/')}|${[...fac.done].sort().join(',')}|${fac.building ?? ''}|${level}|${buildLevel}`;
     if (!office || office.key !== key) {
       const canvas = makeCanvas(map.width * TILE_PX, map.height * TILE_PX);
       const g = canvas.getContext('2d');
       g.imageSmoothingEnabled = false;
+      const unbuilt = unbuiltTiles(map, officeState);
       for (let y = 0; y < map.height; y++) {
-        for (let x = 0; x < map.width; x++) drawTile(g, map, x, y, fac);
+        for (let x = 0; x < map.width; x++) drawTile(g, map, x, y, fac, unbuilt);
       }
+      for (const e of map.expansions ?? []) if (e.level > level) areaOutline(g, e);
       office = { key, canvas };
     }
     ctx.imageSmoothingEnabled = false;

@@ -306,7 +306,7 @@ export function start({ document, storage, now, requestFrame, seedSource: pickSe
 
   function draw(v, t) {
     if (!ctx) return;
-    drawer.drawOffice(ctx, undefined, v.research);
+    drawer.drawOffice(ctx, undefined, v.research, v.office);
     drawer.drawActors(ctx, actors, v.people, t);
     drawer.drawBubbles(ctx, actors, v.people, { sparkles, timeMs: t });
   }
@@ -370,7 +370,7 @@ export function start({ document, storage, now, requestFrame, seedSource: pickSe
       }
       collectSparkles(v, r.newEvents, t);
       if (r.newEvents.length > 0) showNewAdvice(v, r.newEvents);
-      actors = stepActors(actors, v.people, dt);
+      actors = stepActors(actors, v.people, dt, undefined, v.office?.seats);
       draw(v, t);
       refresh(v, t);
     }

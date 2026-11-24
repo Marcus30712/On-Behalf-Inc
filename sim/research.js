@@ -58,9 +58,10 @@ function refresh(person) {
   person.morale = moraleOf(person);
 }
 
-// Applies the finished build to the people; returns the names of those it changed.
+// Applies the finished build to the people; returns those it changed as
+// [{ personId, name, daysLeft? }] (daysLeft: the shortened sick leave, the clinic's {days}).
 function applyNow(state, researchId) {
-  const names = [];
+  const helped = [];
   const eff = defOf(researchId).effect;
   if (eff.sickDaysMul !== undefined) {
     for (const p of state.people) {
@@ -68,20 +69,20 @@ function applyNow(state, researchId) {
       const daysLeft = Math.max(1, Math.ceil(p.health.daysLeft * eff.sickDaysMul));
       if (daysLeft < p.health.daysLeft) {
         p.health = { ...p.health, daysLeft };
-        names.push(p.name);
+        helped.push({ personId: p.id, name: p.name, daysLeft });
       }
     }
   }
   const relief = researchId === 'rest-room' ? REST_ROOM_RELIEF : researchId === 'stress-training' ? TRAINING_RELIEF : 0;
   if (relief > 0) {
     for (const p of state.people) {
-      if (p.stress >= HIGH_STRESS) names.push(p.name);
+      if (p.stress >= HIGH_STRESS) helped.push({ personId: p.id, name: p.name });
       p.stress = Math.max(0, p.stress - relief);
       if (researchId === 'rest-room') p.fatigue = Math.max(0, p.fatigue - REST_ROOM_RELIEF);
       refresh(p);
     }
   }
-  return names;
+  return helped;
 }
 
 // Runs for all elapsed time (nights and weekends too). One build at a time.
@@ -99,6 +100,8 @@ export function advanceBuild(state, minutes) {
     if (eff[key] !== undefined) state.mods[key] = (state.mods[key] ?? 1) * eff[key];
   }
   if (eff.flexibleShifts) (state.flags ??= {}).flexibleShifts = true;
-  const names = applyNow(state, build.researchId);
-  pushEvent(state, { id: 'build-done', data: { researchId: build.researchId, names } });
+  const helped = applyNow(state, build.researchId);
+  pushEvent(state, {
+    id: 'build-done', data: { researchId: build.researchId, names: helped.map((h) => h.name), helped },
+  });
 }

@@ -3,17 +3,19 @@
 // storage is passed in (localStorage in the browser).
 import { newGame, serialize, deserialize } from './state.js';
 import { restoreRng } from './rng.js';
-import { dateOf, isWorkday, DAYS_PER_MONTH } from './calendar.js';
-import { stepInterval } from './interval.js';
+import { dateOf, isWorkday, upcomingHolidays, DAYS_PER_MONTH } from './calendar.js';
+import { stepInterval, breakGroups, isOpen } from './interval.js';
 import { endOfDay } from './day.js';
 import { advanceResearch, advanceBuild, startResearch } from './research.js';
 import { dailyEconomy, monthEnd, reputation } from './economy.js';
 import { advanceHiring, startHiring } from './hiring.js';
 import { resolveEvent } from './events.js';
-import { SHIFTS } from './schedule.js';
+import { SHIFTS, isAbsent, onShift, onBreak } from './schedule.js';
+import { EVENTS } from '../world/events.js';
 import { CLIENTS } from '../world/clients.js';
 import { RESEARCH } from '../world/research.js';
 import { PLANET } from '../world/planet.js';
+import { NATIONS } from '../world/nations.js';
 
 export const SAVE_KEY = 'on-behalf-inc:save:v1';
 
@@ -27,13 +29,22 @@ export function createGame(seed) {
   return newGame(seed);
 }
 
-// Moves the clock on in 30-minute steps (a remainder under 30 is dropped).
+// Moves the clock on by `minutes` in 30-minute steps; a remainder under 30 is
+// kept in state.pendingMinutes and added to the next call, so many small calls
+// add up. Returns the minutes actually simulated (a multiple of 30).
 // Each step: interval, research, build. At midnight: end of day; on a workday
 // then the daily economy and hiring; on a month's last day the month end.
-// Nothing moves once the game is over.
+// Nothing moves once the game is over; a game that ends at midnight stays on
+// its last day (minute 1440).
 export function advance(state, minutes) {
+  if (state.gameOver) return 0;
+  const asked = Number.isFinite(minutes) && minutes > 0 ? minutes : 0;
+  const total = (state.pendingMinutes ?? 0) + asked;
+  const steps = Math.floor(total / INTERVAL);
+  state.pendingMinutes = total - steps * INTERVAL;
   const rng = restoreRng(state.rngState);
-  for (let i = 0; i < Math.floor(minutes / INTERVAL); i++) {
+  let done = 0;
+  for (; done < steps; done++) {
     if (state.gameOver) break; // the game is frozen (builds too)
     stepInterval(state, rng);
     advanceResearch(state);
@@ -45,11 +56,13 @@ export function advance(state, minutes) {
       advanceHiring(state, rng);
     }
     if (state.day % DAYS_PER_MONTH === DAYS_PER_MONTH - 1) monthEnd(state);
+    if (state.gameOver) { done++; break; }
     state.day += 1;
     state.minute = 0;
   }
+  if (state.gameOver) state.pendingMinutes = 0;
   state.rngState = rng.state();
-  return state;
+  return done * INTERVAL;
 }
 
 const refuse = (reason) => ({ ok: false, reason });
@@ -128,6 +141,8 @@ function clientView(state, c) {
   const def = CLIENTS.find((d) => d.id === c.id);
   const t = state.today.clients[c.id];
   const intervals = t?.intervals ?? 0;
+  const offered = t?.offered ?? 0;
+  const handled = t?.handled ?? 0;
   return {
     id: c.id,
     name: def.name,
@@ -135,18 +150,61 @@ function clientView(state, c) {
     satisfaction: c.satisfaction,
     slTarget: def.slTarget,
     today: {
-      offered: t?.offered ?? 0,
-      handled: t?.handled ?? 0,
+      offered,
+      handled,
       abandoned: t?.abandoned ?? 0,
-      // Share of today's intervals at target; null before the first one.
-      serviceLevel: intervals > 0 ? t.intervalsMet / intervals : null,
+      // Service level so far today: calls answered within the target over
+      // calls offered. Null before the first call.
+      serviceLevel: offered > 0 ? (t.inTarget ?? 0) / offered : null,
+      // Average wait of answered calls, in seconds (ASA). Null before the first.
+      asaSec: handled > 0 ? (t.waitSec ?? 0) / handled : null,
+      // Share of today's intervals at target (the fee's met-day rule); null
+      // before the first interval.
+      intervalsMetRate: intervals > 0 ? t.intervalsMet / intervals : null,
       // Average agents on the phone per interval so far.
       agents: intervals > 0 ? t.agentShareSum / intervals : 0,
     },
   };
 }
 
-function personView(state, p, weekday) {
+const HOLIDAY_DAYS_AHEAD = 14;
+const PROGRESS_TASKS = new Set(TASKS.filter((t) => t !== 'phone'));
+
+// Why someone on the roster is not in today: their health ('sick', 'burnout',
+// 'leave') or 'absent'; otherwise the roster shift ('early', 'late', 'off').
+function shiftToday(state, p, rosterShift) {
+  if (p.health.kind !== 'well') return p.health.kind;
+  if (SHIFTS[rosterShift] && isAbsent(state, p.id, state.day)) return 'absent';
+  return rosterShift;
+}
+
+// What the person does in the interval starting now: 'phone' (answering
+// calls), 'task' (coaching, QA, research or training), 'break', 'idle' (on
+// shift with nothing to do) or 'off' (not at work).
+function activity(state, p, rosterShift, group) {
+  if (!onShift(state, p, state.day, state.minute)) return 'off';
+  if (onBreak(state.minute, rosterShift, group)) return 'break';
+  const a = state.assignment[p.id];
+  if (a?.kind === 'phone') {
+    const def = CLIENTS.find((d) => d.id === a.clientId);
+    const active = state.clients.some((c) => c.id === a.clientId && c.active);
+    return active && def && isOpen(def, state.day, state.minute) ? 'phone' : 'idle';
+  }
+  return PROGRESS_TASKS.has(a?.kind) ? 'task' : 'idle';
+}
+
+// Holidays of the person's nation that start within the next 14 days.
+function holidaysAhead(state, p) {
+  const nation = NATIONS.find((n) => n.id === p.nation);
+  if (!nation) return [];
+  return upcomingHolidays(state.day, nation, HOLIDAY_DAYS_AHEAD).map(({ holiday, startDay }) => ({
+    id: holiday.id, name: holiday.name, startDay, length: holiday.length,
+  }));
+}
+
+function personView(state, p, weekday, groups) {
+  const rosterShift = state.roster[p.id]?.[weekday] ?? 'off';
+  const breakGroup = groups.get(p.id) ?? 0;
   return {
     id: p.id,
     name: p.name,
@@ -159,9 +217,20 @@ function personView(state, p, weekday) {
     morale: p.morale,
     health: p.health,
     probationDays: p.probationDays,
-    shiftToday: state.roster[p.id]?.[weekday] ?? 'off',
+    rosterShift,
+    shiftToday: shiftToday(state, p, rosterShift),
+    activity: activity(state, p, rosterShift, breakGroup),
+    breakGroup,
     task: state.assignment[p.id] ?? null,
+    holidays: holidaysAhead(state, p),
   };
+}
+
+// Inbox order: unanswered choices first, then unread notices, then the rest;
+// newest first within each.
+function inboxRank(e) {
+  if (e.resolved) return 2;
+  return EVENTS[e.id]?.choices ? 0 : 1;
 }
 
 // A frozen copy of what the screen shows. Text is left to the screen.
@@ -170,13 +239,14 @@ export function view(state) {
   const current = RESEARCH.find((r) => r.id === state.research.current);
   const inbox = state.inbox
     .map((e, index) => ({ ...e, index }))
-    .sort((a, b) => Number(a.resolved) - Number(b.resolved) || b.index - a.index);
+    .sort((a, b) => inboxRank(a) - inboxRank(b) || b.index - a.index);
+  const groups = breakGroups(state, (p) => state.roster[p.id]?.[date.weekday]);
   return freeze(structuredClone({
     day: state.day,
     minute: state.minute,
     date: { ...date, weekdayLabel: PLANET.weekdays[date.weekday] },
     clients: state.clients.map((c) => clientView(state, c)),
-    people: state.people.map((p) => personView(state, p, date.weekday)),
+    people: state.people.map((p) => personView(state, p, date.weekday, groups)),
     inbox,
     cash: state.cash,
     reputation: reputation(state),

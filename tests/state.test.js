@@ -82,6 +82,12 @@ test('broken or old saves load as null', () => {
     'unknown research done': JSON.stringify({ ...good, research: { ...good.research, done: ['nope'] } }),
     'unknown research current': JSON.stringify({ ...good, research: { ...good.research, current: 'nope' } }),
     'unknown build': JSON.stringify({ ...good, research: { ...good.research, build: { researchId: 'nope', minutesLeft: 5 } } }),
+    'no pending minutes': without('pendingMinutes'),
+    'person not an object': JSON.stringify({ ...good, people: [...good.people.slice(1), null] }),
+    'person without id': JSON.stringify({ ...good, people: good.people.map((p, i) => (i === 0 ? { ...p, id: 7 } : p)) }),
+    'person with unknown role': JSON.stringify({ ...good, people: good.people.map((p, i) => (i === 0 ? { ...p, role: 'boss' } : p)) }),
+    'person without health': JSON.stringify({ ...good, people: good.people.map((p, i) => (i === 0 ? { ...p, health: null } : p)) }),
+    'person with bad health': JSON.stringify({ ...good, people: good.people.map((p, i) => (i === 0 ? { ...p, health: { kind: 3 } } : p)) }),
   };
   for (const [name, text] of Object.entries(cases)) {
     assert.equal(deserialize(text), null, name);

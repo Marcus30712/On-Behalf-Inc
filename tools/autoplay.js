@@ -151,12 +151,12 @@ function recordDay(v, tally) {
   for (const c of v.clients) {
     if (!c.active) continue;
     tally.minSatisfaction = Math.min(tally.minSatisfaction, c.satisfaction);
-    if (c.today.serviceLevel === null) continue;
+    if (c.today.intervalsMetRate === null) continue;
     clients[c.id] = {
-      met: c.today.serviceLevel, offered: c.today.offered, abandoned: c.today.abandoned,
+      met: c.today.intervalsMetRate, offered: c.today.offered, abandoned: c.today.abandoned,
       agents: c.today.agents, satisfaction: c.satisfaction,
     };
-    tally.slSum += c.today.serviceLevel;
+    tally.slSum += c.today.intervalsMetRate;
     tally.slCount += 1;
   }
   if (Object.keys(clients).length > 0) tally.days.push({ day: v.day, weekday: v.date.weekday, clients });
@@ -209,15 +209,15 @@ function planRestDays(state, v, plan) {
   const byClient = new Map();
   for (const p of v.people) {
     if (p.health.kind !== 'well' || p.stress < REST_STRESS) continue;
-    if (!SHIFT_IDS.includes(p.shiftToday)) continue;
+    if (!SHIFT_IDS.includes(p.rosterShift)) continue;
     // Agents: one per client and shift; the lead and QA each on their own.
-    const key = p.role === 'agent' ? `${p.task?.clientId}/${p.shiftToday}` : p.role;
+    const key = p.role === 'agent' ? `${p.task?.clientId}/${p.rosterShift}` : p.role;
     const best = byClient.get(key);
     if (!best || p.stress > best.stress) byClient.set(key, p);
   }
   for (const p of byClient.values()) {
     if (act(state, { type: 'setRoster', personId: p.id, weekday: REST_WEEKDAY, shift: 'off' }).ok) {
-      plan.restOff.push({ personId: p.id, shift: p.shiftToday });
+      plan.restOff.push({ personId: p.id, shift: p.rosterShift });
     }
   }
 }
@@ -226,7 +226,7 @@ function planRestDays(state, v, plan) {
 function staffOn(v, active, shift) {
   const staff = new Map(active.map((id) => [id, []]));
   for (const p of agentsOf(v)) {
-    if (p.health.kind !== 'well' || p.shiftToday !== shift) continue;
+    if (p.health.kind !== 'well' || p.rosterShift !== shift) continue;
     if (p.task?.kind === 'phone' && staff.has(p.task.clientId)) staff.get(p.task.clientId).push(p);
   }
   return staff;

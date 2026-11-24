@@ -28,16 +28,33 @@ test('pushEvent queues an unseen, unresolved event stamped with the day', () => 
   const state = makeState();
   pushEvent(state, { id: 'sick', personId: 'v1', data: { days: 3 } });
   assert.deepEqual(state.inbox, [{
-    id: 'sick', personId: 'v1', data: { days: 3 }, day: 73, seen: false, resolved: false,
+    id: 'sick', personId: 'v1', data: { days: 3, name: person(state, 'v1').name }, day: 73, seen: false, resolved: false,
   }]);
 });
 
-test('resolveEvent on an event without choices just marks it seen', () => {
+test('events keep the person and client names they were made with', () => {
+  const state = makeState();
+  const name = person(state, 'v1').name;
+  pushEvent(state, { id: 'sick', personId: 'v1', clientId: 'gureum-travel', data: { days: 3 } });
+  pushEvent(state, { id: 'no-show', personId: 'k1' });
+  pushEvent(state, { id: 'client-offer', clientId: 'dalbit-mall', deadlineDay: 80 });
+  pushEvent(state, { id: 'candidate', data: { cand1: 'A', cand2: 'B' } });
+  state.people = state.people.filter((p) => p.id !== 'v1'); // v1 leaves
+  assert.deepEqual(state.inbox[0].data, { days: 3, name, client: '구름다리 여행' });
+  assert.equal(state.inbox[1].data.name, makeState().people[1].name);
+  assert.equal(state.inbox[1].data.client, undefined);
+  assert.deepEqual(state.inbox[2].data, { client: '달빛몰' });
+  assert.deepEqual(state.inbox[3].data, { cand1: 'A', cand2: 'B' });
+});
+
+test('reading an information event resolves it', () => {
   const state = makeState();
   pushEvent(state, { id: 'sick', personId: 'v1', data: { days: 3 } });
   const before = structuredClone(state.people);
-  resolveEvent(state, 0, undefined, createRng(1));
+  assert.equal(resolveEvent(state, 0, undefined, createRng(1)), true);
   assert.equal(state.inbox[0].seen, true);
+  assert.equal(state.inbox[0].resolved, true);
+  assert.equal(resolveEvent(state, 0, undefined, createRng(1)), false);
   assert.deepEqual(state.people, before);
 });
 
@@ -99,18 +116,21 @@ test('a resolved event cannot be resolved again; unknown choices change nothing'
   assert.equal(resolveEvent(state, 9, 'grant', createRng(1)), false);
 });
 
-test('friday-off change takes Friday off the roster, keep leaves it and lowers morale', () => {
+test('friday-off change gives the coming Friday off once; keep lowers morale', () => {
   const state = makeState({ day: 0 });
-  pushEvent(state, { id: 'friday-off', personId: 'k1', data: { nationId: 'kamuen' }, deadlineDay: 4 });
-  pushEvent(state, { id: 'friday-off', personId: 'k1', data: { nationId: 'kamuen' }, deadlineDay: 4 });
+  const ask = { id: 'friday-off', personId: 'k1', data: { nationId: 'kamuen', fridayDay: 4 }, deadlineDay: 4 };
+  pushEvent(state, ask);
+  pushEvent(state, ask);
   const k = person(state, 'k1');
+  const roster = structuredClone(state.roster);
   resolveEvent(state, 1, 'keep', createRng(1));
   assert.equal(k.moraleBoost, -5);
-  assert.notEqual(state.roster.k1[4], 'off');
+  assert.deepEqual(state.absences, []);
   resolveEvent(state, 0, 'change', createRng(1));
   assert.equal(k.moraleBoost, 3);
-  assert.equal(state.roster.k1[4], 'off');
-  assert.equal(state.roster.k1[3], 'late'); // other days untouched
+  // One day off, that Friday only: the weekly roster is untouched.
+  assert.deepEqual(state.absences, [{ personId: 'k1', day: 4 }]);
+  assert.deepEqual(state.roster, roster);
 });
 
 test('resign-notice: let-go schedules the leave day, keep-trying boosts morale and may be withdrawn', () => {

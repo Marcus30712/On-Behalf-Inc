@@ -5,7 +5,7 @@
 // A person with no assignment does no work: on shift or not, they rest.
 import { intervalQueue } from './queue.js';
 import { dateOf, isWorkday, holidaysOn } from './calendar.js';
-import { ahtFor, applyWork, applyRest } from './people.js';
+import { ahtFor, applyWork, applyRest, traitMul, traitAdd } from './people.js';
 import { onShift, workShare } from './schedule.js';
 import { CLIENTS } from '../world/clients.js';
 import { NATIONS } from '../world/nations.js';
@@ -73,14 +73,27 @@ const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const SAT_MET = 0.04;
 const SAT_MISS = 0.15;
 const SAT_LOST = 0.2;
+// Traits of the people answering, averaged by how much of the interval each
+// worked: csatAdd adds CSAT_POINT per point while calls are answered;
+// errorMul scales the loss (a miss and dropped calls) their work causes.
+const CSAT_POINT = 0.01;
 
-function satisfactionDelta(q, target) {
+function satisfactionDelta(q, target, { errorMul = 1, csatAdd = 0 } = {}) {
   const lost = q.offered > 0 ? q.abandoned / q.offered : 0;
-  if (q.serviceLevel >= target) return SAT_MET - SAT_LOST * lost;
-  return -SAT_MISS * ((target - q.serviceLevel) / target) - SAT_LOST * lost;
+  const met = q.serviceLevel >= target;
+  const gain = met ? SAT_MET : 0;
+  const loss = (met ? 0 : SAT_MISS * ((target - q.serviceLevel) / target)) + SAT_LOST * lost;
+  const care = q.handled > 0 ? CSAT_POINT * csatAdd : 0;
+  return gain - loss * errorMul + care;
 }
 
-function isOpen(def, day, minute) {
+// Share-weighted average of a per-person value over a client's phone staff.
+function staffAverage(list, valueOf, none) {
+  const weight = list.reduce((s, x) => s + x.share, 0);
+  return weight > 0 ? list.reduce((s, x) => s + x.share * valueOf(x.person), 0) / weight : none;
+}
+
+export function isOpen(def, day, minute) {
   const h = def.hours;
   return isWorkday(day) && h.days.includes(dateOf(day).weekday) && minute >= h.open && minute < h.close;
 }
@@ -94,8 +107,8 @@ function staffAvail(person, day) {
 
 // Break group (0 or 1) per person: phone agents of the same client and shift
 // alternate in state.people order, so a pair never breaks together. Everyone
-// else is group 0.
-function breakGroups(state, shiftOf) {
+// else is group 0 (missing from the map). shiftOf(person) gives today's shift.
+export function breakGroups(state, shiftOf) {
   const seen = new Map();
   const groups = new Map();
   for (const p of state.people) {
@@ -114,6 +127,7 @@ function todayEntry(state, id) {
   state.today.clients ??= {};
   return (state.today.clients[id] ??= {
     offered: 0, handled: 0, abandoned: 0, intervals: 0, intervalsMet: 0, agentShareSum: 0,
+    inTarget: 0, waitSec: 0,
   });
 }
 
@@ -147,10 +161,7 @@ export function stepInterval(state, rng) {
     for (const { state: cs, def } of open) {
       const list = staff.get(def.id);
       const agents = list.reduce((s, x) => s + x.share * staffAvail(x.person, day), 0);
-      const weight = list.reduce((s, x) => s + x.share, 0);
-      const ahtMin = weight > 0
-        ? list.reduce((s, x) => s + x.share * ahtFor(x.person, def), 0) / weight
-        : def.ahtMin;
+      const ahtMin = staffAverage(list, (p) => ahtFor(p, def), def.ahtMin);
       let calls = callsFor(def, day, minute, rng);
       if ((state.spikes ?? []).some((s) => s.clientId === def.id && s.day === day)) calls *= SPIKE_MUL;
       const q = intervalQueue({
@@ -160,7 +171,11 @@ export function stepInterval(state, rng) {
 
       const target = def.slTarget.pct / 100;
       const met = q.serviceLevel >= target;
-      cs.satisfaction = clamp(cs.satisfaction + satisfactionDelta(q, target), 0, 100);
+      const traits = {
+        errorMul: staffAverage(list, (p) => traitMul(p, 'errorMul'), 1),
+        csatAdd: staffAverage(list, (p) => traitAdd(p, 'csatAdd'), 0),
+      };
+      cs.satisfaction = clamp(cs.satisfaction + satisfactionDelta(q, target, traits), 0, 100);
 
       const t = todayEntry(state, def.id);
       t.offered += q.offered;
@@ -169,6 +184,10 @@ export function stepInterval(state, rng) {
       t.intervals += 1;
       if (met) t.intervalsMet += 1;
       t.agentShareSum += agents;
+      // Sums for the call-weighted service level (inTarget / offered) and the
+      // average wait of answered calls (waitSec / handled).
+      t.inTarget += q.serviceLevel * q.offered;
+      t.waitSec += q.asaSec * q.handled;
       report.clients[def.id] = {
         offered: q.offered, handled: q.handled, abandoned: q.abandoned,
         serviceLevel: q.serviceLevel, asaSec: q.asaSec, agents,
@@ -186,7 +205,9 @@ export function stepInterval(state, rng) {
         if (openIds.has(a.clientId)) occupancy = results.get(a.clientId).occupancy;
         else share = 0;
       } else if (a && PROGRESS_KINDS.includes(a.kind) && share > 0) {
-        const gain = a.kind === 'research' ? share * researchSkillMul(p) : share;
+        let gain = share;
+        if (a.kind === 'research') gain *= researchSkillMul(p);
+        if (a.kind === 'qa') gain *= traitMul(p, 'qaMul');
         state.progress[a.kind] = (state.progress[a.kind] ?? 0) + gain;
       }
       const worked = INTERVAL * share;

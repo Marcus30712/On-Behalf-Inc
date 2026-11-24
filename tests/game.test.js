@@ -261,7 +261,11 @@ test('view is a plain snapshot for the screen', () => {
   assert.equal(c.today.offered, t.offered);
   assert.equal(c.today.handled, t.handled);
   assert.equal(c.today.abandoned, t.abandoned);
-  assert.equal(c.today.serviceLevel, t.intervalsMet / t.intervals);
+  // Call-weighted service level and average wait (ASA); the share of
+  // intervals at target is kept apart.
+  assert.equal(c.today.serviceLevel, t.inTarget / t.offered);
+  assert.equal(c.today.asaSec, t.waitSec / t.handled);
+  assert.equal(c.today.intervalsMetRate, t.intervalsMet / t.intervals);
   assert.equal(c.today.agents, t.agentShareSum / t.intervals);
 
   assert.equal(v.people.length, 10);
@@ -273,10 +277,6 @@ test('view is a plain snapshot for the screen', () => {
     assert.ok(key in p0, key);
   }
 
-  // Unresolved first, newest first; each carries its inbox index for 'resolve'.
-  const order = v.inbox.map((e) => [e.resolved, e.index]);
-  const sorted = [...order].sort((a, b) => Number(a[0]) - Number(b[0]) || b[1] - a[1]);
-  assert.deepEqual(order, sorted);
   assert.equal(v.inbox.length, s.inbox.length);
 
   assert.deepEqual(v.research, { done: [], current: null, points: 0, cost: null, build: null });
@@ -291,5 +291,99 @@ test('view is a plain snapshot for the screen', () => {
 test('view shows no service level before the first interval', () => {
   const v = view(createGame(1));
   assert.equal(v.clients[0].today.serviceLevel, null);
+  assert.equal(v.clients[0].today.asaSec, null);
+  assert.equal(v.clients[0].today.intervalsMetRate, null);
   assert.equal(v.clients[0].today.offered, 0);
+});
+
+test('view inbox: open choices first, then unseen notices, then the rest, newest first', () => {
+  const s = createGame(3);
+  const push = (id, extra = {}) => s.inbox.push({ id, day: 0, seen: false, resolved: false, ...extra });
+  push('sick', { personId: 'p0', data: { days: 3 } }); // 0 unseen notice
+  push('friday-off', { personId: 'p1', deadlineDay: 4 }); // 1 open choice
+  push('call-spike', { seen: true, resolved: true }); // 2 read notice
+  push('no-show', { personId: 'p2' }); // 3 unseen notice
+  push('holiday-leave', { personId: 'p3', deadlineDay: 4 }); // 4 open choice
+  push('friday-off', { personId: 'p4', seen: true, resolved: true, choice: 'keep' }); // 5 answered
+  assert.deepEqual(view(s).inbox.map((e) => e.index), [4, 1, 3, 0, 5, 2]);
+  // Reading a notice resolves it.
+  assert.deepEqual(act(s, { type: 'resolve', index: 3 }), { ok: true });
+  assert.equal(s.inbox[3].resolved, true);
+  assert.deepEqual(view(s).inbox.map((e) => e.index), [4, 1, 0, 5, 3, 2]);
+});
+
+test('view shows what each person is doing now and why someone is not in', () => {
+  const s = createGame(13);
+  const at = (minute) => { s.minute = minute; return Object.fromEntries(view(s).people.map((p) => [p.id, p])); };
+  s.people.find((p) => p.id === 'p2').health = { kind: 'sick', daysLeft: 2 };
+  s.people.find((p) => p.id === 'p4').health = { kind: 'leave', daysLeft: 2 };
+  s.absences.push({ personId: 'p6', day: 0 });
+  let v = at(600); // Monday 10:00
+  assert.equal(v.p0.shiftToday, 'early');
+  assert.equal(v.p0.rosterShift, 'early');
+  assert.equal(v.p0.activity, 'phone');
+  assert.equal(v.p1.activity, 'off'); // late shift starts at 12:00
+  assert.equal(v.p2.shiftToday, 'sick');
+  assert.equal(v.p2.rosterShift, 'early');
+  assert.equal(v.p2.activity, 'off');
+  assert.equal(v.p4.shiftToday, 'leave');
+  assert.equal(v.p6.shiftToday, 'absent');
+  assert.equal(v.p8.activity, 'task'); // the lead coaches
+  // Break groups: p0 and p4, the early agents of one client, break at different times.
+  assert.deepEqual([v.p0.task.clientId, v.p0.rosterShift], [v.p4.task.clientId, v.p4.rosterShift]);
+  assert.deepEqual([v.p0.breakGroup, v.p4.breakGroup], [0, 1]);
+  v = at(720); // 12:00: early group 0 takes its first break
+  assert.equal(v.p0.activity, 'break');
+  assert.equal(v.p2.activity, 'off'); // sick
+  delete s.assignment.p0;
+  assert.equal(at(600).p0.activity, 'idle'); // on shift with nothing to do
+  s.day = 5; // Saturday
+  assert.equal(at(600).p1.shiftToday, 'off');
+  assert.equal(at(600).p1.activity, 'off');
+});
+
+test('view lists each person\'s holidays starting within 14 days', () => {
+  const s = createGame(13);
+  s.day = 62; // seed-day (veltora) starts on day 74
+  const v = view(s);
+  const veltoran = v.people.find((p) => p.nation === 'veltora');
+  const kamuen = v.people.find((p) => p.nation === 'kamuen');
+  assert.deepEqual(veltoran.holidays, [{ id: 'seed-day', name: '씨앗날', startDay: 74, length: 1 }]);
+  assert.equal(kamuen.holidays.some((h) => h.id === 'seed-day'), false);
+  s.day = 59; // 15 days before
+  assert.equal(view(s).people.find((p) => p.nation === 'veltora').holidays.length, 0);
+});
+
+test('advance carries minutes under 30 to the next call and returns minutes simulated', () => {
+  const s = createGame(2);
+  assert.equal(advance(s, 10), 0);
+  assert.equal(advance(s, 10), 0);
+  assert.equal(s.minute, 540);
+  assert.equal(advance(s, 10), 30);
+  assert.equal(s.minute, 570);
+  assert.equal(s.pendingMinutes, 0);
+  assert.equal(advance(s, 45), 30);
+  assert.equal(s.pendingMinutes, 15);
+  assert.deepEqual(deserialize(serialize(s)), s);
+  assert.equal(advance(s, 15), 30);
+  assert.equal(s.minute, 630);
+  for (const bad of [-30, NaN, undefined]) assert.equal(advance(s, bad), 0);
+  assert.equal(s.minute, 630);
+  s.gameOver = { kind: 'game-over-cash', day: 0 };
+  assert.equal(advance(s, 60), 0);
+});
+
+test('a game over at month end leaves the clock on the last day', () => {
+  const s = createGame(2);
+  s.cash = -1e6; // the first month end cannot pay salaries
+  advance(s, 31 * DAY);
+  assert.deepEqual(s.gameOver, { kind: 'game-over-cash', day: 29 });
+  assert.equal(s.day, 29);
+  assert.equal(view(s).day, 29);
+});
+
+test('package.json asks for Node 22 or later', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
+  assert.equal(pkg.engines?.node, '>=22');
 });

@@ -3,7 +3,13 @@
 // Event = { id, personId?, clientId?, data?, day, deadlineDay?, seen, resolved, choice?, auto? }
 // Choice effects live in EVENT_EFFECTS; events added by later tasks (candidate,
 // client-offer, ...) get their entries there. A choice with no entry just resolves.
+//
+// Names for the text are copied into data when the event is made, so they
+// outlive the person: data.name ({name}) for an event about a person,
+// data.client ({client}) for one about a client. An event about someone not
+// answering for a client (lead, QA, a task) has no data.client.
 import { EVENTS } from '../world/events.js';
+import { CLIENTS } from '../world/clients.js';
 import { moraleOf } from './people.js';
 import { hireCandidate, dropHiring } from './hiring.js';
 import { acceptClient } from './economy.js';
@@ -45,9 +51,12 @@ export const EVENT_EFFECTS = {
     },
   },
   'friday-off': {
+    // One day off: the coming Friday (data.fridayDay, the deadline), not the weekly roster.
     change(state, event, person) {
       boostMorale(person, 8);
-      state.roster[person.id] = { ...state.roster[person.id], 4: 'off' };
+      const day = event.data?.fridayDay ?? event.deadlineDay;
+      const absences = (state.absences ??= []);
+      if (!absences.some((a) => a.personId === person.id && a.day === day)) absences.push({ personId: person.id, day });
     },
     keep(state, event, person) {
       boostMorale(person, -5);
@@ -77,9 +86,18 @@ export const EVENT_EFFECTS = {
 
 export function pushEvent(state, { id, personId, clientId, data, deadlineDay }) {
   const event = { id };
-  if (personId !== undefined) event.personId = personId;
-  if (clientId !== undefined) event.clientId = clientId;
-  if (data !== undefined) event.data = data;
+  const names = {};
+  if (personId !== undefined) {
+    event.personId = personId;
+    const name = state.people?.find((p) => p.id === personId)?.name;
+    if (name !== undefined) names.name = name;
+  }
+  if (clientId !== undefined) {
+    event.clientId = clientId;
+    const client = CLIENTS.find((c) => c.id === clientId)?.name;
+    if (client !== undefined) names.client = client;
+  }
+  if (data !== undefined || Object.keys(names).length > 0) event.data = { ...data, ...names };
   event.day = state.day;
   if (deadlineDay !== undefined) event.deadlineDay = deadlineDay;
   event.seen = false;
@@ -87,13 +105,15 @@ export function pushEvent(state, { id, personId, clientId, data, deadlineDay }) 
   (state.inbox ??= []).push(event);
 }
 
-// Returns true if the state changed. Events without choices are only marked seen.
+// Returns true if the state changed. An event without choices is resolved by
+// reading it (choiceId is ignored).
 export function resolveEvent(state, eventIndex, choiceId, rng) {
   const event = state.inbox?.[eventIndex];
   if (!event || event.resolved) return false;
   const choices = EVENTS[event.id]?.choices;
   if (!choices) {
     event.seen = true;
+    event.resolved = true;
     return true;
   }
   if (!choices.some((c) => c.id === choiceId)) return false;

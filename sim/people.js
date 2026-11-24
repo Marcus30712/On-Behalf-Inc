@@ -20,13 +20,24 @@ const STRESS = { base: 1.45, perOccupancy: 1.6, overload: 2, overloadFrom: 0.7 }
 // drifting without end.
 const NIGHT_STRESS = { flat: 4, share: 0.12 };
 
-function traitMul(person, key) {
+// Product of the person's trait multipliers for `key` (1 when none).
+export function traitMul(person, key) {
   let m = 1;
   for (const id of person.traits) {
     const t = TRAITS.find((x) => x.id === id);
     m *= t?.effect[key] ?? 1;
   }
   return m;
+}
+
+// Sum of the person's trait additions for `key` (0 when none).
+export function traitAdd(person, key) {
+  let a = 0;
+  for (const id of person.traits) {
+    const t = TRAITS.find((x) => x.id === id);
+    a += t?.effect[key] ?? 0;
+  }
+  return a;
 }
 
 export function moraleOf(person) {

@@ -143,6 +143,7 @@ test('breaking-point effects: no-show absence, argument costs satisfaction, resi
   set(s1.people[0], { stress: 100, fatigue: 100 });
   endOfDay(s1, pickAt(1));
   assert.equal(ids(s1, 'argument')[0].clientId, GUREUM);
+  assert.deepEqual(ids(s1, 'argument')[0].data, { name: s1.people[0].name, client: '구름다리 여행' });
   assert.equal(s1.clients[0].satisfaction, 67);
   assert.equal(s1.clients[1].satisfaction, 70);
   assert.equal(s1.reputationPenalty, 1);
@@ -151,11 +152,30 @@ test('breaking-point effects: no-show absence, argument costs satisfaction, resi
   set(s2.people[0], { stress: 100, fatigue: 100 });
   endOfDay(s2, pickAt(2));
   const notice = ids(s2, 'resign-notice')[0];
-  assert.deepEqual(notice.data, { days: 10, leaveDay: 18 }); // 10 workdays after Friday day 4
+  assert.deepEqual(notice.data, { days: 10, leaveDay: 18, name: s2.people[0].name }); // 10 workdays after Friday day 4
   assert.equal(notice.deadlineDay, 18);
   s2.day = 7;
   endOfDay(s2, pickAt(2));
   assert.equal(ids(s2, 'resign-notice').length, 1, 'no second notice while one is open');
+});
+
+test('someone not on the phone has no argument, and their events name no client', () => {
+  // Breaking point always fires and would pick 'argument' whenever it is offered.
+  const rng = { ...never, chance: (p) => p === 0.08, pick: (a) => (a.includes('argument') ? 'argument' : a[0]) };
+  const s = makeState({ day: 4, nations: ['veltora'] });
+  s.assignment.p0 = { kind: 'coaching' };
+  set(s.people[0], { stress: 100, fatigue: 100 });
+  endOfDay(s, rng);
+  assert.equal(ids(s, 'argument').length, 0);
+  assert.equal(ids(s, 'no-show').length, 1);
+  assert.equal(s.reputationPenalty, undefined);
+
+  const sick = makeState({ nations: ['veltora'] });
+  sick.assignment.p0 = { kind: 'qa' };
+  endOfDay(sick, { ...never, chance: (p) => p > 0 && p < 0.05, int: (a, b) => b });
+  const e = ids(sick, 'sick')[0];
+  assert.equal(e.clientId, undefined);
+  assert.deepEqual(e.data, { days: 6, name: sick.people[0].name });
 });
 
 test('a person who leaves is removed on the leave day unless morale recovered', () => {
@@ -189,6 +209,7 @@ test('holiday leave asked only for the person\'s own nation, only before a workd
   assert.equal(asks[0].personId, 'p0');
   assert.deepEqual(asks[0].data, {
     holidayId: 'seed-day', nationId: 'veltora', startDay: 74, endDay: 74, firstWorkday: 74,
+    name: state.people[0].name,
   });
   assert.equal(asks[0].deadlineDay, 74);
 
@@ -267,6 +288,7 @@ test('friday-off asked only for nations that rest on Friday', () => {
   assert.equal(asks.length, 1);
   assert.equal(asks[0].personId, 'p1');
   assert.equal(asks[0].deadlineDay, 4);
+  assert.deepEqual(asks[0].data, { nationId: 'kamuen', fridayDay: 4, name: state.people[1].name });
   state.day = 1;
   endOfDay(state, never);
   assert.equal(ids(state, 'friday-off').length, 1, 'once a week');
@@ -333,7 +355,9 @@ test('call spikes are planned for the next workday per active client', () => {
     { clientId: GUREUM, day: 7 }, { clientId: MULBIT, day: 7 },
   ]);
   assert.deepEqual(ids(state, 'call-spike').map((e) => e.clientId), [GUREUM, MULBIT]);
-  assert.deepEqual(ids(state, 'call-spike').map((e) => e.data), [{ day: 7 }, { day: 7 }]);
+  assert.deepEqual(ids(state, 'call-spike').map((e) => e.data), [
+    { day: 7, client: '구름다리 여행' }, { day: 7, client: '물빛 통신' },
+  ]);
 });
 
 test('workday report goes to history and today is cleared; weekends only count down', () => {

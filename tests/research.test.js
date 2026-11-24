@@ -73,7 +73,10 @@ test('clinic shortens the sick leave of someone already sick', () => {
   assert.equal(burnt.health.daysLeft, 1); // minimum 1, unchanged
   const ev = s.inbox.at(-1);
   assert.equal(ev.id, 'build-done');
-  assert.deepEqual(ev.data, { researchId: 'clinic', names: [sick.name] });
+  // Each person helped, with the shortened sick leave for the clinic's {days}.
+  assert.deepEqual(ev.data, {
+    researchId: 'clinic', names: [sick.name], helped: [{ personId: 'a1', name: sick.name, daysLeft: 3 }],
+  });
   assert.equal(s.mods.sickDaysMul, 0.6);
 });
 
@@ -91,6 +94,7 @@ test('rest-room changes rest recovery from then on', () => {
   assert.equal(b.fatigue, 0);
   assert.equal(b.stress, 10);
   assert.deepEqual(s.inbox.at(-1).data.names, [a.name]); // only stress >= 40 (HIGH_STRESS) before
+  assert.deepEqual(s.inbox.at(-1).data.helped, [{ personId: 'a1', name: a.name }]);
   // From then on, rest recovers 30% faster.
   a.fatigue = 50;
   applyRest(a, { minutes: 30, mods: mods(s) });
@@ -111,6 +115,7 @@ test('stress-training lowers everyone stress; flexible-shifts sets the flag', ()
   advanceBuild(s, 30);
   assert.equal(s.flags.flexibleShifts, true);
   assert.deepEqual(s.inbox.at(-1).data.names, []);
+  assert.deepEqual(s.inbox.at(-1).data.helped, []);
 });
 
 test('cannot start the same research twice, or two at once, or unknown', () => {

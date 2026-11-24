@@ -3,7 +3,8 @@
 // Every field the sim modules read or write is set here, so a saved game holds
 // all of it: R9 fields, Task 9 (absences, spikes, leaving, lastEndedDay,
 // reputationPenalty, history), Task 10 (research, mods, flags) and Task 11
-// (cash, hiring, nextId, churn, offerStreak, offered, milestones, gameOver).
+// (cash, hiring, nextId, churn, offerStreak, offered, milestones, gameOver),
+// and the game's pendingMinutes.
 import { createRng } from './rng.js';
 import { createPerson } from './people.js';
 import { defaultRoster } from './schedule.js';
@@ -25,7 +26,9 @@ const REQUIRED = {
   today: 'object', history: 'array', spikes: 'array', leaving: 'array', cash: 'number',
   gameOver: 'object', milestones: 'array', hiring: 'object', nextId: 'number', churn: 'array',
   offerStreak: 'number', offered: 'array', reputationPenalty: 'number', lastEndedDay: 'number',
+  pendingMinutes: 'number',
 };
+const ROLES = ['agent', 'lead', 'qa'];
 const NULLABLE = new Set(['gameOver', 'hiring', 'lastEndedDay']);
 
 export function newGame(seed) {
@@ -51,6 +54,7 @@ export function newGame(seed) {
     rngState: rng.state(),
     day: 0,
     minute: START_MINUTE,
+    pendingMinutes: 0, // minutes asked of advance() not yet simulated (under 30)
     people,
     roster: defaultRoster(people),
     absences: [],
@@ -90,6 +94,8 @@ function hasShape(value, type) {
 
 const knownResearch = (id) => RESEARCH.some((r) => r.id === id);
 const knownClient = (id) => CLIENTS.some((c) => c.id === id);
+const isPerson = (p) => hasShape(p, 'object') && typeof p.id === 'string' && ROLES.includes(p.role)
+  && hasShape(p.health, 'object') && typeof p.health.kind === 'string';
 
 function isValid(s) {
   if (!hasShape(s, 'object') || s.version !== VERSION) return false;
@@ -101,7 +107,7 @@ function isValid(s) {
   if (!Array.isArray(r.done) || !r.done.every(knownResearch)) return false;
   if (r.current !== null && !knownResearch(r.current)) return false;
   if (r.build !== null && !knownResearch(r.build?.researchId)) return false;
-  return s.clients.every((c) => knownClient(c?.id));
+  return s.clients.every((c) => knownClient(c?.id)) && s.people.every(isPerson);
 }
 
 // The saved state, or null for text that is not a version-1 save.

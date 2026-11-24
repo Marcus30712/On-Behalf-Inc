@@ -19,6 +19,8 @@ const BURNOUT_STREAK = 10;
 const BREAKING_MORALE = 25;
 const BREAKING_CHANCE = 0.08;
 const BREAKING_EVENTS = ['no-show', 'argument', 'resign-notice'];
+// An argument is with a caller, so only someone answering for a client has one.
+const BREAKING_EVENTS_OFF_PHONE = ['no-show', 'resign-notice'];
 const ARGUMENT_SATISFACTION = 3;
 const RESIGN_WORKDAYS = 10;
 const FRIDAY = 4;
@@ -96,8 +98,8 @@ const hasOpenNotice = (state, person) =>
 
 function rollBreakingPoint(state, person, rng) {
   if (moraleOf(person) >= BREAKING_MORALE || !rng.chance(BREAKING_CHANCE)) return;
-  const kind = rng.pick(BREAKING_EVENTS);
   const clientId = phoneClient(state, person);
+  const kind = rng.pick(clientId === undefined ? BREAKING_EVENTS_OFF_PHONE : BREAKING_EVENTS);
   if (kind === 'no-show') {
     state.absences.push({ personId: person.id, day: nextWorkday(state.day) });
     pushEvent(state, { id: kind, personId: person.id, clientId });
@@ -147,9 +149,10 @@ function askFridayOff(state, person) {
   if (!nation?.weeklyRest.includes(FRIDAY) || weekday >= FRIDAY) return;
   if (!SHIFTS[state.roster[person.id]?.[FRIDAY]] || person.history.lastFridayAskWeek === week) return;
   person.history.lastFridayAskWeek = week;
+  const fridayDay = week + FRIDAY;
   pushEvent(state, {
-    id: 'friday-off', personId: person.id, data: { nationId: nation.id },
-    deadlineDay: state.day - weekday + FRIDAY,
+    id: 'friday-off', personId: person.id, data: { nationId: nation.id, fridayDay },
+    deadlineDay: fridayDay,
   });
 }
 

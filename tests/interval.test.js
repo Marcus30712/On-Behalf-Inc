@@ -215,3 +215,49 @@ test('two agents on the same client and shift take their breaks at different tim
   assert.equal(at(H(14) + 30), 3); // a2 at lunch
   assert.equal(at(H(10)), 2); // only the early pair, both working
 });
+
+test("today keeps calls answered within target and total wait, for a call-weighted service level and ASA", () => {
+  const s = makeState({ minute: H(10), phoneA: 1 });
+  const r1 = stepInterval(s, flat).clients[A.id];
+  const r2 = stepInterval(s, flat).clients[A.id];
+  const t = s.today.clients[A.id];
+  const near = (a, b) => Math.abs(a - b) < 1e-9;
+  assert.ok(near(t.inTarget, r1.serviceLevel * r1.offered + r2.serviceLevel * r2.offered));
+  assert.ok(near(t.waitSec, r1.asaSec * r1.handled + r2.asaSec * r2.handled));
+  assert.ok(t.waitSec > 0);
+});
+
+// Satisfaction after one interval for client A, with every person's traits set.
+function satisfactionWith(traits, { minute = H(10), phoneA = 4 } = {}) {
+  const s = makeState({ minute, phoneA });
+  for (const p of s.people) p.traits = traits;
+  stepInterval(s, flat);
+  return s.clients[0].satisfaction;
+}
+
+test('trait csatAdd lifts the satisfaction of the client the person answers for', () => {
+  const plain = satisfactionWith([]);
+  const warm = satisfactionWith(['warm']); // csatAdd 3, no handling-time change
+  assert.ok(plain > 70, 'a met interval');
+  assert.ok(Math.abs(warm - plain - 3 * 0.01) < 1e-9, `warm ${warm} plain ${plain}`);
+});
+
+test('trait errorMul scales the satisfaction lost from that person\'s work', () => {
+  // One agent at the afternoon peak misses the target.
+  const plain = satisfactionWith([], { minute: H(15), phoneA: 1 });
+  const careful = satisfactionWith(['worrier'], { minute: H(15), phoneA: 1 }); // errorMul 0.9
+  assert.ok(plain < 70, 'a missed interval');
+  assert.ok(Math.abs((70 - careful) - 0.9 * (70 - plain)) < 1e-9, `careful ${careful} plain ${plain}`);
+});
+
+test('trait qaMul scales the QA points that person earns', () => {
+  const qaPoints = (traits) => {
+    const s = makeState({ minute: H(14), phoneA: 0 });
+    s.assignment.q1 = { kind: 'qa' };
+    s.people.find((p) => p.id === 'q1').traits = traits;
+    stepInterval(s, flat);
+    return s.progress.qa;
+  };
+  assert.equal(qaPoints([]), 1);
+  assert.ok(Math.abs(qaPoints(['meticulous']) - 1.2) < 1e-9);
+});

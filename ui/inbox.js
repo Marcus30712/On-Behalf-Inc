@@ -7,9 +7,12 @@ import { builder } from './dom.js';
 import { refusalText } from './panels.js';
 
 let open = new Set(); // inbox indexes the player has expanded
+let showOld = false; // resolved items past the newest few are folded until asked for
+const RECENT_RESOLVED = 3;
 
 export function resetInbox() {
   open = new Set();
+  showOld = false;
 }
 
 function deadlineText(event, day) {
@@ -74,10 +77,15 @@ export function renderInbox(root, v, onAct, { onOpen, getView } = {}) {
   };
 
   const unreadCount = v.inbox.filter((e) => !e.seen).length;
+  // Waiting and unread items always show; of the answered ones only the newest few.
+  const resolvedIdx = v.inbox.filter((e) => e.resolved).map((e) => e.index);
+  const folded = new Set(showOld ? [] : resolvedIdx.slice(RECENT_RESOLVED));
+  const visible = v.inbox.filter((e) => !folded.has(e.index));
   root.replaceChildren(h('section', { class: 'inbox' },
     h('h2', {}, UI_TEXT.inbox.title, unreadCount > 0 && h('span', { class: 'badge' }, fill(UI_TEXT.inbox.unread, { n: unreadCount }))),
     v.inbox.length === 0 && h('p', { class: 'help' }, UI_TEXT.inbox.empty),
-    h('ul', { class: 'inbox-list', 'aria-live': 'polite' }, v.inbox.map(item)),
+    h('ul', { class: 'inbox-list', 'aria-live': 'polite' }, visible.map(item)),
+    folded.size > 0 && h('button', { type: 'button', class: 'show-old', onclick: () => { showOld = true; rerender(); } }, UI_TEXT.inbox.showOld),
     notice));
 }
 

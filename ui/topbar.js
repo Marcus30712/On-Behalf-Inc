@@ -5,6 +5,7 @@ import { UI_TEXT, fill } from './text.js';
 import { formatDate, formatTime, formatMoney, formatPct, formatSec } from './format.js';
 import { SPEEDS } from './clock.js';
 import { builder } from './dom.js';
+import { EVENTS } from '../world/events.js';
 
 const OPEN = 9 * 60;
 const CLOSE = 21 * 60;
@@ -33,7 +34,7 @@ export function renderTopbar(root, v, clock) {
       h('span', { class: 'time' }, formatTime(v.minute)),
       shut && h('span', { class: 'shut' }, shut)),
     h('div', { class: 'speeds', role: 'group' }, speeds),
-    clock.autoPaused ? h('span', { class: 'auto-paused', role: 'status' }, UI_TEXT.speed.autoPaused) : '',
+    clock.autoPaused && v.inbox.some((e) => !e.resolved && EVENTS[e.id]?.choices) ? h('span', { class: 'auto-paused', role: 'status' }, UI_TEXT.speed.autoPaused) : '',
     h('div', { class: low ? 'cash low' : 'cash', title: UI_TEXT.topbar.cashTip },
       `${UI_TEXT.topbar.cash} 💰 ${formatMoney(v.cash)}`,
       low && h('span', { class: 'warn' }, ` · ${UI_TEXT.topbar.cashLow}`)),

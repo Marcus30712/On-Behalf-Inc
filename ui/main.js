@@ -8,6 +8,7 @@ import { renderTopbar, renderMetrics } from './topbar.js';
 import { TABS, renderPanel, resetPanels, selectPerson } from './panels.js';
 import { renderInbox, renderAdvisor, firstRunIntro, resetInbox } from './inbox.js';
 import { builder } from './dom.js';
+import { EVENTS } from '../world/events.js';
 import { stepActors } from '../render/actors.js';
 import { createDrawer, TILE_PX, SCALE } from '../render/draw.js';
 
@@ -49,7 +50,10 @@ function keepFocus(root, render, fromKeyboard) {
   if (sel && !root.contains(doc.activeElement)) root.querySelector(sel)?.focus?.();
 }
 
-export function start({ document, storage, now, requestFrame, seedSource = () => Date.now() }) {
+export function start({ document, storage, now, requestFrame, seedSource: pickSeed = () => Date.now() }) {
+  // ?seed=N fixes the new-game seed. Only for the browser check; not documented.
+  const fixed = Number(new URLSearchParams(document.defaultView?.location?.search ?? '').get('seed'));
+  const seedSource = Number.isInteger(fixed) && fixed > 0 ? () => fixed : pickSeed;
   const h = builder(document);
   const store = safeStorage(storage);
   const $ = (sel) => document.querySelector(sel);
@@ -230,7 +234,8 @@ export function start({ document, storage, now, requestFrame, seedSource = () =>
   // Day (deadlines) and every item's read/answered state.
   const inboxKey = (v) => `${v.day}|${v.inbox.map((e) => `${e.index}${e.seen ? 's' : ''}${e.resolved ? 'r' : ''}`).join(',')}`;
 
-  const barsKey = (v) => `${v.day}:${v.minute}|${clock.speed}|${clock.autoPaused}`;
+  const waiting = (v) => v.inbox.some((e) => !e.resolved && EVENTS[e.id]?.choices);
+  const barsKey = (v) => `${v.day}:${v.minute}|${clock.speed}|${clock.autoPaused}|${waiting(v)}`;
 
   function drawBars(v) {
     renderTopbar(roots.topbar, v, clock);

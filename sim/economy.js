@@ -1,14 +1,14 @@
 // Money, reputation, churn, client offers, milestones and game over. Pure rules, no DOM.
 //
 // state.cash; state.churn = [{ clientId, workdaysLeft }]; state.offerStreak (workdays at A+);
-// state.offered = [clientId]; state.milestones = [eventId]; state.gameOver = { kind, day } | undefined;
+// state.offered = [{ id, day }] (the day a client was last offered; v1.1 saves held bare ids, state.js converts); state.milestones = [eventId]; state.gameOver = { kind, day } | undefined;
 // state.rankSStreak (workdays in a row at S; missing in v1.0 saves, read as 0).
 // The game calls dailyEconomy after endOfDay on workdays, and monthEnd after
 // endOfDay on the last day of each 30-day month.
 import { DAYS_PER_MONTH } from './calendar.js';
 import { pushEvent } from './events.js';
 import { CLIENTS } from '../world/clients.js';
-import { rentOf } from './office.js';
+import { rentOf, officeLevel } from './office.js';
 
 // Placeholder monthly salaries.
 export const SALARY = { agent: 2400, lead: 3600, qa: 3000 };
@@ -23,6 +23,8 @@ const CHURN_RECOVER_ABOVE = 40;
 const CHURN_WORKDAYS = 20;
 const OFFER_STREAK = 20;
 const OFFER_DEADLINE_DAYS = 7;
+// v1.2: a client that was offered (declined, expired) or lost can be offered again after this many days.
+const REOFFER_DAYS = 90;
 const NEW_CLIENT_SATISFACTION = 70;
 const BIG_CLIENT_COUNT = 3;
 // v1.1: the S milestone takes six weeks (30 workdays) at S in a row, not one
@@ -162,10 +164,21 @@ function runOffers(state, grade) {
   state.offerStreak = grade === 'S' || grade === 'A' ? (state.offerStreak ?? 0) + 1 : 0;
   if (state.offerStreak < OFFER_STREAK) return;
   state.offered ??= [];
-  const def = CLIENTS.find((d) => !d.start && !state.offered.includes(d.id)
-    && !state.clients.some((c) => c.id === d.id && c.active));
+  const level = officeLevel(state);
+  const eligible = (d) => {
+    if (d.start || (d.requiresOfficeLevel ?? 0) > level) return false;
+    const client = state.clients.find((c) => c.id === d.id);
+    if (client?.active) return false;
+    const record = state.offered.find((o) => o.id === d.id);
+    if (!record) return true;
+    // 90 days after the offer, or after the client was lost, whichever is later.
+    return state.day - Math.max(record.day, client?.lostDay ?? record.day) >= REOFFER_DAYS;
+  };
+  const def = CLIENTS.find(eligible);
   if (!def) return;
-  state.offered.push(def.id);
+  const record = state.offered.find((o) => o.id === def.id);
+  if (record) record.day = state.day;
+  else state.offered.push({ id: def.id, day: state.day });
   state.offerStreak = 0;
   pushEvent(state, { id: 'client-offer', clientId: def.id, deadlineDay: state.day + OFFER_DEADLINE_DAYS });
 }

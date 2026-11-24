@@ -38,13 +38,18 @@ const SIX_DAYS = 6;
 // v1.1: clients grow. Each 90-day quarter of the game adds `perQuarter` of the
 // starting volume, for the first `quarters` quarters (then it holds at about
 // +14%), so a roster that was enough in spring falls behind by autumn unless
-// it is run. Seats are fixed until office expansion (v1.2), which will
-// revisit how long calls keep growing.
+// it is run. Seats are fixed until office expansion (v1.2), which resumes
+// growth (below).
 export const CALL_GROWTH = { perQuarter: 0.07, quarters: 2 };
 const QUARTER_DAYS = 90;
 
-function growthMul(day) {
-  return 1 + CALL_GROWTH.perQuarter * Math.min(CALL_GROWTH.quarters, Math.floor(day / QUARTER_DAYS));
+// v1.2: when expansion 1 is finished (state.office.level1Day) growth resumes:
+// the same number of quarters again, counted from that day, on top of the first
+// ones (total at most 2 x quarters steps, x1.28). Without it, as in v1.1.
+function growthMul(day, level1Day) {
+  const quarters = (from) => Math.min(CALL_GROWTH.quarters, Math.max(0, Math.floor((day - from) / QUARTER_DAYS)));
+  const steps = quarters(0) + (level1Day === undefined ? 0 : quarters(level1Day));
+  return 1 + CALL_GROWTH.perQuarter * steps;
 }
 
 const nationOf = (id) => NATIONS.find((n) => n.id === id);
@@ -68,7 +73,7 @@ function holidayMul(nation, day) {
 
 // Expected calls for one interval: callsPerDay x growth x curve x weekday x holiday x wobble.
 // Spikes (state.spikes) are not applied here; stepInterval multiplies them in.
-export function callsFor(client, day, minute, rng) {
+export function callsFor(client, day, minute, rng, state) {
   const slot = Math.floor((minute - CURVE_START) / INTERVAL);
   const { weekday } = dateOf(day);
   // No calls on a day the client does not open (a weekday client at the weekend).
@@ -76,7 +81,7 @@ export function callsFor(client, day, minute, rng) {
   const wobble = 0.85 + 0.3 * rng.next();
   const curve = CURVE[slot] ?? 0;
   const holiday = holidayMul(nationOf(client.nation), day);
-  return client.callsPerDay * growthMul(day) * curve * weekMul * holiday * wobble;
+  return client.callsPerDay * growthMul(day, state?.office?.level1Day) * curve * weekMul * holiday * wobble;
 }
 
 // Research points per full interval of work: 1 + average(coaching, evaluation) / 10.
@@ -181,7 +186,7 @@ export function stepInterval(state, rng) {
       const list = staff.get(def.id);
       const agents = list.reduce((s, x) => s + x.share * staffAvail(x.person, day), 0);
       const ahtMin = staffAverage(list, (p) => ahtFor(p, def), def.ahtMin);
-      let calls = callsFor(def, day, minute, rng);
+      let calls = callsFor(def, day, minute, rng, state);
       if ((state.spikes ?? []).some((s) => s.clientId === def.id && s.day === day)) calls *= SPIKE_MUL;
       const q = intervalQueue({
         calls, ahtMin, agents, targetSec: def.slTarget.sec, patienceSec: def.patienceSec,

@@ -2,7 +2,7 @@
 // nothing while no weekend client is active: same seed + same acts must give
 // the same serialized state as the v1.1/v1.2-Task-2 code (golden file
 // tests/fixtures/weekday-golden.json, captured from commit bafdc6b before the
-// weekend change). Regenerate only on a deliberate balance change:
+// weekend change; v1.2 Task 4 regenerated it once: offered became {id, day} records, nothing else differed). Regenerate only on a deliberate balance change:
 //   node tests/fixtures/weekday-scenario.js > tests/fixtures/weekday-golden.json
 import { createGame, advance, act, view } from '../../sim/game.js';
 import { serialize } from '../../sim/state.js';

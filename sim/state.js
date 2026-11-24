@@ -121,6 +121,8 @@ export function deserialize(text) {
     // mark fades from the day the save is loaded.
     for (const c of s.clients) if (!c.active && c.lostDay === undefined) c.lostDay = s.day;
     s.office ??= { level: 0, build: null };
+    // v1.1 saves: offered held bare ids; they count as offered on the day the save is loaded.
+    s.offered = s.offered.map((o) => (typeof o === 'string' ? { id: o, day: s.day } : o));
     return s;
   } catch {
     return null;

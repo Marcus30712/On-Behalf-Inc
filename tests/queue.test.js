@@ -7,6 +7,7 @@ test('matches Erlang C when staffed', () => {
   const q = intervalQueue({ calls: 100, ahtMin: 4, agents: 18, targetSec: 20, patienceSec: 120 });
   const expected = serviceLevel(18, trafficIntensity(100, 4), 4, 20 / 60);
   assert.ok(Math.abs(q.serviceLevel - expected) < 5e-7);
+  assert.ok(Math.abs(q.serviceLevel - 0.887664) < 5e-7);
   assert.equal(q.offered, 100);
   assert.ok(q.abandoned < q.offered * 0.05);
   assert.equal(q.handled + q.abandoned, q.offered);
@@ -34,8 +35,31 @@ test('no calls', () => {
 });
 
 test('longer patience abandons less', () => {
-  const run = (patienceSec) => intervalQueue({ calls: 100, ahtMin: 4, agents: 5, targetSec: 20, patienceSec });
-  assert.ok(run(30).abandoned > run(120).abandoned);
-  const staffed = (patienceSec) => intervalQueue({ calls: 100, ahtMin: 4, agents: 15, targetSec: 20, patienceSec });
-  assert.ok(staffed(30).abandoned >= staffed(120).abandoned);
+  const run = (agents, patienceSec) => intervalQueue({ calls: 100, ahtMin: 4, agents, targetSec: 20, patienceSec });
+  for (const agents of [5, 14]) {
+    assert.ok(run(agents, 30).abandoned > run(agents, 120).abandoned, `agents ${agents}`);
+  }
+  assert.ok(run(14, 0).abandoned > run(14, 30).abandoned);
+  assert.ok(run(5, 0).abandoned >= run(5, 30).abandoned);
+  for (const v of Object.values(run(14, 0))) assert.ok(Number.isFinite(v));
+});
+
+test('more agents never abandon more or handle fewer', () => {
+  let prev = null;
+  for (let agents = 0; agents <= 25; agents += 1) {
+    const q = intervalQueue({ calls: 100, ahtMin: 4, agents, targetSec: 20, patienceSec: 120 });
+    assert.equal(q.handled + q.abandoned, q.offered);
+    if (agents * 30 / 4 <= 100) assert.ok(q.handled <= Math.round(agents * 30 / 4), `capacity at ${agents}`);
+    if (prev) {
+      assert.ok(q.abandoned <= prev.abandoned, `abandoned at ${agents}`);
+      assert.ok(q.handled >= prev.handled, `handled at ${agents}`);
+    }
+    prev = q;
+  }
+});
+
+test('zero handle time is trivially served', () => {
+  const q = intervalQueue({ calls: 10, ahtMin: 0, agents: 2, targetSec: 0, patienceSec: 60 });
+  assert.equal(q.serviceLevel, 1);
+  assert.equal(q.abandoned, 0);
 });

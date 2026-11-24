@@ -14,4 +14,4 @@ export { formatMoney };
 // x is a share, 0..1.
 export const formatPct = (x) => (x === null || x === undefined ? '—' : `${Math.round(x * 100)}%`);
 
-export const formatSec = (s) => (s === null || s === undefined ? '—' : `${Math.round(s)}초`);
+export const formatSec = (s) => (s === null || s === undefined ? '—' : fill(UI_TEXT.metrics.asaUnit, { n: Math.round(s) }));

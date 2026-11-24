@@ -154,6 +154,7 @@ test('formatTime, formatMoney, formatPct, formatSec', () => {
   assert.equal(formatPct(0.82), '82%');
   assert.equal(formatPct(null), '—');
   assert.equal(formatSec(14.4), '14초');
+  assert.equal(formatSec(14.4), fill(UI_TEXT.metrics.asaUnit, { n: 14 }));
   assert.equal(formatSec(null), '—');
 });
 

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
-import { createGame, act, view, advance, HIRE_COST } from '../sim/game.js';
+import { createGame, act, view, advance, HIRE_COST, SEATS } from '../sim/game.js';
 import { UI_TEXT, fill } from '../ui/text.js';
 import { formatMoney } from '../ui/money.js';
 import { renderPanel, selectPerson, resetPanels, TABS } from '../ui/panels.js';
@@ -160,6 +160,7 @@ test('a refusal notice clears once time passes or an action succeeds', () => {
 
 test('resetPanels closes the open card and forgets notices', () => {
   const state = createGame(11);
+  state.people.splice(state.people.findLastIndex((p) => p.role === 'agent'), 1); // a free seat: the start button shows
   const root = makeRoot();
   const onAct = (a) => act(state, a);
   selectPerson(state.people[0].id);
@@ -180,4 +181,75 @@ test('style.css lets the canvas set the stage row height and hides no overflow',
   assert.match(inbox, /min-height:\s*100%/);
   assert.match(inbox, /overflow-y:\s*auto/);
   assert.doesNotMatch(css, /overflow-x:\s*hidden/);
+});
+
+test('hiring with no free seat shows the no-seats state and no start button', () => {
+  const state = createGame(11);
+  const root = makeRoot();
+  const v = view(state);
+  assert.equal(v.people.filter((p) => p.role === 'agent').length >= SEATS, true, 'seats full at start');
+  assert.equal(v.hiring ?? null, null);
+  renderPanel(root, v, 'hiring', (a) => act(state, a));
+  assert.equal(root.querySelector('.state').textContent, UI_TEXT.hiring.noSeats);
+  assert.ok(!root.textContent.includes(UI_TEXT.hiring.state.ready));
+  assert.equal(root.querySelector('button[data-action="startHiring"]'), null);
+  assert.equal(root.textContent.split(UI_TEXT.hiring.noSeats).length - 1, 1, 'said once');
+});
+
+test('people list shows the shift name before a shift starts, 퇴근 after it ends', () => {
+  const state = createGame(11);
+  const person = state.people.find((p) => state.roster[p.id]?.[0] === 'late' && p.health.kind === 'well');
+  assert.ok(person, 'someone works late on Monday');
+  const root = makeRoot();
+  const row = () => root.querySelector(`[data-person="${person.id}"]`).textContent;
+  state.minute = 8 * 60;
+  renderPanel(root, view(state), 'people', (a) => act(state, a));
+  assert.ok(row().includes(UI_TEXT.shift.late.full), row());
+  assert.ok(!row().includes(UI_TEXT.activity.off), row());
+  state.minute = 22 * 60;
+  renderPanel(root, view(state), 'people', (a) => act(state, a));
+  assert.ok(row().includes(UI_TEXT.activity.off), row());
+});
+
+test('metrics strip shows each client target next to its service level', () => {
+  const state = createGame(11);
+  const root = makeRoot();
+  const v = view(state);
+  renderMetrics(root, v);
+  for (const c of v.clients.filter((x) => x.active)) {
+    const item = root.querySelector(`[data-client="${c.id}"]`);
+    assert.ok(item.textContent.includes(`(${UI_TEXT.metrics.target} ${c.slTarget.pct}%)`), item.textContent);
+  }
+});
+
+test('top bar says the clock waits for an answer after an auto-pause', () => {
+  const state = createGame(11);
+  const root = makeRoot();
+  const v = view(state);
+  const clock = { speed: 0, autoPaused: true, setSpeed() {} };
+  renderTopbar(root, v, clock);
+  assert.ok(root.textContent.includes(UI_TEXT.speed.autoPaused));
+  renderTopbar(root, v, { ...clock, autoPaused: false });
+  assert.ok(!root.textContent.includes(UI_TEXT.speed.autoPaused));
+  assert.ok(!root.textContent.includes('false'), root.textContent);
+});
+
+test('a panel rendered with onClose has a close button that calls it', () => {
+  const state = createGame(11);
+  const root = makeRoot();
+  let closed = 0;
+  renderPanel(root, view(state), 'people', (a) => act(state, a), { onClose: () => { closed++; } });
+  const btn = root.querySelector('button.panel-close');
+  assert.ok(btn, 'close button');
+  assert.equal(btn.textContent, UI_TEXT.common.close);
+  click(btn);
+  assert.equal(closed, 1);
+});
+
+test('style.css lays the open panel over the bottom of the stage', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const css = await readFile(new URL('../style.css', import.meta.url), 'utf8');
+  const root = [...css.matchAll(/\.panel-root\s*\{([^}]*)\}/g)].map((m) => m[1]).join('\n');
+  assert.match(root, /grid-area:\s*stage/);
+  assert.match(css, /max-height:\s*45vh/);
 });

@@ -135,3 +135,16 @@ test('intro skip calls onDone', () => {
   click(root.querySelector('.intro-skip'));
   assert.equal(done, 1);
 });
+
+test('a person event whose title has no name shows the name in its head', () => {
+  const state = createGame(5);
+  const [a, b] = state.people;
+  pushEvent(state, { id: 'friday-off', personId: a.id, data: { fridayDay: 4 }, deadlineDay: 4 });
+  pushEvent(state, { id: 'sick', personId: b.id, data: { days: 2 } });
+  const root = makeRoot();
+  renderInbox(root, view(state), (x) => act(state, x));
+  const head = (id) => root.querySelector(`[data-id="${id}"] .inbox-title`).textContent;
+  const fridayTitle = eventText(view(state).inbox.find((e) => e.id === 'friday-off')).title;
+  assert.equal(head('friday-off'), `${fridayTitle} · ${a.name}`);
+  assert.equal(head('sick'), eventText(view(state).inbox.find((e) => e.id === 'sick')).title, 'name already in the title');
+});

@@ -7,7 +7,7 @@ Serves the repo root on a free local port and drives /usr/bin/google-chrome
 through Playwright at 1280x720 and 1024x640: new game, 3x speed to game day 5,
 no console or page errors, no raw template text, no sideways scroll, a click
 at 1x, a choice answered, continue after reload, a game-over save, a long
-inbox. Screenshots go to tools/out/. Prints only failures; the last line is
+inbox, every open panel fully on screen. Screenshots go to tools/out/. Prints only failures; the last line is
 ALL CHECKS PASSED when there are none.
 """
 import functools
@@ -31,7 +31,7 @@ TARGET_DAY = 5
 RUN_STEP_MS = 500  # page time run per poll at 3x (frames fire every 16 ms)
 DAYS_PER_MONTH = 30
 DAYS_PER_YEAR = 360
-BAD_TEXT = ['{', 'undefined', 'NaN', 'null']
+BAD_TEXT = ['{', 'undefined', 'NaN', 'null', 'false', 'true']
 DATE_RE = re.compile(r'(\d+)년차 (\d+)월 (\d+)일')
 
 failures = []
@@ -199,6 +199,17 @@ def check_click_at_1x(page, tag):
     page.click('[data-tab="research"]')  # close
 
 
+def check_panel_visible(page, size, tag):
+    """The open panel is fully on screen without scrolling the page."""
+    scroll_y = page.evaluate('scrollY')
+    box = page.locator('.panel-root .panel').bounding_box()
+    vw, vh = size
+    if scroll_y != 0 or not box or box['y'] < 0 or box['y'] + box['height'] > vh or box['x'] + box['width'] > vw:
+        fail(f'{tag}: open panel not fully in the viewport (scrollY {scroll_y}): {box}')
+    if not page.locator('.panel-root .panel-close').is_visible():
+        fail(f'{tag}: panel close button not visible')
+
+
 def play_viewport(browser, size):
     tag = where(size)
     page = open_page(browser, size)
@@ -241,10 +252,13 @@ def play_viewport(browser, size):
     for name in page.eval_on_selector_all('[data-tab]', 'bs => bs.map((b) => b.dataset.tab)'):
         page.click(f'[data-tab="{name}"]')
         page.wait_for_timeout(100)
+        check_panel_visible(page, size, f'{tag} tab {name}')
         page.screenshot(path=str(OUT / f'tab-{name}-{tag}.png'), full_page=True)
         check_text(page, f'{tag} tab {name}')
         check_no_sideways(page, f'{tag} tab {name}')
-    page.click('[data-tab="calendar"]')  # close the last one
+    page.click('.panel-root .panel-close')  # close the last one
+    if page.locator('.panel-root .panel').count() != 0:
+        fail(f'{tag}: the close button did not close the panel')
 
     first = page.locator('.inbox-item .inbox-head').first
     if first.get_attribute('aria-expanded') != 'true':
@@ -295,6 +309,9 @@ def check_long_inbox(browser):
         box = page.locator(sel).bounding_box()
         if not box or box['y'] + box['height'] > size[1]:
             fail(f'{tag}: {sel} pushed below the viewport: {box}')
+    page.click('[data-tab="people"]')
+    page.wait_for_timeout(100)
+    check_panel_visible(page, size, tag)
     page.screenshot(path=str(OUT / 'long-inbox.png'))
     check_text(page, tag)
     check_no_sideways(page, tag)

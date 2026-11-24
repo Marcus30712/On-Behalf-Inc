@@ -20,6 +20,7 @@ import { NATIONS } from '../world/nations.js';
 export const SAVE_KEY = 'on-behalf-inc:save:v1';
 // Agent seats and the hiring cost, for the screen.
 export { SEATS, HIRE_COST } from './hiring.js';
+export { SHIFTS } from './schedule.js';
 
 const INTERVAL = 30;
 const DAY_MINUTES = 1440;

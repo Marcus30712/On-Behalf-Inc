@@ -23,16 +23,20 @@ export function createClock({ state }) {
   let speed = 0;
   let lastSpeed = 1;
   let lastReal = null;
+  let autoPaused = false; // stopped by a new choice event, not by the player
 
   const clock = {
     get speed() { return speed; },
+    get autoPaused() { return autoPaused; },
     setSpeed(n) {
       if (!SPEEDS.includes(n)) return;
       speed = n;
+      autoPaused = false;
       if (n > 0) lastSpeed = n;
     },
     resume() {
       speed = lastSpeed;
+      autoPaused = false;
     },
     tick(realNowMs) {
       const idle = { advancedMinutes: 0, newEvents: [], dayEnded: false };
@@ -49,7 +53,10 @@ export function createClock({ state }) {
         .filter((e) => e.index >= before.inbox.length)
         .map((e) => e.index)
         .sort((a, b) => a - b);
-      if (after.inbox.some((e) => e.index >= before.inbox.length && EVENTS[e.id]?.choices)) speed = 0;
+      if (after.inbox.some((e) => e.index >= before.inbox.length && EVENTS[e.id]?.choices)) {
+        speed = 0;
+        autoPaused = true;
+      }
 
       return { advancedMinutes, newEvents, dayEnded: after.day !== before.day };
     },

@@ -92,3 +92,21 @@ test('a finished game advances nothing', () => {
   clock.tick(0);
   assert.equal(clock.tick(10000).advancedMinutes, 0);
 });
+
+test('autoPaused is set by a choice pause and cleared by resume or setSpeed', () => {
+  const state = createGame(1);
+  const clock = createClock({ state, now: 0 });
+  assert.equal(clock.autoPaused, false);
+  clock.setSpeed(2);
+  let now = 0;
+  clock.tick(now);
+  for (let i = 0; i < 2000 && clock.speed !== 0; i++) { now += 2000; clock.tick(now); }
+  assert.equal(clock.speed, 0);
+  assert.equal(clock.autoPaused, true);
+  clock.resume();
+  assert.equal(clock.autoPaused, false);
+  for (let i = 0; i < 2000 && clock.speed !== 0; i++) { now += 2000; clock.tick(now); }
+  assert.equal(clock.autoPaused, true);
+  clock.setSpeed(0);
+  assert.equal(clock.autoPaused, false, 'a manual pause is not an auto-pause');
+});

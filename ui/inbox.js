@@ -2,6 +2,7 @@
 // rebuilds the root it is given. Which items are open lives in this module
 // (resetInbox() clears it for a new or loaded game).
 import { UI_TEXT, eventText, fill } from './text.js';
+import { EVENTS } from '../world/events.js';
 import { builder } from './dom.js';
 import { refusalText } from './panels.js';
 
@@ -52,6 +53,8 @@ export function renderInbox(root, v, onAct, { onOpen, getView } = {}) {
     const unread = !event.seen;
     const chosen = t.choices?.find((c) => c.id === event.choice);
     const deadline = deadlineText(event, v.day);
+    // Several requests can share a title ('금요일 휴무 요청'): name the person if the title does not.
+    const name = event.data?.name && !EVENTS[event.id]?.title.includes('{name}') ? event.data.name : null;
     const body = isOpen && h('div', { class: 'inbox-body', id: `inbox-body-${event.index}` },
       h('p', {}, t.text),
       needsAnswer && h('p', { class: 'help' }, UI_TEXT.inbox.choices),
@@ -64,7 +67,7 @@ export function renderInbox(root, v, onAct, { onOpen, getView } = {}) {
       'data-id': event.id, 'data-index': event.index,
     },
     h('button', { type: 'button', class: 'inbox-head', 'aria-expanded': String(isOpen), 'aria-controls': isOpen ? `inbox-body-${event.index}` : null, onclick: () => toggle(event) },
-      h('span', { class: 'inbox-title' }, t.title),
+      h('span', { class: 'inbox-title' }, name ? `${t.title} · ${name}` : t.title),
       needsAnswer && h('span', { class: 'badge' }, UI_TEXT.inbox.needsAnswer),
       deadline && h('span', { class: 'inbox-deadline' }, deadline)),
     body);

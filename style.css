@@ -1,6 +1,7 @@
 /* On Behalf Inc — layout for 1280×720 and up (works at 1024×640).
    Top bar, then the office canvas (960×576, scales down) with the inbox column
-   on its right, then the metrics strip, the tab bar and the open panel.
+   on its right, then the metrics strip and the tab bar. The open panel is a
+   drawer over the lower part of the canvas, so it is on screen at 1280×720.
    No external fonts: a system stack that covers Korean. */
 
 :root {
@@ -42,8 +43,7 @@ small { color: var(--muted); }
     "topbar  topbar"
     "stage   inbox"
     "metrics metrics"
-    "tabs    tabs"
-    "panel   panel";
+    "tabs    tabs";
   max-width: 1280px;
   margin: 0 auto;
 }
@@ -70,7 +70,30 @@ small { color: var(--muted); }
 }
 .metrics { grid-area: metrics; }
 .tabs { grid-area: tabs; }
-.panel-root { grid-area: panel; }
+.topbar, .metrics, .tabs { position: relative; z-index: 3; }
+/* The open panel: a drawer over the bottom of the stage. Like the inbox it adds
+   no height to the row (height: 0, min-height: 100%); the panel inside sits at
+   the bottom, at most 45vh tall, and scrolls inside. Clicks outside it reach
+   the canvas. */
+.panel-root {
+  grid-area: stage;
+  z-index: 2;
+  height: 0;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  pointer-events: none;
+}
+.panel-root > .panel {
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: 45vh;
+  overflow-y: auto;
+  pointer-events: auto;
+  border-top: 2px solid var(--accent);
+  box-shadow: 0 -6px 16px rgba(0, 0, 0, .45);
+}
 
 @media (max-width: 1100px) {
   :root { --inbox-w: 260px; font-size: 13px; }
@@ -99,6 +122,7 @@ small { color: var(--muted); }
   border-radius: 4px;
   cursor: pointer;
 }
+.topbar .auto-paused { color: var(--warn); font-weight: 700; }
 .topbar .speed[aria-pressed="true"] { background: var(--accent); color: #10131c; border-color: var(--accent); }
 .topbar .cash { margin-left: auto; font-variant-numeric: tabular-nums; }
 .topbar .cash.low { color: var(--bad); }
@@ -117,6 +141,7 @@ small { color: var(--muted); }
 }
 .metric { display: flex; gap: 10px; font-variant-numeric: tabular-nums; }
 .metric.below strong { color: var(--warn); }
+.metric .target { color: var(--muted); }
 
 /* ---------- tab bar ---------- */
 .tabs { display: flex; flex-wrap: wrap; gap: 2px; padding: 4px 8px 0; background: var(--bg); border-bottom: 1px solid var(--line); }
@@ -131,7 +156,8 @@ small { color: var(--muted); }
 .tabs button[aria-selected="true"] { background: var(--surface-2); color: var(--accent); }
 
 /* ---------- panels ---------- */
-.panel { padding: 10px 12px 16px; background: var(--surface-2); min-height: 200px; }
+.panel { padding: 10px 12px 16px; background: var(--surface-2); }
+.panel .panel-close { position: sticky; top: 0; z-index: 1; float: right; margin-left: 8px; }
 .panel .notice { min-height: 1.4em; margin: .6em 0 0; color: var(--bad); }
 .panel .notice:empty { visibility: hidden; }
 .panel button:not(.person) {

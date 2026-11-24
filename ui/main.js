@@ -218,7 +218,7 @@ export function start({ document, storage, now, requestFrame, seedSource = () =>
 
   function drawPanel(v) {
     if (!tab) { roots.panel.replaceChildren(); return; }
-    keepFocus(roots.panel, () => renderPanel(roots.panel, v, tab, onAct), keyboardFocus);
+    keepFocus(roots.panel, () => renderPanel(roots.panel, v, tab, onAct, { onClose: () => openTab(null) }), keyboardFocus);
     keys.panel = `${tab}|${v.day}:${v.minute}`;
   }
 
@@ -230,10 +230,12 @@ export function start({ document, storage, now, requestFrame, seedSource = () =>
   // Day (deadlines) and every item's read/answered state.
   const inboxKey = (v) => `${v.day}|${v.inbox.map((e) => `${e.index}${e.seen ? 's' : ''}${e.resolved ? 'r' : ''}`).join(',')}`;
 
+  const barsKey = (v) => `${v.day}:${v.minute}|${clock.speed}|${clock.autoPaused}`;
+
   function drawBars(v) {
     renderTopbar(roots.topbar, v, clock);
     renderMetrics(roots.metrics, v);
-    keys.bars = `${v.day}:${v.minute}|${clock.speed}`;
+    keys.bars = barsKey(v);
   }
 
   function refreshAll(v) {
@@ -254,7 +256,7 @@ export function start({ document, storage, now, requestFrame, seedSource = () =>
     if (keys.inbox !== inboxKey(v) && free(roots.inbox)) drawInbox(v);
     if (t - lastRefresh < REFRESH_MS) return;
     lastRefresh = t;
-    if (keys.bars !== `${v.day}:${v.minute}|${clock.speed}` && free(roots.topbar) && free(roots.metrics)) drawBars(v);
+    if (keys.bars !== barsKey(v) && free(roots.topbar) && free(roots.metrics)) drawBars(v);
     if (tab && keys.panel !== `${tab}|${v.day}:${v.minute}` && !selectOpen() && free(roots.panel)) drawPanel(v);
   }
 

@@ -293,3 +293,14 @@ test('the inbox redraws when an item is read', () => {
   page.frame(16);
   assert.ok(!page.$('.inbox [data-id="call-spike"]').classList.contains('unread'));
 });
+
+test('the open panel has a close button that closes the tab', () => {
+  const page = boot();
+  page.click('.start-new');
+  page.click('.intro-skip');
+  page.click('.tabs [data-tab="hiring"]');
+  assert.equal(page.$('.panel-root .panel-close').textContent, UI_TEXT.common.close);
+  page.click('.panel-root .panel-close');
+  assert.equal(page.$('.panel-root .panel'), null);
+  assert.equal(page.$('.tabs [data-tab="hiring"]').getAttribute('aria-selected'), 'false');
+});

@@ -4,7 +4,7 @@
 // and clears once time passes or any action succeeds. After an ok action the
 // caller re-renders with a fresh view. resetPanels() clears the panels' own
 // state (open card, notices, pending phone picks) for a new or loaded game.
-import { SEATS, HIRE_COST } from '../sim/game.js';
+import { SEATS, HIRE_COST, SHIFTS } from '../sim/game.js';
 import { RESEARCH } from '../world/research.js';
 import { TRAITS } from '../world/traits.js';
 import { NATIONS } from '../world/nations.js';
@@ -55,12 +55,13 @@ const clientName = (v, id) => v.clients.find((c) => c.id === id)?.name ?? CLIENT
 const roleText = (p) => [UI_TEXT.role[p.role] ?? p.role,
   p.probationDays > 0 ? fill(UI_TEXT.role.probation, { n: p.probationDays }) : null].filter(Boolean).join(' · ');
 
-export function renderPanel(root, v, tab, onAct) {
+// options.onClose: shows a close button that calls it.
+export function renderPanel(root, v, tab, onAct, { onClose } = {}) {
   const h = builder(root.ownerDocument);
   const notice = h('p', { class: 'notice', role: 'status' }, noticeFor(tab, v));
   const ctx = {
     h, v,
-    rerender: () => renderPanel(root, v, tab, onAct),
+    rerender: () => renderPanel(root, v, tab, onAct, { onClose }),
     run(action) {
       const r = onAct(action);
       if (r?.ok) notices = {};
@@ -70,7 +71,8 @@ export function renderPanel(root, v, tab, onAct) {
     },
   };
   const body = (BODIES[tab] ?? BODIES.people)(ctx);
-  root.replaceChildren(h('section', { class: `panel panel-${tab}`, 'data-tab': tab }, body, notice));
+  const close = onClose && h('button', { type: 'button', class: 'panel-close', onclick: onClose }, UI_TEXT.common.close);
+  root.replaceChildren(h('section', { class: `panel panel-${tab}`, 'data-tab': tab }, close, body, notice));
 }
 
 const title = (h, text, help) => [h('h2', {}, text), help && h('p', { class: 'help' }, help)];
@@ -89,6 +91,13 @@ function healthText(p) {
   if (p.shiftToday === 'absent') return UI_TEXT.health.absent.left;
   const t = UI_TEXT.health[p.health?.kind] ?? UI_TEXT.health.well;
   return p.health?.kind === 'well' ? t.name : fill(t.left, { days: p.health.daysLeft });
+}
+
+// 'off' before today's shift has begun reads as the shift, not as gone home.
+function activityText(v, p) {
+  const shift = SHIFTS[p.shiftToday];
+  if (p.activity === 'off' && shift && v.minute < shift.start) return UI_TEXT.shift[p.shiftToday].full;
+  return UI_TEXT.activity[p.activity] ?? '';
 }
 
 function taskText(v, task) {
@@ -136,7 +145,7 @@ function peoplePanel(ctx) {
   },
   h('strong', {}, p.name),
   h('span', {}, roleText(p)),
-  h('span', {}, UI_TEXT.activity[p.activity] ?? ''),
+  h('span', {}, activityText(v, p)),
   h('span', {}, healthText(p))));
   return [title(h, P.title, fill(P.count, { n: v.people.length })), h('div', { class: 'person-list' }, cards)];
 }
@@ -239,14 +248,14 @@ function hiringPanel({ h, v, run }) {
   const H = UI_TEXT.hiring;
   const free = Math.max(0, SEATS - v.people.filter((p) => p.role === 'agent').length);
   let state;
-  if (!v.hiring) state = H.state.ready;
+  if (!v.hiring) state = free > 0 ? H.state.ready : H.noSeats;
   else if (v.hiring.candidates) state = H.state.arrived;
   else state = fill(H.state.searching, { n: v.hiring.workdays });
   return [title(h, H.title, H.help),
     h('p', { class: 'state' }, state),
     h('p', {}, fill(H.cost, { cost: formatMoney(HIRE_COST) })),
-    h('p', {}, free > 0 ? fill(H.seats, { n: free }) : H.noSeats),
-    !v.hiring && h('button', { type: 'button', 'data-action': 'startHiring', onclick: () => run({ type: 'startHiring' }) }, H.start),
+    (free > 0 || v.hiring) && h('p', {}, free > 0 ? fill(H.seats, { n: free }) : H.noSeats),
+    !v.hiring && free > 0 && h('button', { type: 'button', 'data-action': 'startHiring', onclick: () => run({ type: 'startHiring' }) }, H.start),
     h('p', { class: 'help' }, H.probationNote),
     h('p', { class: 'help' }, H.noRefund)];
 }

@@ -61,6 +61,13 @@ test('page has the layout roots', () => {
   assert.ok(document.querySelector('.stage canvas[width="960"][height="576"]'));
 });
 
+test('the page names its own icon (no favicon.ico request)', () => {
+  const { document } = new JSDOM(HTML).window;
+  const icon = document.querySelector('link[rel="icon"]');
+  assert.ok(icon, 'an icon link');
+  assert.ok(icon.getAttribute('href').startsWith('data:'), 'inline, no file');
+});
+
 test('broken save starts a new game', () => {
   const page = boot({ storage: fakeStorage('{not json'), seed: 42 });
   assert.equal(page.game.state.seed, 42, 'started without a click');

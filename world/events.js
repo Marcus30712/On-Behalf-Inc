@@ -1,4 +1,4 @@
-// Templates: {name} {client} {holiday} {nation} {days} {research} {hours} {sl} {fee} {cand1} {cand2}.
+// Templates: {name} {client} {holiday} {nation} {days} {research} {hours} {stage} {seats} {sl} {fee} {cand1} {cand2}.
 // build-done shows the research's doneText ({doneText}); textNobody is used when nobody is helped.
 export const EVENTS = {
   sick: { title: '{name} 씨가 아파요', text: '{name} 씨가 몸살로 {days}일 쉬어야 해요. 그동안 {client} 응대 인원이 한 명 줄어요.' },
@@ -57,5 +57,13 @@ export const EVENTS = {
       { id: 'accept', label: '계약한다', result: '{client}가 새 고객사가 돼요. 상담사를 세 고객사에 나눠 배치하세요.' },
       { id: 'decline', label: '정중히 거절한다', result: '지금 인원으로 지금 고객사에 집중해요.' },
     ],
+    // v1.2 variants (ui/text.js eventText picks): after an expansion, for a weekend client, and a re-offer.
+    textMore: '{client}에서 계약을 제안했어요. 목표는 {sl}, 월 계약금은 {fee}예요. 받으면 지금 인원을 나눠야 해요.',
+    textWeekend: '{client}에서 주말 계약을 제안했어요. 토·일 09:00~18:00에 전화를 받아요. 목표는 {sl}, 월 계약금은 {fee}예요.',
+    acceptMore: '{client}가 새 고객사가 돼요. 업무 배치에서 응대 인원을 정해 주세요.',
+    acceptWeekend: '{client}가 새 고객사가 돼요. 근무표에 토·일 칸이 생겼어요. 주말 조를 짜 주세요.',
+    again: '예전에 인연이 닿지 않았던 {client}에서 다시 연락이 왔어요.',
   },
+  'expansion-start': { title: '{stage} 공사 시작', text: '{stage} 공사를 시작했어요. {days}근무일 뒤에 완공돼요. 그동안 조금 시끄러울 거예요.' },
+  'expansion-done': { title: '{stage} 완공', text: '{stage}이 문을 열었어요. 이제 상담사 좌석이 {seats}개예요. 채용 탭에서 새 사람을 뽑을 수 있어요.' },
 };

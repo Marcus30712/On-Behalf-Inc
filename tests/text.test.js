@@ -27,6 +27,8 @@ const REPRESENTATIVE = {
   'resign-notice': { data: { name: '하나', days: 3, leaveDay: 9 } },
   candidate: { data: { cand1: '가을', cand2: '나무' } },
   'client-offer': { data: { client: '달빛몰' }, clientId: 'dalbit-mall' },
+  'expansion-start': { data: { level: 1, days: 10 } },
+  'expansion-done': { data: { level: 2, seats: 16 } },
 };
 
 test('every event id in EVENTS renders without leftover braces', () => {
@@ -208,4 +210,46 @@ test('real client names get grammatical particles in churn-warning and client-of
     assert.ok(offer.choices[0].result.startsWith(`${client}이 새 고객사가 돼요.`), offer.choices[0].result);
     assert.ok(offer.text.startsWith(`${client}에서`));
   }
+});
+
+const offer = (clientId, data) => eventText({ id: 'client-offer', day: 3, clientId, data });
+
+test('client-offer text: old text at level 0, textMore after expansion, textWeekend for the weekend client', () => {
+  assert.match(offer('dalbit-mall').text, /좌석이 8개뿐이라/);
+  assert.equal(offer('dalbit-mall').choices[0].result, '달빛몰이 새 고객사가 돼요. 상담사를 세 고객사에 나눠 배치하세요.');
+  const more = offer('dalbit-mall', { officeLevel: 1 });
+  assert.ok(!more.text.includes('8개뿐'));
+  assert.match(more.text, /받으면 지금 인원을 나눠야 해요\.$/);
+  assert.match(more.choices[0].result, /업무 배치에서 응대 인원을 정해 주세요\./);
+  const bandi = offer('bandi-repair');
+  assert.match(bandi.text, /^반딧불 가전에서 계약을 제안했어요\./);
+  assert.match(bandi.choices[0].result, /업무 배치/);
+  const weekend = offer('baram-delivery', { officeLevel: 1 });
+  assert.match(weekend.text, /^바람개비 배달에서 주말 계약을 제안했어요\. 토·일 09:00~18:00에 전화를 받아요\./);
+  assert.match(weekend.choices[0].result, /주말 조를 짜 주세요\./);
+  assert.match(weekend.advisor, /주말 일은 누가 쉬는지/);
+  assert.match(more.advisor, /큰 기회예요/);
+});
+
+test('a re-offer starts with the again sentence', () => {
+  const out = offer('bandi-repair', { officeLevel: 1, again: true });
+  assert.ok(out.text.startsWith('예전에 인연이 닿지 않았던 반딧불 가전에서 다시 연락이 왔어요. 반딧불 가전에서 계약을 제안했어요.'));
+  assert.ok(!offer('bandi-repair', { officeLevel: 1 }).text.includes('예전에'));
+});
+
+test('expansion events fill stage, days and seats', () => {
+  const done = eventText({ id: 'expansion-done', day: 1, data: { level: 1, seats: 12 } });
+  assert.equal(done.title, '창가 구역 완공');
+  assert.match(done.text, /^창가 구역이 문을 열었어요\. 이제 상담사 좌석이 12개예요\./);
+  assert.ok(done.advisor.length > 0);
+  const start = eventText({ id: 'expansion-start', day: 1, data: { level: 2, days: 15 } });
+  assert.equal(start.title, '안쪽 구역 공사 시작');
+  assert.match(start.text, /15근무일 뒤에 완공돼요/);
+});
+
+test('v1.2 UI_TEXT keys exist', () => {
+  for (const k of ['shift.weekend.short', 'shift.weekend.full', 'tasks.seatsOf', 'refuse.office.no-cash', 'refuse.building', 'refuse.max-level', 'refuse.need-previous', 'topbar.weekendOpen', 'metrics.weekendOnly', 'metrics.weekendOnlyTip', 'roster.colDaysWeekend', 'roster.weekendHelp', 'roster.weekendCount', 'roster.sixDays', 'roster.sixDaysShort', 'office.title', 'office.confirmText', 'office.stages.2.name']) {
+    assert.equal(typeof k.split('.').reduce((o, p) => o?.[p], UI_TEXT), 'string', k);
+  }
+  assert.equal(UI_TEXT.shift.weekend.full, '주말 조');
 });

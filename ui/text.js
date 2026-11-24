@@ -15,6 +15,7 @@ export const UI_TEXT = {
     "time": "{hh}:{mm}",
     "closed": "영업 끝",
     "weekend": "주말 휴무",
+    "weekendOpen": "주말 운영",
     "cash": "돈",
     "cashTip": "센터 통장 잔액. 월말에 계약금이 들어오고 급여가 나가요. 0 아래로 내려가면 문을 닫아요.",
     "cashLow": "돈이 얼마 안 남았어요",
@@ -81,6 +82,8 @@ export const UI_TEXT = {
     "none": "—",
     "noneTip": "오늘은 아직 전화가 없어요.",
     "belowTarget": "목표 아래",
+    "weekendOnly": "주말 운영",
+    "weekendOnlyTip": "이 고객사는 토·일에만 전화를 받아요.",
     "today": "오늘"
   },
   "tabs": {
@@ -225,6 +228,11 @@ export const UI_TEXT = {
     "help": "칸을 누를 때마다 이른 조 → 늦은 조 → 휴무 순서로 바뀌어요.",
     "colName": "이름",
     "colDays": "월 · 화 · 수 · 목 · 금",
+    "colDaysWeekend": "월 · 화 · 수 · 목 · 금 · 토 · 일",
+    "weekendHelp": "토·일 칸은 주말 조 → 휴무 순서로 바뀌어요. 주말 조는 09:00~18:00예요.",
+    "weekendCount": "주말 조 {n}명",
+    "sixDays": "주 6일 이상 일해요. 피로가 빨리 쌓여요.",
+    "sixDaysShort": "주 {n}일",
     "count": "이른 조 {n}명 · 늦은 조 {n}명",
     "hours": "이른 조 09:00~18:00 · 늦은 조 12:00~21:00",
     "empty": "근무표에 올릴 사람이 없어요.",
@@ -242,6 +250,10 @@ export const UI_TEXT = {
     "off": {
       "short": "휴무",
       "full": "휴무"
+    },
+    "weekend": {
+      "short": "주말",
+      "full": "주말 조"
     }
   },
   "tasks": {
@@ -253,6 +265,7 @@ export const UI_TEXT = {
     "colClient": "고객사",
     "pickClient": "고객사 고르기",
     "seats": "상담사 좌석 {n} / 8",
+    "seatsOf": "상담사 좌석 {n} / {seats}",
     "byClient": "{client} 응대 {n}명",
     "empty": "일을 맡길 사람이 없어요.",
     "clientEnded": "계약 끝난 고객사예요. 다른 일을 맡겨 주세요."
@@ -351,12 +364,40 @@ export const UI_TEXT = {
     "unknown-research": "찾을 수 없는 연구예요.",
     "unknown-event": "이미 사라진 알림이에요.",
     "unknown-action": "지금은 할 수 없는 일이에요.",
+    "office": {
+      "no-cash": "돈이 모자라요. 공사 비용은 💰 {cost}예요."
+    },
+    "building": "이미 공사를 하고 있어요. 끝난 뒤에 다시 넓혀요.",
+    "max-level": "더 넓힐 곳이 없어요.",
+    "need-previous": "창가 구역을 먼저 넓혀야 해요.",
     "bad-weekday": "근무표는 월~금만 정할 수 있어요.",
     "bad-shift": "이른 조, 늦은 조, 휴무 중에서 골라 주세요.",
     "bad-task": "맡길 수 없는 일이에요.",
     "bad-choice": "이미 답한 알림이에요.",
     "game-over": "센터가 문을 닫았어요. 새 게임을 시작해 주세요.",
     "default": "지금은 할 수 없어요."
+  },
+  "office": {
+    "title": "사무실",
+    "tabTip": "사무실을 넓혀 좌석을 늘려요",
+    "help": "넓히면 상담사 좌석이 늘어 더 많이 뽑을 수 있어요. 대신 다달이 임대료가 나가요.",
+    "seatsNow": "지금 상담사 좌석 {seats}개",
+    "cost": "공사 비용 💰 {cost}",
+    "buildTime": "공사 기간 {days}근무일",
+    "rent": "완공 뒤 월 임대료 💰 {rent}",
+    "seatsAfter": "완공 뒤 좌석 {seats}개",
+    "start": "공사 시작",
+    "building": "공사 중 · {days}근무일 남음",
+    "done": "완공",
+    "locked": "창가 구역을 먼저 넓혀야 해요",
+    "rentTotal": "이번 달 임대료 💰 {rent}",
+    "confirmTitle": "{stage} 공사를 시작할까요?",
+    "confirmText": "공사 비용 💰 {cost}은 지금 바로 나가요. 완공 뒤부터는 임대료도 다달이 나가요.",
+    "allDone": "지금 넓힐 수 있는 곳을 모두 넓혔어요.",
+    "stages": {
+      "1": { "name": "창가 구역", "blurb": "비어 있던 창가 바닥에 책상 네 개를 들여요. 햇살 드는 자리에서 전화를 받아요." },
+      "2": { "name": "안쪽 구역", "blurb": "창고로 쓰던 안쪽 공간을 비워 책상 네 개를 더 놓아요. 센터가 한결 북적여요." }
+    }
   },
   "inbox": {
     "title": "알림",
@@ -477,7 +518,9 @@ function valuesFor(event) {
   const helped = d.helped ?? [];
   const values = {
     name: d.name,
-    client: d.client,
+    client: d.client ?? clientDef?.name,
+    stage: UI_TEXT.office.stages[d.level]?.name,
+    seats: d.seats,
     holiday: holiday?.name ?? d.holiday,
     nation: nation?.name ?? d.nation,
     days: d.days,
@@ -498,6 +541,8 @@ function valuesFor(event) {
   return values;
 }
 
+const clientDef = (event) => CLIENTS.find((c) => c.id === event.clientId);
+
 // Event -> { title, text, choices?, advisor }. Unknown or missing values drop their sentence.
 export function eventText(event) {
   const def = EVENTS[event.id];
@@ -509,18 +554,28 @@ export function eventText(event) {
     const research = RESEARCH.find((r) => r.id === event.data?.researchId);
     const done = helped.length > 0 && research ? fill(research.doneText, values) : '';
     text = done || fill(def.textNobody, values);
+  } else if (event.id === 'client-offer') {
+    const weekend = clientDef(event)?.hours.days.some((x) => x >= 5);
+    const more = (event.data?.officeLevel ?? 0) >= 1 || (clientDef(event)?.requiresOfficeLevel ?? 0) >= 1;
+    const body = fill(weekend ? def.textWeekend : more ? def.textMore : def.text, values);
+    text = [event.data?.again ? fill(def.again, values) : '', body].filter(Boolean).join(' ');
   } else {
     text = fill(def.text, values);
   }
   const out = { title: fill(def.title, values), text };
   if (def.choices) {
+    const acceptResult = event.id === 'client-offer'
+      ? (clientDef(event)?.hours.days.some((x) => x >= 5) ? def.acceptWeekend
+        : ((event.data?.officeLevel ?? 0) >= 1 || (clientDef(event)?.requiresOfficeLevel ?? 0) >= 1) ? def.acceptMore : undefined)
+      : undefined;
     out.choices = def.choices.map((c) => ({
-      id: c.id, label: fill(c.label, values), result: fill(c.result, values),
+      id: c.id, label: fill(c.label, values), result: fill(c.id === 'accept' && acceptResult ? acceptResult : c.result, values),
     }));
     const chosen = event.auto && out.choices.find((c) => c.id === event.choice);
     if (chosen?.label) out.text = [out.text, fill(UI_TEXT.inbox.auto, { choice: chosen.label })].filter(Boolean).join(' ');
   }
-  const lines = ADVISOR[event.id] ?? [];
+  const weekendOffer = event.id === 'client-offer' && clientDef(event)?.hours.days.some((x) => x >= 5);
+  const lines = ADVISOR[weekendOffer ? 'client-offer-weekend' : event.id] ?? [];
   out.advisor = '';
   for (let i = 0; i < lines.length && !out.advisor; i++) {
     out.advisor = fill(lines[((event.day ?? 0) + i) % lines.length], values);

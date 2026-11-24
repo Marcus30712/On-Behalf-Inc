@@ -19,10 +19,13 @@ const FAKE = {
   callsPerDay: 60, ahtMin: 5, patienceSec: 90, hours: { days: [0, 1, 2, 3, 4], open: 540, close: 1260 },
 };
 
+// The real v1.2 clients (requiresOfficeLevel) are taken out meanwhile so only the fakes are in play.
 function withFakes(fakes, fn) {
   const added = fakes.filter((f) => !CLIENTS.includes(f));
+  const saved = CLIENTS.slice();
+  for (let i = CLIENTS.length - 1; i >= 0; i--) if ((CLIENTS[i].requiresOfficeLevel ?? 0) > 0) CLIENTS.splice(i, 1);
   CLIENTS.push(...added);
-  try { fn(); } finally { for (const f of added) CLIENTS.splice(CLIENTS.indexOf(f), 1); }
+  try { fn(); } finally { CLIENTS.splice(0, CLIENTS.length, ...saved); }
 }
 
 // A state at A grade whose next dailyEconomy call raises an offer (if one is due).
@@ -181,4 +184,22 @@ test('an early expansion stacks on the first quarters, still capped at x1.28', (
 test('level 0 without level1Day is v1.1 growth', () => {
   const s = createGame(1);
   assert.equal(quietCalls(A, 501, H(11), flat, s), quietCalls(A, 501, H(11), flat));
+});
+
+test('a never-offered eligible client is offered before a cooled-down re-offer', () => {
+  withFakes([FAKE], () => {
+    const s = ready();
+    s.office.level = 1;
+    s.day = 400;
+    s.offered = [{ id: DALBIT, day: 0 }]; // cooled down, eligible again; FAKE never offered, listed after it
+    dailyEconomy(s);
+    assert.equal(offers(s)[0].clientId, FAKE.id);
+    assert.equal(offers(s)[0].data?.again, undefined);
+    s.offerStreak = 19;
+    s.day = 410;
+    dailyEconomy(s);
+    assert.equal(offers(s)[1].clientId, DALBIT, 'then the re-offer');
+    assert.equal(offers(s)[1].data.again, true);
+    assert.equal(offers(s)[1].data.officeLevel, 1);
+  });
 });

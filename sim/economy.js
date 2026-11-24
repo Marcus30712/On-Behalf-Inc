@@ -174,13 +174,19 @@ function runOffers(state, grade) {
     // 90 days after the offer, or after the client was lost, whichever is later.
     return state.day - Math.max(record.day, client?.lostDay ?? record.day) >= REOFFER_DAYS;
   };
-  const def = CLIENTS.find(eligible);
+  // Never-offered clients first; a cooled-down re-offer only when nothing new is eligible.
+  const def = CLIENTS.find((d) => eligible(d) && !state.offered.some((o) => o.id === d.id)) ?? CLIENTS.find(eligible);
   if (!def) return;
   const record = state.offered.find((o) => o.id === def.id);
   if (record) record.day = state.day;
   else state.offered.push({ id: def.id, day: state.day });
   state.offerStreak = 0;
-  pushEvent(state, { id: 'client-offer', clientId: def.id, deadlineDay: state.day + OFFER_DEADLINE_DAYS });
+  // data only where it differs from v1.1 (keeps weekday-only games byte-identical): the office level
+  // picks the offer text, `again` marks a re-offer.
+  const data = {};
+  if (level > 0) data.officeLevel = level;
+  if (record) data.again = true;
+  pushEvent(state, { id: 'client-offer', clientId: def.id, deadlineDay: state.day + OFFER_DEADLINE_DAYS, ...(Object.keys(data).length ? { data } : {}) });
 }
 
 // Once per workday, after endOfDay.

@@ -9,6 +9,10 @@ export const ADVISOR = {
   'friday-off': ['우리 센터의 주말과 {name} 씨의 주말이 달라요. 서로 조금씩 맞춰 가요.'],
   'call-spike': ['연휴 다음 날은 늘 이래요. 덜 바쁜 고객사에서 한두 명 옮겨 와요.', '대기 시간이 길어지면 끊는 고객이 늘어요. 지금은 전화부터요.'],
   'client-offer': ['큰 기회예요. 다만 지금 인원으로 버틸 수 있는지 먼저 따져 봐요.'],
+  // v1.2: used instead of the line above when the offered client works weekends.
+  'client-offer-weekend': ['주말 일은 누가 쉬는지까지 같이 짜야 해요. 한 사람이 일주일 내내 일하지 않게요.'],
+  'expansion-start': ['공사하는 동안에도 전화는 와요. 배치는 평소처럼 챙겨 주세요.', '넓히는 건 좋지만, 자리를 채울 사람과 돈도 같이 생각해 봐요.'],
+  'expansion-done': ['새 책상 냄새가 좋네요! 서두르지 말고 한 명씩 잘 뽑아요.', '자리가 늘었다고 바로 다 채울 필요는 없어요. 임대료도 잊지 마세요.'],
   'churn-warning': ['아직 늦지 않았어요. 그 고객사에 사람을 더 붙이고 서비스 레벨부터 올려요.'],
   'research-done': ['연구 끝! 공사만 끝나면 바로 효과가 나요.'],
   'build-done': ['보세요, {name} 씨 얼굴이 달라졌죠? 이게 센터장님이 한 일이에요.'],

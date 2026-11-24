@@ -165,3 +165,10 @@ PASS  research helps someone (build-done with names): 2.4 per seed
 
 9/9 checks pass (13.5 s)
 ```
+
+## v1.1
+
+- 금요일 휴무 요청(`friday-off`): 같은 사람에게 28일 안에 다시 묻지 않음(`FRIDAY_ASK_GAP = 28`, `person.history.lastFridayAskDay`, 옛 저장엔 없음 = 한 번도 안 물음).
+- 확률: 브리프의 0.35 대신 0.25(`FRIDAY_ASK_CHANCE`). 사람당 주 1회만 굴리므로 0.35에서는 360일에 평균 약 9번(2~8번 범위를 자주 넘음), 0.25에서는 약 7~8번.
+- 굴림은 금요일 휴무 나라이고 금요일 근무가 잡혀 있고 28일이 지난 사람에게만, 주 1회 굴려 난수열 이동을 최소화함(이 경우 난수열이 달라짐).
+- `node tools/autoplay.js`: 9/9 통과.

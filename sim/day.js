@@ -142,13 +142,20 @@ function askHolidayLeave(state, person, rng) {
   }
 }
 
-function askFridayOff(state, person) {
+const FRIDAY_ASK_GAP = 28; // days between friday-off asks of one person
+const FRIDAY_ASK_CHANCE = 0.25;
+
+function askFridayOff(state, person, rng) {
   const nation = nationOf(person.nation);
   const { weekday } = dateOf(state.day);
   const week = state.day - weekday; // the week's Monday
   if (!nation?.weeklyRest.includes(FRIDAY) || weekday >= FRIDAY) return;
   if (!SHIFTS[state.roster[person.id]?.[FRIDAY]] || person.history.lastFridayAskWeek === week) return;
-  person.history.lastFridayAskWeek = week;
+  // lastFridayAskDay is missing in old saves: treated as never asked.
+  if (state.day - (person.history.lastFridayAskDay ?? -Infinity) < FRIDAY_ASK_GAP) return;
+  person.history.lastFridayAskWeek = week; // one roll per person per week
+  if (!rng.chance(FRIDAY_ASK_CHANCE)) return; // rolled only for otherwise eligible people
+  person.history.lastFridayAskDay = state.day;
   const fridayDay = week + FRIDAY;
   pushEvent(state, {
     id: 'friday-off', personId: person.id, data: { nationId: nation.id, fridayDay },
@@ -219,7 +226,7 @@ export function endOfDay(state, rng) {
       if (p.health.kind !== 'well') continue;
       rollBreakingPoint(state, p, rng);
       askHolidayLeave(state, p, rng);
-      askFridayOff(state, p);
+      askFridayOff(state, p, rng);
     }
     grow(state);
     planSpikes(state, rng);

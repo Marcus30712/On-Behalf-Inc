@@ -41,9 +41,10 @@ function focusSelector(root, el) {
   return `${scope}${el.tagName.toLowerCase()}${cls}${data}`;
 }
 
-function keepFocus(root, render) {
+// Rebuilds a root; a control focused from the keyboard gets its focus back.
+function keepFocus(root, render, fromKeyboard) {
   const doc = root.ownerDocument;
-  const sel = focusSelector(root, doc.activeElement);
+  const sel = fromKeyboard ? focusSelector(root, doc.activeElement) : null;
   render();
   if (sel && !root.contains(doc.activeElement)) root.querySelector(sel)?.focus?.();
 }
@@ -80,6 +81,8 @@ export function start({ document, storage, now, requestFrame, seedSource = () =>
   let lastRefresh = -Infinity;
   let keys = {}; // what each root was last drawn from
   let refreshQueued = false;
+  let keyboardFocus = false; // the last input was a key, not a pointer
+  let held = null; // the root a pointer is pressed in: not rebuilt until released
 
   // ---- overlay screens -------------------------------------------------------
 
@@ -103,6 +106,9 @@ export function start({ document, storage, now, requestFrame, seedSource = () =>
   function showStart() {
     const S = UI_TEXT.start;
     const { raw, saved, broken } = readSave();
+    // An unreadable save: a new game starts at once (it replaces the save) and the
+    // screen says so; the clock waits for the player's go.
+    if (broken) { begin(createGame(seedSource()), { fresh: true, brokenSave: true }); return; }
     const date = saved && view(saved).date;
     const onNew = () => {
       if (saved) showConfirm();
@@ -112,7 +118,6 @@ export function start({ document, storage, now, requestFrame, seedSource = () =>
       h('h1', {}, S.title),
       h('p', { class: 'subtitle' }, S.subtitle),
       h('p', {}, S.intro),
-      broken && h('p', { class: 'warn' }, S.brokenSave),
       h('div', { class: 'screen-actions' },
         saved && h('button', { type: 'button', class: 'start-continue', onclick: () => begin(saved) },
           S.continue, h('small', {}, fill(S.continueInfo, { year: date.year, month: date.month, day: date.date }))),
@@ -147,7 +152,19 @@ export function start({ document, storage, now, requestFrame, seedSource = () =>
 
   // ---- game lifecycle --------------------------------------------------------
 
-  function begin(state, { intro = false, fresh = false } = {}) {
+  function showBrokenSave() {
+    const S = UI_TEXT.start;
+    showOverlay(h('section', { class: 'screen start', role: 'dialog', 'aria-label': S.title },
+      h('h1', {}, S.title),
+      h('p', { class: 'subtitle' }, S.subtitle),
+      h('p', { class: 'warn' }, S.brokenSave),
+      h('div', { class: 'screen-actions' },
+        h('button', { type: 'button', class: 'start-play', onclick: () => { hideOverlay(); play(); } }, UI_TEXT.intro.done)),
+      h('p', { class: 'help' }, S.autosave),
+      h('p', { class: 'help' }, S.keys)));
+  }
+
+  function begin(state, { intro = false, fresh = false, brokenSave = false } = {}) {
     game = state;
     clock = createClock({ state });
     resetPanels();
@@ -162,6 +179,7 @@ export function start({ document, storage, now, requestFrame, seedSource = () =>
     const v = view(game);
     refreshAll(v);
     if (v.gameOver) { showGameOver(v); return; }
+    if (brokenSave) { showBrokenSave(); return; }
     if (intro) {
       roots.overlay.hidden = false;
       firstRunIntro(roots.overlay, () => { hideOverlay(); play(); });
@@ -200,14 +218,17 @@ export function start({ document, storage, now, requestFrame, seedSource = () =>
 
   function drawPanel(v) {
     if (!tab) { roots.panel.replaceChildren(); return; }
-    keepFocus(roots.panel, () => renderPanel(roots.panel, v, tab, onAct));
+    keepFocus(roots.panel, () => renderPanel(roots.panel, v, tab, onAct), keyboardFocus);
     keys.panel = `${tab}|${v.day}:${v.minute}`;
   }
 
   function drawInbox(v) {
-    keepFocus(roots.inbox, () => renderInbox(roots.inbox, v, onAct, { onOpen, getView }));
-    keys.inbox = `${v.day}|${v.inbox.length}`;
+    keepFocus(roots.inbox, () => renderInbox(roots.inbox, v, onAct, { onOpen, getView }), keyboardFocus);
+    keys.inbox = inboxKey(v);
   }
+
+  // Day (deadlines) and every item's read/answered state.
+  const inboxKey = (v) => `${v.day}|${v.inbox.map((e) => `${e.index}${e.seen ? 's' : ''}${e.resolved ? 'r' : ''}`).join(',')}`;
 
   function drawBars(v) {
     renderTopbar(roots.topbar, v, clock);
@@ -226,13 +247,25 @@ export function start({ document, storage, now, requestFrame, seedSource = () =>
     return el?.tagName === 'SELECT' && roots.panel.contains(el);
   };
 
+  // A press in progress would lose its click if its button were replaced.
+  const free = (root) => held !== root;
+
   function refresh(v, t) {
-    if (keys.inbox !== `${v.day}|${v.inbox.length}`) drawInbox(v);
+    if (keys.inbox !== inboxKey(v) && free(roots.inbox)) drawInbox(v);
     if (t - lastRefresh < REFRESH_MS) return;
     lastRefresh = t;
-    if (keys.bars !== `${v.day}:${v.minute}|${clock.speed}`) drawBars(v);
-    if (tab && keys.panel !== `${tab}|${v.day}:${v.minute}` && !selectOpen()) drawPanel(v);
+    if (keys.bars !== `${v.day}:${v.minute}|${clock.speed}` && free(roots.topbar) && free(roots.metrics)) drawBars(v);
+    if (tab && keys.panel !== `${tab}|${v.day}:${v.minute}` && !selectOpen() && free(roots.panel)) drawPanel(v);
   }
+
+  for (const root of [roots.topbar, roots.metrics, roots.inbox, roots.panel]) {
+    root.addEventListener('pointerdown', () => { held = root; });
+    root.addEventListener('pointerleave', () => { if (held === root) held = null; });
+  }
+  const release = () => { held = null; };
+  document.addEventListener('pointerup', release);
+  document.addEventListener('pointercancel', release);
+  document.addEventListener('pointerdown', () => { keyboardFocus = false; }, true);
 
   function openTab(name) {
     tab = name;
@@ -289,13 +322,20 @@ export function start({ document, storage, now, requestFrame, seedSource = () =>
 
   // ---- keyboard --------------------------------------------------------------
 
+  // Space pauses everywhere but in form fields; a focused button must not
+  // also take it as a click (buttons activate on Space's keyup).
+  const spaceIsPause = (e) => e.key === ' ' && game && roots.overlay.hidden && !FORM_TAGS.has(e.target?.tagName)
+    && !e.ctrlKey && !e.metaKey && !e.altKey;
+  document.addEventListener('keyup', (e) => { if (spaceIsPause(e)) e.preventDefault(); });
+
   document.addEventListener('keydown', (e) => {
+    keyboardFocus = true;
     if (!game || !roots.overlay.hidden || e.ctrlKey || e.metaKey || e.altKey) return;
     const tag = e.target?.tagName;
     if (FORM_TAGS.has(tag)) return;
     if (e.key === ' ') {
-      if (tag === 'BUTTON' || e.repeat) return; // a focused button takes its own Space
       e.preventDefault();
+      if (e.repeat) return;
       if (clock.speed > 0) clock.setSpeed(0);
       else clock.resume();
     } else if (e.key === '1' || e.key === '2' || e.key === '3') {

@@ -63,12 +63,15 @@ test('page has the layout roots', () => {
 
 test('broken save starts a new game', () => {
   const page = boot({ storage: fakeStorage('{not json'), seed: 42 });
+  assert.equal(page.game.state.seed, 42, 'started without a click');
+  assert.equal(page.game.state.day, 0);
+  assert.ok(page.storage.getItem(SAVE_KEY).startsWith('{'), 'the broken save is replaced');
+  assert.equal(page.storage.getItem(SAVE_KEY) === '{not json', false);
   assert.ok(page.$('.overlay').textContent.includes(UI_TEXT.start.brokenSave));
   assert.equal(page.$('.start-continue'), null);
-  page.click('.start-new');
-  assert.equal(page.$('.confirm'), null, 'nothing to keep: no confirmation');
-  assert.equal(page.game.state.seed, 42);
-  assert.equal(page.game.state.day, 0);
+  assert.equal(page.$('.start-new'), null);
+  assert.equal(page.game.clock.speed, 0, 'waits for the player');
+  page.click('.start-play');
   assert.equal(page.game.clock.speed, 1);
   assert.ok(page.$('.overlay').hidden);
   const before = page.game.state.minute;
@@ -192,8 +195,10 @@ test('a build-done event triggers sparkles for helped people', () => {
   const page = boot({ storage: savedStorage(s) });
   page.click('.start-continue');
   runUntil(page, () => page.game.state.inbox.some((e) => e.id === 'build-done'), { ms: 1000, speed: '1' });
-  assert.ok(page.game.sparkles.has(s.people[0].id));
-  assert.ok(!page.game.sparkles.has(s.people[1].id) || s.people[1].stress >= 80);
+  const event = page.game.state.inbox.find((e) => e.id === 'build-done');
+  const helped = event.data.helped.map((x) => x.personId).sort();
+  assert.ok(helped.includes(s.people[0].id));
+  assert.deepEqual([...page.game.sparkles.keys()].sort(), helped);
 });
 
 test('the inbox and an open panel refresh after an action', async () => {
@@ -230,4 +235,54 @@ test('a throwing storage never crashes the page', () => {
   page.click('.intro-skip');
   page.key('3');
   runUntil(page, () => page.game.state.day === 1);
+});
+
+const pointer = (page, el, type) => el.dispatchEvent(new page.window.Event(type, { bubbles: true }));
+
+test('a press inside the panel holds its rebuild until release', () => {
+  const page = boot();
+  page.click('.start-new');
+  page.click('.intro-skip');
+  page.key('3');
+  page.click('.tabs [data-tab="people"]');
+  const before = page.$('.panel-root .panel');
+  pointer(page, page.$('.panel-root button.person'), 'pointerdown');
+  const minute = page.game.state.minute;
+  runUntil(page, () => page.game.state.minute !== minute, { ms: 1000 });
+  page.frame(300);
+  assert.equal(page.$('.panel-root .panel'), before, 'not rebuilt while pressed');
+  pointer(page, page.document.body, 'pointerup');
+  page.frame(300);
+  assert.notEqual(page.$('.panel-root .panel'), before, 'rebuilt after release');
+});
+
+test('space on a focused panel button pauses and does not press it', () => {
+  const page = boot();
+  page.click('.start-new');
+  page.click('.intro-skip');
+  page.click('.tabs [data-tab="research"]');
+  const btn = page.$('.panel-root [data-action="startResearch"]');
+  btn.focus();
+  const down = new page.window.KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true });
+  const up = new page.window.KeyboardEvent('keyup', { key: ' ', bubbles: true, cancelable: true });
+  btn.dispatchEvent(down);
+  btn.dispatchEvent(up);
+  assert.equal(page.game.clock.speed, 0);
+  assert.ok(down.defaultPrevented && up.defaultPrevented, 'the button is not activated');
+  assert.equal(page.game.state.research.current, null);
+  btn.dispatchEvent(new page.window.KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true }));
+  assert.equal(page.game.clock.speed, 1);
+});
+
+test('the inbox redraws when an item is read', () => {
+  const page = boot();
+  page.click('.start-new');
+  page.click('.intro-skip');
+  page.key(' ');
+  pushEvent(page.game.state, { id: 'call-spike', clientId: CLIENTS[0].id });
+  page.frame(16);
+  assert.ok(page.$('.inbox [data-id="call-spike"]').classList.contains('unread'));
+  page.game.state.inbox.at(-1).seen = true; // read elsewhere (e.g. after a load)
+  page.frame(16);
+  assert.ok(!page.$('.inbox [data-id="call-spike"]').classList.contains('unread'));
 });

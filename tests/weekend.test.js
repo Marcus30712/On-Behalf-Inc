@@ -10,6 +10,7 @@ import { endOfDay } from '../sim/day.js';
 import { onShift, isCenterOpen } from '../sim/schedule.js';
 import { createRng } from '../sim/rng.js';
 import { CLIENTS } from '../world/clients.js';
+import { NATIONS } from '../world/nations.js';
 import { SCENARIOS, runScenario } from './fixtures/weekday-scenario.js';
 
 const WEEKEND = 'test-weekend';
@@ -19,6 +20,12 @@ const FAKE = {
   callsPerDay: 60, ahtMin: 5, patienceSec: 90, hours: { days: [5, 6], open: 540, close: 1080 },
 };
 CLIENTS.push(FAKE);
+// Added to NATIONS only inside the test that uses it (new games pick nations
+// from NATIONS by index). A nation whose only holiday is the first weekend (Sat 1/6 - Sun 1/7, days 5-6).
+const WEEKEND_NATION = {
+  id: 'test-weekend-nation', name: '시험국', weeklyRest: [],
+  holidays: [{ id: 'test-weekend-holiday', name: '시험 주말', rule: { kind: 'fixed', month: 1, date: 6 }, length: 2, staffLeave: 1 }],
+};
 after(() => CLIENTS.splice(CLIENTS.indexOf(FAKE), 1));
 
 const SAT = 5; // day 5 is the first Saturday (day 0 is a Monday)
@@ -150,8 +157,6 @@ test('a person rostered six days or more tires 1.5 times as fast that week', () 
 
 test('day-end rules run on an open weekend day and plan spikes per client', () => {
   const s = withWeekendClient(6);
-  s.day = SAT;
-  s.minute = 1440;
   s.hiring = { workdays: 0, waitDays: 5 };
   // Force spikes for every client on Friday's end of day.
   const always = { next: () => 0.5, int: (a) => a, pick: (a) => a[0], chance: (p) => p === 0.05 };
@@ -186,4 +191,50 @@ test('an old save with 5-day rosters loads; the weekend reads as off', () => {
     assert.deepEqual(p.week.slice(5), ['off', 'off']);
   }
   assert.equal(advance(loaded, 7 * 1440), 7 * 1440);
+});
+
+// Friday's end of day with a weekend client: p0 works early Mon-Fri, p1 also
+// the weekend shift. Both at rock-bottom morale; the rng fires only the
+// breaking-point roll and picks the first (no-show) or last (resign) event.
+function fridayBreakingPoint(pick) {
+  const s = withWeekendClient(8);
+  const [a, b] = s.people;
+  s.people = [a, b];
+  s.roster[b.id] = { ...s.roster[b.id], 5: 'weekend', 6: 'weekend' };
+  for (const p of [a, b]) Object.assign(p, { fatigue: 100, stress: 100, moraleBoost: 0, morale: 0 });
+  s.day = 4;
+  s.minute = 1440;
+  endOfDay(s, { next: () => 0.5, int: (lo) => lo, pick, chance: (p) => p === 0.08 });
+  return { s, a, b };
+}
+
+test('a Friday no-show is missed on the person\'s own next working day', () => {
+  const { s, a, b } = fridayBreakingPoint((list) => list[0]);
+  assert.deepEqual(s.absences.find((x) => x.personId === a.id), { personId: a.id, day: MON }, 'weekday-only: Monday');
+  assert.deepEqual(s.absences.find((x) => x.personId === b.id), { personId: b.id, day: SAT }, 'weekend shift: Saturday');
+});
+
+test('a resignation notice counts the person\'s own working days', () => {
+  const { s, a, b } = fridayBreakingPoint((list) => list.at(-1));
+  const leaveDay = (p) => s.inbox.find((e) => e.id === 'resign-notice' && e.personId === p.id).data.leaveDay;
+  assert.equal(leaveDay(a), 18, 'ten weekdays after Friday day 4');
+  assert.equal(leaveDay(b), 14, 'Sat and Sun count for a weekend worker');
+});
+
+test('only people working the weekend are asked for leave over a Sat-Sun holiday', () => {
+  const s = withWeekendClient(9);
+  const [a, b] = s.people;
+  s.people = [a, b];
+  for (const p of [a, b]) { p.nation = WEEKEND_NATION.id; p.health = { kind: 'well', daysLeft: 0 }; }
+  s.roster[b.id] = { ...s.roster[b.id], 5: 'weekend' };
+  s.day = 4;
+  s.minute = 1440;
+  NATIONS.push(WEEKEND_NATION);
+  try {
+    endOfDay(s, { next: () => 0.99, int: (lo) => lo, pick: (l) => l[0], chance: (p) => p === 1 });
+  } finally {
+    NATIONS.splice(NATIONS.indexOf(WEEKEND_NATION), 1);
+  }
+  const asked = s.inbox.filter((e) => e.id === 'holiday-leave').map((e) => e.personId);
+  assert.deepEqual(asked, [b.id]);
 });

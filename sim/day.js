@@ -8,7 +8,7 @@
 import { dateOf, holidaysOn } from './calendar.js';
 import { moraleOf, overnight, wearDay, WEAR } from './people.js';
 import { pushEvent, expireEvents } from './events.js';
-import { SHIFTS, isCenterOpen } from './schedule.js';
+import { SHIFTS, isCenterOpen, shiftRunsOn } from './schedule.js';
 import { CLIENTS } from '../world/clients.js';
 import { NATIONS } from '../world/nations.js';
 
@@ -42,9 +42,25 @@ function nextWorkday(state, day) {
   return d;
 }
 
-function addWorkdays(state, day, n) {
+// A person's own working days: Monday to Friday (as before v1.2, rostered off
+// or not), plus Saturday or Sunday only when the center opens and they are
+// rostered on a shift that runs that day. So a weekday-only agent's next
+// working day after Friday is Monday even with a weekend client.
+function isPersonWorkday(state, person, d) {
+  if (!isCenterOpen(state, d)) return false;
+  const { weekday } = dateOf(d);
+  return weekday < 5 || shiftRunsOn(state.roster[person.id]?.[weekday], weekday);
+}
+
+function nextPersonWorkday(state, person, day) {
+  let d = day + 1;
+  while (!isPersonWorkday(state, person, d)) d++;
+  return d;
+}
+
+function addPersonWorkdays(state, person, day, n) {
   let d = day;
-  for (let i = 0; i < n; i++) d = nextWorkday(state, d);
+  for (let i = 0; i < n; i++) d = nextPersonWorkday(state, person, d);
   return d;
 }
 
@@ -110,7 +126,7 @@ function rollBreakingPoint(state, person, rng) {
   const clientId = phoneClient(state, person);
   const kind = rng.pick(clientId === undefined ? BREAKING_EVENTS_OFF_PHONE : BREAKING_EVENTS);
   if (kind === 'no-show') {
-    state.absences.push({ personId: person.id, day: nextWorkday(state, state.day) });
+    state.absences.push({ personId: person.id, day: nextPersonWorkday(state, person, state.day) });
     pushEvent(state, { id: kind, personId: person.id, clientId });
   } else if (kind === 'argument') {
     const client = state.clients.find((c) => c.id === clientId);
@@ -119,19 +135,20 @@ function rollBreakingPoint(state, person, rng) {
     state.reputationPenalty = (state.reputationPenalty ?? 0) + 1;
     pushEvent(state, { id: kind, personId: person.id, clientId });
   } else if (!hasOpenNotice(state, person)) {
-    const leaveDay = addWorkdays(state, state.day, RESIGN_WORKDAYS);
+    const leaveDay = addPersonWorkdays(state, person, state.day, RESIGN_WORKDAYS);
     pushEvent(state, {
       id: kind, personId: person.id, data: { days: RESIGN_WORKDAYS, leaveDay }, deadlineDay: leaveDay,
     });
   }
 }
 
-// A holiday of the person's nation that covers the next workday and has not
-// started yet (so it is asked once, on the last workday before it).
+// A holiday of the person's nation that covers their next working day and has
+// not started yet (so it is asked once, on the last workday before it). A
+// weekday-only agent is not asked about a holiday that covers only Sat-Sun.
 function askHolidayLeave(state, person, rng) {
   const nation = nationOf(person.nation);
   if (!nation) return;
-  const firstWorkday = nextWorkday(state, state.day);
+  const firstWorkday = nextPersonWorkday(state, person, state.day);
   for (const { holiday, startDay } of holidaysOn(firstWorkday, nation)) {
     if (startDay <= state.day) continue;
     const key = `${holiday.id}@${startDay}`;

@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>On Behalf Inc</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+  <header class="topbar"></header>
+  <div class="stage"><canvas class="office" width="960" height="576"></canvas></div>
+  <aside class="inbox">
+    <div class="advisor-root"></div>
+    <div class="inbox-root"></div>
+  </aside>
+  <div class="metrics"></div>
+  <nav class="tabs" role="tablist"></nav>
+  <main class="panel-root"></main>
+</div>
+<div class="overlay" hidden></div>
+<!-- © Marcus Shim. All rights reserved. Serve over http: ES modules do not load from file://. -->
+<script type="module">
+import { start } from './ui/main.js';
+
+let storage = null;
+try { storage = window.localStorage; } catch { storage = null; } // blocked storage: play without saving
+start({
+  document,
+  storage,
+  now: () => performance.now(),
+  requestFrame: (cb) => requestAnimationFrame(cb),
+  seedSource: () => Date.now(),
+});
+</script>
+</body>
+</html>

@@ -387,3 +387,21 @@ test('package.json asks for Node 22 or later', async () => {
   const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
   assert.equal(pkg.engines?.node, '>=22');
 });
+
+test('view gives the screen the week roster, churn countdown and 30-day holidays', () => {
+  const s = createGame(7);
+  const p = s.people[0];
+  s.roster[p.id] = { 0: 'late', 2: 'early' };
+  const c = s.clients[0];
+  s.churn = [{ clientId: c.id, workdaysLeft: 12 }];
+  s.day = 360 + 2 * 30 + 2; // year 2, 3 Mar (veltora seed-day is 3/15)
+  const v = view(s);
+  assert.deepEqual(v.people[0].week, ['late', 'off', 'early', 'off', 'off']);
+  assert.equal(v.clients.find((x) => x.id === c.id).churnWorkdaysLeft, 12);
+  assert.equal(v.clients.find((x) => x.id !== c.id).churnWorkdaysLeft, null);
+  const seed = v.calendar.find((h) => h.id === 'seed-day');
+  assert.equal(seed.nation, 'veltora');
+  assert.equal(seed.startDay, 360 + 2 * 30 + 14);
+  assert.deepEqual({ ...seed.date }, { year: 2, month: 3, date: 15, weekday: (360 + 74) % 7, weekdayLabel: '월화수목금토일'[(360 + 74) % 7] });
+  assert.ok(v.calendar.every((h) => h.startDay + h.length > s.day && h.startDay < s.day + 30));
+});

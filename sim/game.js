@@ -3,7 +3,7 @@
 // storage is passed in (localStorage in the browser).
 import { newGame, serialize, deserialize } from './state.js';
 import { restoreRng } from './rng.js';
-import { dateOf, isWorkday, upcomingHolidays, DAYS_PER_MONTH } from './calendar.js';
+import { dateOf, isWorkday, upcomingHolidays, holidaysOn, DAYS_PER_MONTH } from './calendar.js';
 import { stepInterval, breakGroups, isOpen } from './interval.js';
 import { endOfDay } from './day.js';
 import { advanceResearch, advanceBuild, startResearch } from './research.js';
@@ -18,6 +18,9 @@ import { PLANET } from '../world/planet.js';
 import { NATIONS } from '../world/nations.js';
 
 export const SAVE_KEY = 'on-behalf-inc:save:v1';
+// Agent seats and the hiring cost, for the screen.
+export { SEATS, HIRE_COST } from './hiring.js';
+export { SHIFTS } from './schedule.js';
 
 const INTERVAL = 30;
 const DAY_MINUTES = 1440;
@@ -149,6 +152,8 @@ function clientView(state, c) {
     active: c.active,
     satisfaction: c.satisfaction,
     slTarget: def.slTarget,
+    // Workdays left before a warned client leaves; null without a warning.
+    churnWorkdaysLeft: state.churn?.find((e) => e.clientId === c.id)?.workdaysLeft ?? null,
     today: {
       offered,
       handled,
@@ -218,12 +223,31 @@ function personView(state, p, weekday, groups) {
     health: p.health,
     probationDays: p.probationDays,
     rosterShift,
+    week: Array.from({ length: WEEKDAYS }, (_, w) => state.roster[p.id]?.[w] ?? 'off'),
     shiftToday: shiftToday(state, p, rosterShift),
     activity: activity(state, p, rosterShift, breakGroup),
     breakGroup,
     task: state.assignment[p.id] ?? null,
     holidays: holidaysAhead(state, p),
   };
+}
+
+const CALENDAR_DAYS = 30;
+
+// Both nations' holidays running today or starting within the next 30 days.
+function calendarAhead(state) {
+  const out = [];
+  for (const nation of NATIONS) {
+    const running = holidaysOn(state.day, nation).filter((h) => h.startDay < state.day);
+    for (const { holiday, startDay } of [...running, ...upcomingHolidays(state.day, nation, CALENDAR_DAYS - 1)]) {
+      const date = dateOf(startDay);
+      out.push({
+        nation: nation.id, id: holiday.id, name: holiday.name, startDay, length: holiday.length,
+        date: { ...date, weekdayLabel: PLANET.weekdays[date.weekday] },
+      });
+    }
+  }
+  return out.sort((a, b) => a.startDay - b.startDay || a.nation.localeCompare(b.nation));
 }
 
 // Inbox order: unanswered choices first, then unread notices, then the rest;
@@ -258,6 +282,7 @@ export function view(state) {
       build: state.research.build,
     },
     hiring: state.hiring,
+    calendar: calendarAhead(state),
     gameOver: state.gameOver,
     milestones: state.milestones,
   }));

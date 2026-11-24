@@ -163,7 +163,15 @@ test('a person who leaves is removed on the leave day unless morale recovered', 
     { personId: 'p1', day: 18, withdrawIfMoraleAbove: 50 },
   ];
   set(state.people[1], { stress: 0, fatigue: 0 });
+  state.absences = [{ personId: 'p0', day: 21 }, { personId: 'p1', day: 21 }];
+  state.inbox = [
+    { id: 'friday-off', personId: 'p0', day: 14, deadlineDay: 25, seen: false, resolved: false },
+    { id: 'sick', personId: 'p0', day: 14, seen: false, resolved: false },
+  ];
   endOfDay(state, never);
+  assert.deepEqual(state.absences, [{ personId: 'p1', day: 21 }]);
+  assert.ok(state.inbox.every((e) => e.resolved), 'their open events are closed');
+  assert.equal(state.inbox[0].choice, undefined, 'closed without a choice effect');
   assert.deepEqual(state.people.map((p) => p.id), ['p1']);
   assert.equal(state.assignment.p0, undefined);
   assert.equal(state.roster.p0, undefined);
@@ -215,6 +223,39 @@ test('granted leave keeps the person off until the holiday ends', () => {
     endOfDay(state, never);
   }
   assert.equal(p.health.kind, 'well');
+});
+
+test('an unanswered holiday-leave request still gives the whole holiday off', () => {
+  // Seed-day, 1 day, Friday 74: asked Thursday 73.
+  const one = makeState({ day: 73, nations: ['veltora'] });
+  endOfDay(one, above(0.15));
+  const p = one.people[0];
+  assert.deepEqual(p.health, { kind: 'leave', daysLeft: 1 }, 'off on the holiday itself');
+  one.day = 74;
+  endOfDay(one, never); // deadline: passive grant
+  const ask = ids(one, 'holiday-leave')[0];
+  assert.equal(ask.choice, 'grant');
+  assert.equal(ask.auto, true);
+  assert.equal(p.health.kind, 'well', 'back after the holiday');
+
+  // Harvest Sat-Mon asked Friday 263: off on 264, 265, 266.
+  const multi = makeState({ day: 263, nations: ['veltora'] });
+  endOfDay(multi, above(0.15));
+  const q = multi.people[0];
+  for (const day of [264, 265, 266]) {
+    assert.equal(q.health.kind, 'leave', `day ${day}`);
+    multi.day = day;
+    endOfDay(multi, never);
+  }
+  assert.equal(q.health.kind, 'well');
+});
+
+test('someone who comes back today gets no new rolls until tomorrow', () => {
+  const state = makeState({ nations: ['veltora', 'kamuen'] });
+  for (const p of state.people) p.health = { kind: 'sick', daysLeft: 1 };
+  endOfDay(state, { ...never, chance: () => true });
+  assert.deepEqual(state.people.map((p) => p.health.kind), ['well', 'well']);
+  assert.deepEqual(state.inbox.filter((e) => e.personId), []);
 });
 
 test('friday-off asked only for nations that rest on Friday', () => {
@@ -290,6 +331,7 @@ test('call spikes are planned for the next workday per active client', () => {
     { clientId: GUREUM, day: 7 }, { clientId: MULBIT, day: 7 },
   ]);
   assert.deepEqual(ids(state, 'call-spike').map((e) => e.clientId), [GUREUM, MULBIT]);
+  assert.deepEqual(ids(state, 'call-spike').map((e) => e.data), [{ day: 7 }, { day: 7 }]);
 });
 
 test('workday report goes to history and today is cleared; weekends only count down', () => {

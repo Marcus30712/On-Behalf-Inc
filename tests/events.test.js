@@ -67,6 +67,15 @@ test('granting leave sets health leave and raises morale; refusing lowers morale
   assert.equal(r.morale, before - 15);
 });
 
+test('refusing a request already on provisional leave brings the person back', () => {
+  const state = makeState();
+  leaveEvent(state);
+  const v = person(state, 'v1');
+  v.health = { kind: 'leave', daysLeft: 1 }; // set when the request was made
+  resolveEvent(state, 0, 'refuse', { ...createRng(1), chance: () => false });
+  assert.deepEqual(v.health, { kind: 'well', daysLeft: 0 });
+});
+
 test('refusing leave makes the person absent on the first holiday workday about 30% of the time', () => {
   let absent = 0;
   const rng = createRng(5);

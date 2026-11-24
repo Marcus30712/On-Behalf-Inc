@@ -52,6 +52,10 @@ function processLeaving(state) {
     state.people = state.people.filter((p) => p !== person);
     delete state.assignment[person.id];
     delete state.roster[person.id];
+    state.absences = state.absences.filter((a) => a.personId !== person.id);
+    for (const e of state.inbox ?? []) {
+      if (e.personId === person.id) e.resolved = true;
+    }
   }
 }
 
@@ -120,11 +124,14 @@ function askHolidayLeave(state, person, rng) {
     const key = `${holiday.id}@${startDay}`;
     if (person.history.lastLeaveAsk === key || !rng.chance(holiday.staffLeave)) continue;
     person.history.lastLeaveAsk = key;
+    // The passive answer is "grant", so the leave starts now; refusing undoes it.
+    const endDay = startDay + holiday.length - 1;
+    person.health = { kind: 'leave', daysLeft: endDay - state.day };
     pushEvent(state, {
       id: 'holiday-leave',
       personId: person.id,
       data: {
-        holidayId: holiday.id, nationId: nation.id, startDay, endDay: startDay + holiday.length - 1, firstWorkday,
+        holidayId: holiday.id, nationId: nation.id, startDay, endDay, firstWorkday,
       },
       deadlineDay: firstWorkday,
     });
@@ -134,7 +141,7 @@ function askHolidayLeave(state, person, rng) {
 function askFridayOff(state, person) {
   const nation = nationOf(person.nation);
   const { weekday } = dateOf(state.day);
-  const week = Math.floor(state.day / 7);
+  const week = state.day - weekday; // the week's Monday
   if (!nation?.weeklyRest.includes(FRIDAY) || weekday >= FRIDAY) return;
   if (!SHIFTS[state.roster[person.id]?.[FRIDAY]] || person.history.lastFridayAskWeek === week) return;
   person.history.lastFridayAskWeek = week;
@@ -182,7 +189,7 @@ function planSpikes(state, rng) {
   for (const c of state.clients) {
     if (!c.active || !rng.chance(SPIKE_CHANCE)) continue;
     state.spikes.push({ clientId: c.id, day });
-    pushEvent(state, { id: 'call-spike', clientId: c.id });
+    pushEvent(state, { id: 'call-spike', clientId: c.id, data: { day } });
   }
 }
 
@@ -193,11 +200,12 @@ export function endOfDay(state, rng) {
   expireEvents(state, rng);
   processLeaving(state);
 
+  const wellAtStart = new Set(state.people.filter((p) => p.health.kind === 'well'));
   for (const p of state.people) countDownHealth(p);
 
   if (workday) {
     for (const p of state.people) {
-      if (p.health.kind !== 'well') {
+      if (!wellAtStart.has(p)) {
         p.history.highStressDays = 0;
         continue;
       }

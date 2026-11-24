@@ -27,8 +27,8 @@ function boostMorale(person, amount) {
 
 export const EVENT_EFFECTS = {
   'holiday-leave': {
-    // Off through the holiday's last day, counted from the last ended day, so a
-    // late (auto) grant covers only what is left of the holiday.
+    // endOfDay already put the person on leave when asking (passive default);
+    // this only sets it for a request made without that, through the holiday's end.
     grant(state, event, person) {
       boostMorale(person, 10);
       const daysLeft = event.data.endDay - (state.lastEndedDay ?? event.day);
@@ -36,6 +36,7 @@ export const EVENT_EFFECTS = {
     },
     refuse(state, event, person, rng) {
       boostMorale(person, -15);
+      if (person.health.kind === 'leave') person.health = { kind: 'well', daysLeft: 0 };
       if (rng.chance(LEAVE_REFUSED_ABSENCE)) {
         state.absences.push({ personId: person.id, day: event.data.firstWorkday });
       }

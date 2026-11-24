@@ -233,3 +233,49 @@ test('clock: an open weekend runs at the opening-hours rate', () => {
   assert.equal(gameMinutesFor(1000, 1, { ...open, flags: { weekend: false } }), 120);
   assert.equal(gameMinutesFor(1000, 1, { day: SAT, minute: 600 }), 120, 'no flags: shut as before');
 });
+
+// ---- fix round 1: keyboard focus in the expansion question -------------------------
+
+test('the expansion question takes focus and gives it back', () => {
+  const state = createGame(11);
+  state.cash = 0; // the first 네 is refused
+  const root = makeRoot();
+  const doc = root.ownerDocument;
+  const onAct = (a) => act(state, a);
+  const btn = (a) => root.querySelector(`button[data-action="${a}"]`);
+  renderPanel(root, view(state), 'hiring', onAct);
+
+  btn('startExpansion').focus();
+  click(btn('startExpansion'));
+  assert.equal(doc.activeElement, btn('confirmExpansion'), 'opening the question focuses 네');
+  assert.ok(doc.activeElement.closest('[role="alertdialog"]'));
+
+  click(btn('cancelExpansion'));
+  assert.equal(doc.activeElement, btn('startExpansion'), '아니요 goes back to 공사 시작');
+
+  click(btn('startExpansion'));
+  click(btn('confirmExpansion'));
+  assert.ok(root.textContent.includes(fill(UI_TEXT.refuse.office['no-cash'], { cost: formatMoney(30000) })));
+  assert.equal(doc.activeElement, btn('startExpansion'), 'a refused 네 goes back to 공사 시작');
+
+  state.cash = 100000;
+  renderPanel(root, view(state), 'hiring', onAct);
+  click(btn('startExpansion'));
+  click(btn('confirmExpansion'));
+  assert.deepEqual(state.office.build, { level: 1, workdaysLeft: 10 });
+  assert.equal(doc.activeElement, stage(root, 1), 'an ok 네 focuses the stage card');
+  assert.equal(btn('startExpansion'), null, 'no start button flashes back from the stale view');
+  assert.equal(root.querySelector('[role="alertdialog"]'), null, 'the question is gone');
+});
+
+test('the expansion question closes when another tab renders', () => {
+  const state = createGame(11);
+  const root = makeRoot();
+  const onAct = (a) => act(state, a);
+  renderPanel(root, view(state), 'hiring', onAct);
+  click(root.querySelector('button[data-action="startExpansion"]'));
+  assert.ok(root.querySelector('[role="alertdialog"]'));
+  renderPanel(root, view(state), 'roster', onAct);
+  renderPanel(root, view(state), 'hiring', onAct);
+  assert.equal(root.querySelector('[role="alertdialog"]'), null);
+});

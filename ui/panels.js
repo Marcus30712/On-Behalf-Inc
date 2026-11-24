@@ -31,6 +31,7 @@ let selected = null; // person id whose card is open in the people panel
 let notices = {}; // tab -> { text, day, minute } of the refusal
 let pendingPhone = new Set(); // people picked 'phone' in tasks, waiting for a client
 let confirming = false; // the hiring tab asks before an expansion starts
+let lastTab = null; // the tab last rendered: another tab closes the question
 
 // Opens a person's card the next time the people panel renders (null closes it).
 export function selectPerson(id) {
@@ -42,6 +43,13 @@ export function resetPanels() {
   notices = {};
   pendingPhone = new Set();
   confirming = false;
+  lastTab = null;
+}
+
+// The open tab changed or closed (ui/main.js): an open question is dropped.
+export function closePanel() {
+  confirming = false;
+  lastTab = null;
 }
 
 // The tab's refusal text if the clock has not moved since it was given.
@@ -68,11 +76,15 @@ const roleText = (p) => [UI_TEXT.role[p.role] ?? p.role,
 
 // options.onClose: shows a close button that calls it.
 export function renderPanel(root, v, tab, onAct, { onClose } = {}) {
+  if (tab !== lastTab) closePanel();
+  lastTab = tab;
   const h = builder(root.ownerDocument);
   const notice = h('p', { class: 'notice', role: 'status' }, noticeFor(tab, v));
   const ctx = {
     h, v,
     rerender: () => renderPanel(root, v, tab, onAct, { onClose }),
+    // Focuses the first match of the selectors, in order (after a rerender).
+    focus: (...sels) => sels.map((sel) => root.querySelector(sel)).find(Boolean)?.focus?.(),
     run(action) {
       const r = onAct(action);
       if (r?.ok) notices = {};
@@ -287,9 +299,11 @@ function researchPanel({ h, v, run }) {
 // One expansion stage (OFFICE_LEVELS index 1, 2): done, building, the next
 // one to start (with its numbers and button), or locked behind the one before.
 function officeStage(ctx, level) {
-  const { h, v, run, rerender } = ctx;
+  const { h, v, run, rerender, focus } = ctx;
   const O = UI_TEXT.office;
   const o = v.office;
+  const card = `[data-stage="${level}"]`;
+  const focusBack = () => focus('button[data-action="startExpansion"]', card);
   const def = OFFICE_LEVELS[level];
   const name = O.stages[level]?.name;
   let body;
@@ -298,24 +312,32 @@ function officeStage(ctx, level) {
   else if (level === o.level + 1 && !o.build) {
     const next = o.next ?? def;
     const cost = formatMoney(next.cost);
+    // The question takes focus (네) and gives it back to 공사 시작, or to the
+    // card once the build has started. An ok 네 only drops the question: the
+    // caller redraws from a fresh view (a rerender here would show the stale
+    // start button).
+    const yes = () => {
+      confirming = false;
+      if (run({ type: 'startExpansion' })?.ok) { ask.remove(); focus(card); return; }
+      rerender();
+      focusBack();
+    };
+    const no = () => { confirming = false; rerender(); focusBack(); };
+    const open = () => { confirming = true; rerender(); focus('button[data-action="confirmExpansion"]'); };
     const ask = confirming
       ? h('div', { class: 'confirm', role: 'alertdialog', 'aria-label': fill(O.confirmTitle, { stage: name }) },
         h('strong', {}, fill(O.confirmTitle, { stage: name })),
         h('p', {}, fill(O.confirmText, { cost })),
-        h('button', {
-          type: 'button', 'data-action': 'confirmExpansion',
-          onclick: () => { confirming = false; run({ type: 'startExpansion' }); rerender(); },
-        }, UI_TEXT.common.yes), ' ',
-        h('button', { type: 'button', 'data-action': 'cancelExpansion', onclick: () => { confirming = false; rerender(); } },
-          UI_TEXT.common.no))
-      : h('button', { type: 'button', 'data-action': 'startExpansion', onclick: () => { confirming = true; rerender(); } }, O.start);
+        h('button', { type: 'button', 'data-action': 'confirmExpansion', onclick: yes }, UI_TEXT.common.yes), ' ',
+        h('button', { type: 'button', 'data-action': 'cancelExpansion', onclick: no }, UI_TEXT.common.no))
+      : h('button', { type: 'button', 'data-action': 'startExpansion', onclick: open }, O.start);
     body = [h('ul', { class: 'office-numbers' },
       h('li', {}, fill(O.cost, { cost })),
       h('li', {}, fill(O.buildTime, { days: next.buildWorkdays })),
       h('li', {}, fill(O.rent, { rent: formatMoney(next.rent) })),
       h('li', {}, fill(O.seatsAfter, { seats: def.seats }))), ask];
   } else body = h('p', { class: 'help' }, O.locked);
-  return h('li', { class: 'office-stage', 'data-stage': level },
+  return h('li', { class: 'office-stage', 'data-stage': level, tabindex: -1 },
     h('strong', {}, name), h('p', {}, O.stages[level]?.blurb), body);
 }
 

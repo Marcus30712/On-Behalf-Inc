@@ -5,7 +5,7 @@ import { createGame, act, save, load, view, SAVE_KEY } from '../sim/game.js';
 import { createClock } from './clock.js';
 import { UI_TEXT, eventText, fill } from './text.js';
 import { renderTopbar, renderMetrics } from './topbar.js';
-import { TABS, renderPanel, resetPanels, selectPerson } from './panels.js';
+import { TABS, renderPanel, resetPanels, selectPerson, closePanel } from './panels.js';
 import { renderInbox, renderAdvisor, firstRunIntro, resetInbox } from './inbox.js';
 import { builder } from './dom.js';
 import { EVENTS } from '../world/events.js';
@@ -275,6 +275,7 @@ export function start({ document, storage, now, requestFrame, seedSource: pickSe
   document.addEventListener('pointerdown', () => { keyboardFocus = false; }, true);
 
   function openTab(name) {
+    if (name !== tab) closePanel();
     tab = name;
     for (const b of roots.tabs.querySelectorAll('[data-tab]')) {
       b.setAttribute('aria-selected', String(b.dataset.tab === tab));

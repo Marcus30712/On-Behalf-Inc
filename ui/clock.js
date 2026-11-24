@@ -8,7 +8,7 @@ export const SPEEDS = [0, 1, 2, 3];
 const OPEN = 9 * 60;
 const CLOSE = 21 * 60;
 const OPEN_RATE = 6; // game minutes per real second at 1x, in opening hours
-const FAST_RATE = 120; // outside opening hours and on weekends
+const FAST_RATE = 120; // outside opening hours (weekends: unless a weekend client opens them)
 const MAX_TICK_MINUTES = 240; // a tab that was paused must not run away
 
 // Weekdays 09-21; with a weekend client (view flags.weekend) also Saturday and

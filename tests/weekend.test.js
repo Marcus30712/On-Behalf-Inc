@@ -1,0 +1,189 @@
+// v1.2 Task 3: weekend operations. The real weekend client arrives in Task 5;
+// these tests add a fake one to CLIENTS (removed again after the file).
+import { test, after } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { createGame, advance, act, view, SHIFTS } from '../sim/game.js';
+import { serialize, deserialize } from '../sim/state.js';
+import { stepInterval } from '../sim/interval.js';
+import { endOfDay } from '../sim/day.js';
+import { onShift, isCenterOpen } from '../sim/schedule.js';
+import { createRng } from '../sim/rng.js';
+import { CLIENTS } from '../world/clients.js';
+import { SCENARIOS, runScenario } from './fixtures/weekday-scenario.js';
+
+const WEEKEND = 'test-weekend';
+const FAKE = {
+  id: WEEKEND, name: '주말 시험 고객사', industry: '시험', nation: 'veltora', start: false,
+  slTarget: { pct: 80, sec: 20 }, monthlyFee: 10000,
+  callsPerDay: 60, ahtMin: 5, patienceSec: 90, hours: { days: [5, 6], open: 540, close: 1080 },
+};
+CLIENTS.push(FAKE);
+after(() => CLIENTS.splice(CLIENTS.indexOf(FAKE), 1));
+
+const SAT = 5; // day 5 is the first Saturday (day 0 is a Monday)
+const SUN = 6;
+const MON = 7;
+
+// A new game with the fake weekend client active and nobody on it yet.
+function withWeekendClient(seed = 3) {
+  const s = createGame(seed);
+  s.clients.push({ id: WEEKEND, satisfaction: 70, active: true });
+  return s;
+}
+
+test('without a weekend client the game is byte-identical to the pre-weekend code', () => {
+  const golden = JSON.parse(readFileSync(new URL('./fixtures/weekday-golden.json', import.meta.url), 'utf8'));
+  for (const sc of SCENARIOS) {
+    const key = `${sc.seed}x${sc.days}`;
+    assert.equal(runScenario(sc), golden[key], key);
+  }
+});
+
+test('SHIFTS gains a weekend shift; early and late stay weekday shifts', () => {
+  assert.deepEqual(SHIFTS.weekend, { start: 540, end: 1080, days: [5, 6] });
+  assert.deepEqual(SHIFTS.early.days, [0, 1, 2, 3, 4]);
+  assert.deepEqual(SHIFTS.late.days, [0, 1, 2, 3, 4]);
+});
+
+test('the center opens on a day only when an active client does', () => {
+  const s = createGame(1);
+  for (let d = 0; d < 14; d++) assert.equal(isCenterOpen(s, d), d % 7 < 5, `day ${d}`);
+  s.clients.push({ id: WEEKEND, satisfaction: 70, active: false });
+  assert.equal(isCenterOpen(s, SAT), false, 'an inactive weekend client does not open the center');
+  s.clients.at(-1).active = true;
+  assert.equal(isCenterOpen(s, SAT), true);
+  assert.equal(isCenterOpen(s, SUN), true);
+  assert.equal(view(s).flags.weekend, true);
+  assert.equal(view(createGame(1)).flags.weekend, false);
+});
+
+test('without a weekend client nothing happens on Saturday and Sunday', () => {
+  const s = createGame(4);
+  s.day = SAT;
+  s.minute = 540;
+  const rng = createRng(9);
+  const r = stepInterval(s, rng);
+  assert.deepEqual(r.clients, {});
+  assert.deepEqual(s.today.clients, {});
+  s.minute = 1440;
+  const before = s.history.length;
+  endOfDay(s, rng);
+  assert.equal(s.history.length, before, 'no history entry for a closed day');
+});
+
+test('with a weekend client only it takes calls at the weekend, and never on weekdays', () => {
+  const s = withWeekendClient();
+  // Two agents work Saturday and Sunday on the weekend client.
+  for (const p of s.people.slice(0, 2)) {
+    s.roster[p.id] = { ...s.roster[p.id], 5: 'weekend', 6: 'weekend' };
+    s.assignment[p.id] = { kind: 'phone', clientId: WEEKEND };
+  }
+  const calls = {}; // day -> clientId -> offered
+  for (let d = 0; d < 14; d++) {
+    advance(s, 1440);
+    const h = s.history.find((x) => x.day === d);
+    calls[d] = h ? Object.fromEntries(Object.entries(h.clients).map(([id, t]) => [id, t.offered])) : null;
+  }
+  for (const d of [SAT, SUN, SAT + 7, SUN + 7]) {
+    assert.deepEqual(Object.keys(calls[d]), [WEEKEND], `day ${d}`);
+    assert.ok(calls[d][WEEKEND] > 0);
+  }
+  for (const d of [0, 1, 2, 3, 4, MON, MON + 4]) {
+    assert.ok(calls[d], `day ${d} recorded`);
+    assert.equal(calls[d][WEEKEND], undefined, `weekend client has no calls on weekday ${d}`);
+    assert.ok(calls[d]['gureum-travel'] > 0);
+  }
+});
+
+test('only people on the weekend shift work at the weekend', () => {
+  const s = withWeekendClient();
+  const [a, b, c] = s.people;
+  s.roster[a.id] = { ...s.roster[a.id], 5: 'weekend' };
+  s.roster[c.id] = { ...s.roster[c.id], 5: 'early' }; // not a weekend shift: ignored
+  assert.equal(onShift(s, a, SAT, 600), true);
+  assert.equal(onShift(s, a, SAT, 1080), false, 'the weekend shift ends at 18:00');
+  assert.equal(onShift(s, b, SAT, 600), false);
+  assert.equal(onShift(s, c, SAT, 600), false);
+  assert.equal(onShift(s, a, SUN, 600), false, 'not rostered on Sunday');
+  // Without an active weekend client nobody works the weekend, rostered or not.
+  s.clients.at(-1).active = false;
+  assert.equal(onShift(s, a, SAT, 600), false);
+});
+
+test('setRoster takes 7 weekdays and only shifts that run on that weekday', () => {
+  const s = createGame(2);
+  const id = s.people[0].id;
+  assert.deepEqual(act(s, { type: 'setRoster', personId: id, weekday: 5, shift: 'weekend' }), { ok: true });
+  assert.deepEqual(act(s, { type: 'setRoster', personId: id, weekday: 6, shift: 'off' }), { ok: true });
+  assert.equal(act(s, { type: 'setRoster', personId: id, weekday: 5, shift: 'early' }).ok, false);
+  assert.equal(act(s, { type: 'setRoster', personId: id, weekday: 0, shift: 'weekend' }).ok, false);
+  assert.equal(act(s, { type: 'setRoster', personId: id, weekday: 7, shift: 'off' }).ok, false);
+  const week = view(s).people[0].week;
+  assert.equal(week.length, 7);
+  assert.equal(week[5], 'weekend');
+  assert.equal(week[6], 'off');
+});
+
+test('a person rostered six days or more tires 1.5 times as fast that week', () => {
+  const gain = (sixDays, weekendClient) => {
+    const s = weekendClient ? withWeekendClient(5) : createGame(5);
+    const p = s.people[0];
+    const twin = s.people[2]; // same early shift, same client
+    s.people = [p, twin];
+    p.traits = []; twin.traits = [];
+    for (const x of [p, twin]) { x.fatigue = 10; x.stress = 15; }
+    s.roster[p.id] = { 0: 'early', 1: 'early', 2: 'early', 3: 'early', 4: 'early', ...(sixDays ? { 5: 'weekend' } : {}) };
+    s.roster[twin.id] = { ...s.roster[p.id] };
+    s.assignment = { [p.id]: { kind: 'coaching' }, [twin.id]: { kind: 'coaching' } };
+    s.day = 0;
+    s.minute = 540;
+    const f0 = p.fatigue;
+    stepInterval(s, createRng(1)); // 09:00, both shifts' first interval, no break
+    return p.fatigue - f0;
+  };
+  const five = gain(false, true);
+  assert.ok(five > 0);
+  assert.ok(Math.abs(gain(true, true) - five * 1.5) < 1e-9, 'six days with the weekend client open');
+  assert.equal(gain(true, false), five, 'a Saturday shift with no weekend client is not worked');
+});
+
+test('day-end rules run on an open weekend day and plan spikes per client', () => {
+  const s = withWeekendClient(6);
+  s.day = SAT;
+  s.minute = 1440;
+  s.hiring = { workdays: 0, waitDays: 5 };
+  // Force spikes for every client on Friday's end of day.
+  const always = { next: () => 0.5, int: (a) => a, pick: (a) => a[0], chance: (p) => p === 0.05 };
+  s.day = 4;
+  endOfDay(s, always);
+  const spikeDay = Object.fromEntries(s.spikes.map((x) => [x.clientId, x.day]));
+  assert.equal(spikeDay[WEEKEND], SAT);
+  assert.equal(spikeDay['gureum-travel'], MON);
+  // Saturday ends with a history entry and the hiring wait counts the day.
+  s.day = SAT;
+  s.minute = 1410;
+  const before = s.history.length;
+  advance(s, 30);
+  assert.equal(s.history.length, before + 1);
+  assert.equal(s.history.at(-1).day, SAT);
+  assert.equal(s.hiring.workdays, 1);
+});
+
+test('an old save with 5-day rosters loads; the weekend reads as off', () => {
+  const s = createGame(11);
+  for (const id of Object.keys(s.roster)) {
+    assert.deepEqual(Object.keys(s.roster[id]), ['0', '1', '2', '3', '4'], 'new games keep 5-day rosters');
+  }
+  const old = JSON.parse(serialize(s));
+  delete old.office;
+  const loaded = deserialize(JSON.stringify(old));
+  assert.ok(loaded);
+  const v = view(loaded);
+  assert.equal(v.flags.weekend, false);
+  for (const p of v.people) {
+    assert.equal(p.week.length, 7);
+    assert.deepEqual(p.week.slice(5), ['off', 'off']);
+  }
+  assert.equal(advance(loaded, 7 * 1440), 7 * 1440);
+});

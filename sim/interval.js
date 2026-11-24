@@ -4,9 +4,9 @@
 // Assignment = { [personId]: { kind: 'phone', clientId } | { kind: 'coaching'|'qa'|'research'|'training' } }
 // A person with no assignment does no work: on shift or not, they rest.
 import { intervalQueue } from './queue.js';
-import { dateOf, isWorkday, holidaysOn } from './calendar.js';
+import { dateOf, holidaysOn } from './calendar.js';
 import { ahtFor, applyWork, applyRest, traitMul, traitAdd } from './people.js';
-import { onShift, workShare } from './schedule.js';
+import { onShift, workShare, rosteredDays } from './schedule.js';
 import { CLIENTS } from '../world/clients.js';
 import { NATIONS } from '../world/nations.js';
 
@@ -28,8 +28,12 @@ export const CURVE = [
   65, 58, 38, 33, 30, 26, 21, 16, // 17:00-21:00
 ].map((w) => w / 1000);
 
-// Monday = weekday 0.
-const WEEKDAY_MUL = [1.15, 1.0, 1.0, 1.0, 0.9];
+// Monday = weekday 0. Saturday and Sunday (v1.2) only reach weekend clients.
+const WEEKDAY_MUL = [1.15, 1.0, 1.0, 1.0, 0.9, 1.0, 1.0];
+
+// v1.2: someone rostered six days or more in a week tires this much faster.
+export const SIX_DAY_FATIGUE_MUL = 1.5;
+const SIX_DAYS = 6;
 
 // v1.1: clients grow. Each 90-day quarter of the game adds `perQuarter` of the
 // starting volume, for the first `quarters` quarters (then it holds at about
@@ -66,7 +70,9 @@ function holidayMul(nation, day) {
 // Spikes (state.spikes) are not applied here; stepInterval multiplies them in.
 export function callsFor(client, day, minute, rng) {
   const slot = Math.floor((minute - CURVE_START) / INTERVAL);
-  const weekMul = WEEKDAY_MUL[dateOf(day).weekday] ?? 0;
+  const { weekday } = dateOf(day);
+  // No calls on a day the client does not open (a weekday client at the weekend).
+  const weekMul = client.hours.days.includes(weekday) ? WEEKDAY_MUL[weekday] ?? 0 : 0;
   const wobble = 0.85 + 0.3 * rng.next();
   const curve = CURVE[slot] ?? 0;
   const holiday = holidayMul(nationOf(client.nation), day);
@@ -105,9 +111,10 @@ function staffAverage(list, valueOf, none) {
   return weight > 0 ? list.reduce((s, x) => s + x.share * valueOf(x.person), 0) / weight : none;
 }
 
+// The client's own days and hours (weekday clients Mon-Fri, weekend clients Sat-Sun).
 export function isOpen(def, day, minute) {
   const h = def.hours;
-  return isWorkday(day) && h.days.includes(dateOf(day).weekday) && minute >= h.open && minute < h.close;
+  return h.days.includes(dateOf(day).weekday) && minute >= h.open && minute < h.close;
 }
 
 // Capacity factor from the person's nation holidays (e.g. a quiet month).
@@ -223,7 +230,9 @@ export function stepInterval(state, rng) {
         state.progress[a.kind] = (state.progress[a.kind] ?? 0) + gain;
       }
       const worked = INTERVAL * share;
-      if (worked > 0) applyWork(p, { minutes: worked, occupancy, mods });
+      const tired = worked > 0 && rosteredDays(state, p.id) >= SIX_DAYS
+        ? { ...mods, fatigueGainMul: (mods.fatigueGainMul ?? 1) * SIX_DAY_FATIGUE_MUL } : mods;
+      if (worked > 0) applyWork(p, { minutes: worked, occupancy, mods: tired });
       if (INTERVAL - worked > 0) applyRest(p, { minutes: INTERVAL - worked, mods });
     }
   }

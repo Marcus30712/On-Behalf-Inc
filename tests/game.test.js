@@ -396,7 +396,7 @@ test('view gives the screen the week roster, churn countdown and 30-day holidays
   s.churn = [{ clientId: c.id, workdaysLeft: 12 }];
   s.day = 360 + 2 * 30 + 2; // year 2, 3 Mar (veltora seed-day is 3/15)
   const v = view(s);
-  assert.deepEqual(v.people[0].week, ['late', 'off', 'early', 'off', 'off']);
+  assert.deepEqual(v.people[0].week, ['late', 'off', 'early', 'off', 'off', 'off', 'off']); // Mon-Sun (v1.2)
   assert.equal(v.clients.find((x) => x.id === c.id).churnWorkdaysLeft, 12);
   assert.equal(v.clients.find((x) => x.id !== c.id).churnWorkdaysLeft, null);
   const seed = v.calendar.find((h) => h.id === 'seed-day');

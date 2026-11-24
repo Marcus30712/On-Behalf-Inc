@@ -2,12 +2,14 @@
 // growth, call spikes and the daily report. Pure rules, no DOM.
 //
 // Runs once per calendar day, after the day's last interval. Health counts down
-// every day; everything else only when the ending day was a workday. Rolls use
+// every day; everything else only when the center was open that day (Mon-Fri,
+// and Sat-Sun with an active weekend client, v1.2; "workday" below). Rolls use
 // end-of-day values; overnight recovery comes last.
-import { dateOf, isWorkday, holidaysOn } from './calendar.js';
+import { dateOf, holidaysOn } from './calendar.js';
 import { moraleOf, overnight, wearDay, WEAR } from './people.js';
 import { pushEvent, expireEvents } from './events.js';
-import { SHIFTS } from './schedule.js';
+import { SHIFTS, isCenterOpen } from './schedule.js';
+import { CLIENTS } from '../world/clients.js';
 import { NATIONS } from '../world/nations.js';
 
 const SICK_DAYS = [3, 6];
@@ -33,16 +35,23 @@ const MAX_SKILL = 10;
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const nationOf = (id) => NATIONS.find((n) => n.id === id);
 
-function nextWorkday(day) {
+// The next day the center opens (Monday after a Friday unless a weekend client is active).
+function nextWorkday(state, day) {
   let d = day + 1;
-  while (!isWorkday(d)) d++;
+  while (!isCenterOpen(state, d)) d++;
   return d;
 }
 
-function addWorkdays(day, n) {
+function addWorkdays(state, day, n) {
   let d = day;
-  for (let i = 0; i < n; i++) d = nextWorkday(d);
+  for (let i = 0; i < n; i++) d = nextWorkday(state, d);
   return d;
+}
+
+// The next day the client itself opens (a week on if it never does).
+function nextClientDay(def, day) {
+  for (let d = day + 1; d <= day + 7; d++) if (def.hours.days.includes(dateOf(d).weekday)) return d;
+  return day + 7;
 }
 
 function processLeaving(state) {
@@ -101,7 +110,7 @@ function rollBreakingPoint(state, person, rng) {
   const clientId = phoneClient(state, person);
   const kind = rng.pick(clientId === undefined ? BREAKING_EVENTS_OFF_PHONE : BREAKING_EVENTS);
   if (kind === 'no-show') {
-    state.absences.push({ personId: person.id, day: nextWorkday(state.day) });
+    state.absences.push({ personId: person.id, day: nextWorkday(state, state.day) });
     pushEvent(state, { id: kind, personId: person.id, clientId });
   } else if (kind === 'argument') {
     const client = state.clients.find((c) => c.id === clientId);
@@ -110,7 +119,7 @@ function rollBreakingPoint(state, person, rng) {
     state.reputationPenalty = (state.reputationPenalty ?? 0) + 1;
     pushEvent(state, { id: kind, personId: person.id, clientId });
   } else if (!hasOpenNotice(state, person)) {
-    const leaveDay = addWorkdays(state.day, RESIGN_WORKDAYS);
+    const leaveDay = addWorkdays(state, state.day, RESIGN_WORKDAYS);
     pushEvent(state, {
       id: kind, personId: person.id, data: { days: RESIGN_WORKDAYS, leaveDay }, deadlineDay: leaveDay,
     });
@@ -122,7 +131,7 @@ function rollBreakingPoint(state, person, rng) {
 function askHolidayLeave(state, person, rng) {
   const nation = nationOf(person.nation);
   if (!nation) return;
-  const firstWorkday = nextWorkday(state.day);
+  const firstWorkday = nextWorkday(state, state.day);
   for (const { holiday, startDay } of holidaysOn(firstWorkday, nation)) {
     if (startDay <= state.day) continue;
     const key = `${holiday.id}@${startDay}`;
@@ -196,10 +205,12 @@ function grow(state) {
   progress.training = 0;
 }
 
+// A spike lands on the client's own next open day.
 function planSpikes(state, rng) {
-  const day = nextWorkday(state.day);
   for (const c of state.clients) {
     if (!c.active || !rng.chance(SPIKE_CHANCE)) continue;
+    const def = CLIENTS.find((d) => d.id === c.id);
+    const day = def ? nextClientDay(def, state.day) : nextWorkday(state, state.day);
     state.spikes.push({ clientId: c.id, day });
     pushEvent(state, { id: 'call-spike', clientId: c.id, data: { day } });
   }
@@ -207,7 +218,7 @@ function planSpikes(state, rng) {
 
 export function endOfDay(state, rng) {
   if (state.gameOver) return;
-  const workday = isWorkday(state.day);
+  const workday = isCenterOpen(state, state.day);
   state.spikes = (state.spikes ?? []).filter((s) => s.day >= state.day);
   state.absences ??= [];
   expireEvents(state, rng);

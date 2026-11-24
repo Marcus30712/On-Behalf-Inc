@@ -13,7 +13,12 @@ const state = () => ({ roster: defaultRoster(people), absences: [] });
 const H = (h) => h * 60;
 
 test('early shift covers 09:00-18:00, late 12:00-21:00, overlap 12:00-18:00', () => {
-  assert.deepEqual(SHIFTS, { early: { start: 540, end: 1080 }, late: { start: 720, end: 1260 } });
+  const WEEK = [0, 1, 2, 3, 4];
+  assert.deepEqual(SHIFTS, {
+    early: { start: 540, end: 1080, days: WEEK },
+    late: { start: 720, end: 1260, days: WEEK },
+    weekend: { start: 540, end: 1080, days: [5, 6] }, // v1.2
+  });
   const s = state();
   const early = people[0];
   const late = people[1];

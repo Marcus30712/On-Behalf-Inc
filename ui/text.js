@@ -7,6 +7,7 @@ import { ADVISOR } from '../world/advisor.js';
 import { RESEARCH } from '../world/research.js';
 import { NATIONS } from '../world/nations.js';
 import { CLIENTS } from '../world/clients.js';
+import { formatMoney } from './money.js';
 
 export const UI_TEXT = {
   "topbar": {
@@ -435,6 +436,16 @@ const eroFor = (word) => {
 // '책' -> '책으로', '서울' -> '서울로', '휴가' -> '휴가로'.
 export const withParticle = (word) => word + eroFor(word);
 
+// A particle written right after a placeholder ({client}가) is re-chosen by the
+// 받침 of the filled value. Only whole particles count: the next char is not Hangul.
+const PARTICLE_PAIRS = [['이', '가'], ['을', '를'], ['은', '는'], ['과', '와']];
+const PARTICLE_AFTER_VALUE = /\{(\w+)\}(으로|로|이|가|을|를|은|는|과|와)(?![가-힣(])/g;
+function pickParticle(value, written) {
+  if (written === '로' || written === '으로') return eroFor(value);
+  const pair = PARTICLE_PAIRS.find((p) => p.includes(written));
+  return jongseong(lastChar(value)) === 0 ? pair[1] : pair[0];
+}
+
 // Fills {key} placeholders. Splits on '. ', '? ', '! ' and the end of the string;
 // a sentence with any placeholder lacking a value is dropped. Then settles
 // "(으)로" and "이(가)" by the 받침 of the text before them.
@@ -444,14 +455,17 @@ export function fill(template, values = {}) {
   for (const sentence of sentences) {
     const keys = [...sentence.matchAll(/\{(\w+)\}/g)].map((m) => m[1]);
     if (keys.some((k) => values[k] === undefined || values[k] === null || values[k] === '')) continue;
-    kept.push(sentence.replace(/\{(\w+)\}/g, (_, k) => String(values[k])));
+    kept.push(sentence
+      .replace(PARTICLE_AFTER_VALUE, (_, k, particle) => {
+        const value = String(values[k]);
+        return value + pickParticle(value, particle);
+      })
+      .replace(/\{(\w+)\}/g, (_, k) => String(values[k])));
   }
   return kept.join('').trim()
     .replace(/([^\s])\(으\)로/gu, (_, ch, off, s) => ch + eroFor(s.slice(0, off + 1)))
     .replace(/(\S)이\(가\)/gu, (_, ch) => ch + (jongseong(ch) === 0 ? '가' : '이'));
 }
-
-const money = (n) => Math.round(n).toLocaleString('en-US');
 
 // The values an event's templates can use, read from its data (see sim/*.js pushEvent calls).
 function valuesFor(event) {
@@ -474,7 +488,7 @@ function valuesFor(event) {
   };
   if (clientDef) {
     values.sl = fill(UI_TEXT.metrics.targetFull, { sec: clientDef.slTarget.sec, pct: clientDef.slTarget.pct });
-    values.fee = fill(UI_TEXT.common.money, { cost: money(clientDef.monthlyFee) });
+    values.fee = fill(UI_TEXT.common.money, { cost: formatMoney(clientDef.monthlyFee) });
   }
   if (event.id === 'build-done') {
     values.name = helped.map((h) => h.name).join('·') || undefined;

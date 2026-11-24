@@ -116,7 +116,7 @@ test('auto-resolved event adds the auto note', () => {
   assert.ok(!manual.text.includes('답이 없어'));
 });
 
-test('auto note picks 으로 after a final consonant', () => {
+test('auto note for a choice ending without a 받침 uses 로', () => {
   const e = {
     id: 'client-offer', day: 2, clientId: 'dalbit-mall', data: { client: '달빛몰' }, resolved: true, choice: 'decline', auto: true,
   };
@@ -182,4 +182,29 @@ test('UI_TEXT keeps the approved key shape', () => {
   assert.equal(UI_TEXT.refuse['no-seat'], '빈 좌석이 없어요. 지금은 더 뽑을 수 없어요.');
   assert.equal(UI_TEXT.hiring.state.ready, '채용할 수 있어요');
   assert.equal(UI_TEXT.topbar.date, '{year}년차 {month}월 {day}일 ({weekday})');
+});
+
+test('fill settles (으)로 after a value with a 받침', () => {
+  assert.equal(fill("'{c}'(으)로 처리했어요.", { c: '책' }), "'책'으로 처리했어요.");
+  assert.equal(fill("'{c}'(으)로 처리했어요.", { c: '서울' }), "'서울'로 처리했어요.");
+});
+
+test('fill settles particles written right after a value', () => {
+  assert.equal(fill('{a}가 왔어요.', { a: '달빛몰' }), '달빛몰이 왔어요.');
+  assert.equal(fill('{a}가 왔어요.', { a: '가을' }), '가을이 왔어요.');
+  assert.equal(fill('{a}가 왔어요.', { a: '나무' }), '나무가 왔어요.');
+  assert.equal(fill('{a}를 봐요. {a}은 {a}와 {a}로', { a: '물빛 통신' }), '물빛 통신을 봐요. 물빛 통신은 물빛 통신과 물빛 통신으로');
+  assert.equal(fill('{a}를 {a}는 {a}와 {a}로', { a: '나무' }), '나무를 나무는 나무와 나무로');
+  assert.equal(fill('{a}에서 {a} 가요 {a}가을', { a: '달빛몰' }), '달빛몰에서 달빛몰 가요 달빛몰가을');
+});
+
+test('real client names get grammatical particles in churn-warning and client-offer', () => {
+  const names = { 'gureum-travel': '구름다리 여행', 'mulbit-telecom': '물빛 통신', 'dalbit-mall': '달빛몰' };
+  for (const [clientId, client] of Object.entries(names)) {
+    const warn = eventText({ id: 'churn-warning', day: 1, clientId, data: { client, days: 20 } });
+    assert.ok(warn.title.startsWith(`${client}이 계약 해지를`), warn.title);
+    const offer = eventText({ id: 'client-offer', day: 1, clientId, data: { client } });
+    assert.ok(offer.choices[0].result.startsWith(`${client}이 새 고객사가 돼요.`), offer.choices[0].result);
+    assert.ok(offer.text.startsWith(`${client}에서`));
+  }
 });

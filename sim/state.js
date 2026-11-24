@@ -76,6 +76,7 @@ export function newGame(seed) {
     nextId: 1,
     churn: [],
     offerStreak: 0,
+    rankSStreak: 0, // v1.1; not in REQUIRED, so v1.0 saves still load (read as 0)
     offered: [],
     reputationPenalty: 0,
     lastEndedDay: null,
@@ -114,7 +115,11 @@ function isValid(s) {
 export function deserialize(text) {
   try {
     const s = JSON.parse(text);
-    return isValid(s) ? s : null;
+    if (!isValid(s)) return null;
+    // v1.0 saves: a client lost before v1.1 has no lostDay; its reputation
+    // mark fades from the day the save is loaded.
+    for (const c of s.clients) if (!c.active && c.lostDay === undefined) c.lostDay = s.day;
+    return s;
   } catch {
     return null;
   }

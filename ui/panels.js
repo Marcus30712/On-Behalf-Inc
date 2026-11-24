@@ -95,6 +95,8 @@ function healthText(p) {
 
 // 'off' before today's shift has begun reads as the shift, not as gone home.
 function activityText(v, p) {
+  if (p.shiftToday === 'absent') return UI_TEXT.health.absent.name;
+  if (p.health?.kind && p.health.kind !== 'well' && UI_TEXT.health[p.health.kind]) return UI_TEXT.health[p.health.kind].name;
   const shift = SHIFTS[p.shiftToday];
   if (p.activity === 'off' && shift && v.minute < shift.start) return UI_TEXT.shift[p.shiftToday].full;
   return UI_TEXT.activity[p.activity] ?? '';

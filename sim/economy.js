@@ -1,7 +1,8 @@
 // Money, reputation, churn, client offers, milestones and game over. Pure rules, no DOM.
 //
 // state.cash; state.churn = [{ clientId, workdaysLeft }]; state.offerStreak (workdays at A+);
-// state.offered = [clientId]; state.milestones = [eventId]; state.gameOver = { kind, day } | undefined.
+// state.offered = [clientId]; state.milestones = [eventId]; state.gameOver = { kind, day } | undefined;
+// state.rankSStreak (workdays in a row at S; missing in v1.0 saves, read as 0).
 // The game calls dailyEconomy after endOfDay on workdays, and monthEnd after
 // endOfDay on the last day of each 30-day month.
 import { DAYS_PER_MONTH } from './calendar.js';
@@ -23,6 +24,27 @@ const OFFER_STREAK = 20;
 const OFFER_DEADLINE_DAYS = 7;
 const NEW_CLIENT_SATISFACTION = 70;
 const BIG_CLIENT_COUNT = 3;
+// v1.1: the S milestone takes six weeks (30 workdays) at S in a row, not one
+// good day; and every client lost to churn (inactive in state.clients, lost on
+// client.lostDay) takes LOST_CLIENT_MARK off the score for LOST_CLIENT_DAYS
+// days, then nothing, so a centre does not look better for having lost one
+// and putting everyone on the client that stayed, yet can earn its name back.
+// (A step, not a straight-line fade: a fading mark is small enough for S
+// within about 40 days.)
+const RANK_S_WORKDAYS = 30;
+const LOST_CLIENT_MARK = 15;
+const LOST_CLIENT_DAYS = 180;
+
+// What the lost clients still take off the score today. A lost client with no
+// lostDay (a v1.0 save; state.js sets it to the load day) counts as lost today.
+export function lostClientMark(state) {
+  let mark = 0;
+  for (const c of state.clients) {
+    if (c.active) continue;
+    if (state.day - (c.lostDay ?? state.day) < LOST_CLIENT_DAYS) mark += LOST_CLIENT_MARK;
+  }
+  return mark;
+}
 
 export const isOver = (state) => !!state.gameOver;
 
@@ -60,14 +82,15 @@ export function neediestClient(state) {
 }
 
 // Score = 60 x average met-rate (last 20 workdays, active clients)
-//       + 0.4 x average satisfaction (active clients) - reputationPenalty.
+//       + 0.4 x average satisfaction (active clients) - reputationPenalty
+//       - 15 per client lost in the last 180 days (v1.1).
 // With no recorded workday yet the met-rate counts as 1.
 export function reputationScore(state) {
   const active = activeClients(state);
   const rates = active.flatMap((c) => dailyMetRates(state, c.id));
   const met = rates.length === 0 ? 1 : rates.reduce((s, r) => s + r, 0) / rates.length;
   const sat = active.length === 0 ? 0 : active.reduce((s, c) => s + c.satisfaction, 0) / active.length;
-  return 60 * met + 0.4 * sat - (state.reputationPenalty ?? 0);
+  return 60 * met + 0.4 * sat - (state.reputationPenalty ?? 0) - lostClientMark(state);
 }
 
 export function reputation(state) {
@@ -106,6 +129,7 @@ function checkBigClient(state) {
 
 function loseClient(state, client) {
   client.active = false;
+  client.lostDay = state.day;
   const to = neediestClient(state);
   for (const [personId, a] of Object.entries(state.assignment)) {
     if (a.kind !== 'phone' || a.clientId !== client.id) continue;
@@ -151,7 +175,8 @@ export function dailyEconomy(state) {
   runChurn(state);
   if (state.gameOver) return;
   const grade = reputation(state);
-  if (grade === 'S') milestone(state, 'milestone-rank-s');
+  state.rankSStreak = grade === 'S' ? (state.rankSStreak ?? 0) + 1 : 0;
+  if (state.rankSStreak >= RANK_S_WORKDAYS) milestone(state, 'milestone-rank-s');
   checkBigClient(state);
   runOffers(state, grade);
 }
@@ -160,7 +185,10 @@ export function dailyEconomy(state) {
 // Seats stay 8: the player splits the agents among the clients.
 export function acceptClient(state, clientId) {
   const existing = state.clients.find((c) => c.id === clientId);
-  if (existing) Object.assign(existing, { satisfaction: NEW_CLIENT_SATISFACTION, active: true });
+  if (existing) {
+    Object.assign(existing, { satisfaction: NEW_CLIENT_SATISFACTION, active: true });
+    delete existing.lostDay;
+  }
   else state.clients.push({ id: clientId, satisfaction: NEW_CLIENT_SATISFACTION, active: true });
   checkBigClient(state);
 }

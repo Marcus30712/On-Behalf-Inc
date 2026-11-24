@@ -1,16 +1,18 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRng } from '../sim/rng.js';
-import { createPerson, moraleOf } from '../sim/people.js';
+import { createPerson, moraleOf, WEAR } from '../sim/people.js';
 import { defaultRoster } from '../sim/schedule.js';
 import { isWorkday } from '../sim/calendar.js';
-import { endOfDay } from '../sim/day.js';
+import { endOfDay, FRIDAY_ASK_CHANCE } from '../sim/day.js';
 import { resolveEvent } from '../sim/events.js';
 
 const GUREUM = 'gureum-travel';
 const MULBIT = 'mulbit-telecom';
 const never = { next: () => 0.99, int: (a) => a, pick: (a) => a[0], chance: () => false };
 // Fires only chances of at least `min` (staffLeave 0.2 yes; sickness, spikes, breaking point no).
+// Fires only the friday-off roll.
+const asking = { ...never, chance: (p) => p === FRIDAY_ASK_CHANCE };
 const above = (min) => ({ ...never, chance: (p) => p >= min });
 
 function makeState({ day = 0, nations = ['veltora', 'kamuen'] } = {}) {
@@ -283,35 +285,102 @@ test('someone who comes back today gets no new rolls until tomorrow', () => {
 
 test('friday-off asked only for nations that rest on Friday', () => {
   const state = makeState({ day: 0 }); // Monday; p0 veltora, p1 kamuen
-  endOfDay(state, never);
+  endOfDay(state, asking);
   const asks = ids(state, 'friday-off');
   assert.equal(asks.length, 1);
   assert.equal(asks[0].personId, 'p1');
   assert.equal(asks[0].deadlineDay, 4);
   assert.deepEqual(asks[0].data, { nationId: 'kamuen', fridayDay: 4, name: state.people[1].name });
   state.day = 1;
-  endOfDay(state, never);
-  assert.equal(ids(state, 'friday-off').length, 1, 'once a week');
+  endOfDay(state, asking);
+  assert.equal(ids(state, 'friday-off').length, 1, 'once in 4 weeks');
   state.day = 7;
-  endOfDay(state, never);
-  assert.equal(ids(state, 'friday-off').length, 2, 'again next week');
+  endOfDay(state, asking);
+  assert.equal(ids(state, 'friday-off').length, 1, 'not next week');
+  state.day = 28; // 4 weeks later
+  endOfDay(state, asking);
+  assert.equal(ids(state, 'friday-off').length, 2, 'again after 4 weeks');
 
   const off = makeState({ day: 0 });
   off.roster.p1[4] = 'off';
-  endOfDay(off, never);
+  endOfDay(off, asking);
   assert.equal(ids(off, 'friday-off').length, 0, 'not when Friday is already off');
 });
 
 test('expired events are auto-resolved at end of day', () => {
   const state = makeState({ day: 0 });
-  endOfDay(state, never); // friday-off for p1, deadline Friday 4
+  endOfDay(state, asking); // friday-off for p1, deadline Friday 4
   for (const day of [1, 2, 3, 4]) {
     state.day = day;
-    endOfDay(state, never);
+    endOfDay(state, asking);
   }
   const ask = ids(state, 'friday-off')[0];
   assert.equal(ask.choice, 'keep');
   assert.equal(ask.auto, true);
+});
+
+test('friday-off is asked at most once per person per 4 weeks', () => {
+  const state = makeState({ day: 0 });
+  const days = [];
+  for (let d = 0; d < 120; d++) {
+    state.day = d;
+    const before = ids(state, 'friday-off').length;
+    endOfDay(state, asking);
+    if (ids(state, 'friday-off').length > before) days.push(d);
+  }
+  assert.ok(days.length >= 2);
+  for (let i = 1; i < days.length; i++) assert.ok(days[i] - days[i - 1] >= 28, `${days}`);
+});
+
+test('friday-off is still asked sometimes', () => {
+  // Over a year a Friday-resting person is asked a few times: 2-8 on average
+  // over ten seeds (one seed alone hangs on its rng sequence), and never
+  // fewer than once on any of them.
+  const counts = [];
+  for (let seed = 1; seed <= 10; seed++) {
+    const rng = createRng(seed);
+    const state = makeState({ day: 0 });
+    for (let d = 0; d < 360; d++) {
+      state.day = d;
+      endOfDay(state, rng);
+    }
+    counts.push(ids(state, 'friday-off').filter((e) => e.personId === 'p1').length);
+    assert.equal(ids(state, 'friday-off').filter((e) => e.personId === 'p0').length, 0);
+  }
+  const mean = counts.reduce((s, n) => s + n, 0) / counts.length;
+  assert.ok(mean >= 2 && mean <= 8, `asked ${counts.join(' ')} times`);
+  assert.ok(counts.every((n) => n >= 1), `asked ${counts.join(' ')} times`);
+});
+
+test('long-term wear: strained workdays add to it, other workdays ease it, weekends leave it', () => {
+  const state = makeState({ day: 0, nations: ['veltora', 'veltora'] });
+  const [tense, calm] = state.people;
+  delete tense.history.wear; // a v1.0 save: no wear yet
+  for (let d = 0; d < 7; d++) {
+    state.day = d;
+    set(tense, { stress: WEAR.from, fatigue: 0 });
+    set(calm, { stress: WEAR.from - 1, fatigue: 0 });
+    endOfDay(state, never);
+  }
+  assert.equal(tense.history.wear, 5, 'five workdays, not the weekend');
+  assert.equal(calm.history.wear, 0);
+  tense.health = { kind: 'sick', daysLeft: 3 }; // off sick: not strained
+  state.day = 7;
+  endOfDay(state, never);
+  assert.equal(tense.history.wear, 5 - WEAR.recover);
+  // Morale is exactly WEAR.recover higher than it would be with yesterday's wear.
+  const unchanged = { ...tense, history: { ...tense.history, wear: 5 } };
+  assert.ok(moraleOf(tense) < 100 && moraleOf(unchanged) > 0);
+  assert.ok(Math.abs(moraleOf(tense) - moraleOf(unchanged) - WEAR.recover) < 1e-9);
+  assert.ok(Math.abs(tense.morale - moraleOf(tense)) < 1e-9, 'stored morale follows');
+});
+
+test('old saves without the new history field still work', () => {
+  const state = makeState({ day: 0 });
+  delete state.people[1].history.lastFridayAskDay;
+  state.people[1].history.lastFridayAskWeek = -7; // old field only
+  endOfDay(state, asking);
+  assert.equal(ids(state, 'friday-off').length, 1);
 });
 
 test('coaching progress raises the coached agent\'s skill', () => {

@@ -5,7 +5,7 @@ import { createPerson } from '../sim/people.js';
 import { defaultRoster } from '../sim/schedule.js';
 import { dateOf } from '../sim/calendar.js';
 import { CLIENTS } from '../world/clients.js';
-import { CURVE, callsFor, stepInterval } from '../sim/interval.js';
+import { CURVE, CALL_GROWTH, callsFor, stepInterval } from '../sim/interval.js';
 
 const H = (h, m = 0) => h * 60 + m;
 const A = CLIENTS[0]; // veltora
@@ -51,6 +51,21 @@ test('weekday multipliers and wobble range', () => {
   assert.equal(at(5), 0);
   assert.ok(Math.abs(callsFor(A, 1, H(11), { next: () => 0 }) - base * 0.85) < 1e-9);
   assert.ok(Math.abs(callsFor(A, 1, H(11), { next: () => 1 }) - base * 1.15) < 1e-9);
+});
+
+test('calls grow a little every 90-day quarter, then hold after two quarters', () => {
+  const at = (day) => callsFor(A, day, H(11), flat) / (A.callsPerDay * CURVE[4]);
+  const step = CALL_GROWTH.perQuarter;
+  assert.ok(step > 0 && step <= 0.1, 'a little');
+  // Tuesdays (weekday 1): day 1, then the first Tuesday of each quarter.
+  const tuesday = (from) => from + ((8 - (from % 7)) % 7);
+  assert.ok(Math.abs(at(1) - 1) < 1e-9);
+  assert.ok(Math.abs(at(tuesday(84)) - 1) < 1e-9, 'day 85: still the first quarter');
+  assert.equal(CALL_GROWTH.quarters, 2, 'seats are fixed until v1.2: growth stops at two quarters');
+  assert.ok(Math.abs(at(tuesday(90)) - (1 + step)) < 1e-9);
+  assert.ok(Math.abs(at(tuesday(180)) - (1 + 2 * step)) < 1e-9);
+  assert.ok(Math.abs(at(tuesday(270)) - (1 + 2 * step)) < 1e-9, 'holds');
+  assert.ok(Math.abs(at(tuesday(900)) - (1 + 2 * step)) < 1e-9, 'holds');
 });
 
 test('outside opening hours nothing happens', () => {

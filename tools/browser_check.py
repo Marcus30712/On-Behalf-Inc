@@ -28,6 +28,7 @@ CHROME = '/usr/bin/google-chrome'
 SAVE_KEY = 'on-behalf-inc:save:v1'
 VIEWPORTS = [(1280, 720), (1024, 640)]
 TARGET_DAY = 5
+SEED = 7  # fixed new-game seed for the page (the long-inbox save uses the same one)
 RUN_STEP_MS = 500  # page time run per poll at 3x (frames fire every 16 ms)
 DAYS_PER_MONTH = 30
 DAYS_PER_YEAR = 360
@@ -61,8 +62,10 @@ def serve():
 def node_save(body):
     """Runs `body` with createGame/advance/save/view in scope; `game` is saved."""
     game_url = (ROOT / 'sim' / 'game.js').as_uri()
+    events_url = (ROOT / 'sim' / 'events.js').as_uri()
     script = f"""
 import {{ createGame, advance, save, view }} from {json.dumps(game_url)};
+import {{ pushEvent }} from {json.dumps(events_url)};
 const store = {{ text: null, setItem(k, v) {{ this.text = v; }}, getItem() {{ return this.text; }} }};
 const game = createGame(7);
 {body}
@@ -297,8 +300,10 @@ def check_game_over(browser):
 
 def check_long_inbox(browser):
     tag = 'long inbox'
+    # Push unread notices until the inbox is long, whatever the run produced.
     text = node_save('advance(game, 1440 * 30);'
-                     "if (view(game).inbox.length < 20 || game.gameOver) throw new Error('need a long inbox');")
+                     "while (game.inbox.length < 20) pushEvent(game, { id: 'call-spike', clientId: view(game).clients[0].id });"
+                     "if (game.gameOver) throw new Error('game ended');")
     size = VIEWPORTS[0]
     page = open_page(browser, size, text)
     page.click('.start-continue')
@@ -323,7 +328,7 @@ def main():
     global base_url
     OUT.mkdir(parents=True, exist_ok=True)
     server = serve()
-    base_url = f'http://127.0.0.1:{server.server_address[1]}/index.html'
+    base_url = f'http://127.0.0.1:{server.server_address[1]}/index.html?seed={SEED}'  # ?seed= is test-only
     try:
         with sync_playwright() as pw:
             browser = pw.chromium.launch(executable_path=CHROME, headless=True)

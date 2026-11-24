@@ -148,3 +148,31 @@ test('a person event whose title has no name shows the name in its head', () => 
   assert.equal(head('friday-off'), `${fridayTitle} · ${a.name}`);
   assert.equal(head('sick'), eventText(view(state).inbox.find((e) => e.id === 'sick')).title, 'name already in the title');
 });
+
+test('resolved events fold under a show-old button', () => {
+  const state = createGame(5);
+  for (let i = 0; i < 6; i++) pushEvent(state, { id: 'call-spike', clientId: CLIENTS[0].id });
+  for (let i = 0; i < 6; i++) act(state, { type: 'resolve', index: i, choiceId: undefined });
+  pushEvent(state, { id: 'call-spike', clientId: CLIENTS[0].id }); // unread, index 6
+  pushEvent(state, { id: 'client-offer', clientId: CLIENTS[0].id, deadlineDay: state.day + 3 }); // choice, index 7
+  const onAct = (a) => act(state, a);
+  const root = makeRoot();
+  renderInbox(root, view(state), onAct, { getView: () => view(state) });
+  const shown = () => items(root).map((l) => Number(l.dataset.index));
+  assert.deepEqual(shown(), [7, 6, 5, 4, 3], 'waiting + unread + 3 newest resolved');
+  const btn = root.querySelector('button.show-old');
+  assert.equal(btn.textContent, UI_TEXT.inbox.showOld);
+  click(btn);
+  assert.equal(items(root).length, 8);
+  assert.equal(root.querySelector('button.show-old'), null);
+  resetInbox();
+  renderInbox(root, view(state), onAct, { getView: () => view(state) });
+  assert.equal(items(root).length, 5, 'reset folds again');
+});
+
+test('no show-old button when 3 or fewer events are resolved', () => {
+  const { state, onAct } = setup();
+  const root = makeRoot();
+  renderInbox(root, view(state), onAct);
+  assert.equal(root.querySelector('button.show-old'), null);
+});

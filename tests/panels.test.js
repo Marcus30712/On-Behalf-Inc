@@ -7,6 +7,8 @@ import { formatMoney } from '../ui/money.js';
 import { renderPanel, selectPerson, resetPanels, TABS } from '../ui/panels.js';
 import { renderTopbar, renderMetrics } from '../ui/topbar.js';
 import { createClock } from '../ui/clock.js';
+import { pushEvent } from '../sim/events.js';
+import { CLIENTS } from '../world/clients.js';
 
 function makeRoot() {
   resetPanels(); // no panel state carries over between tests
@@ -225,6 +227,7 @@ test('metrics strip shows each client target next to its service level', () => {
 test('top bar says the clock waits for an answer after an auto-pause', () => {
   const state = createGame(11);
   const root = makeRoot();
+  pushEvent(state, { id: 'client-offer', clientId: CLIENTS[0].id });
   const v = view(state);
   const clock = { speed: 0, autoPaused: true, setSpeed() {} };
   renderTopbar(root, v, clock);
@@ -252,4 +255,39 @@ test('style.css lays the open panel over the bottom of the stage', async () => {
   const root = [...css.matchAll(/\.panel-root\s*\{([^}]*)\}/g)].map((m) => m[1]).join('\n');
   assert.match(root, /grid-area:\s*stage/);
   assert.match(css, /max-height:\s*45vh/);
+});
+
+test('auto-paused note clears once no choice is waiting', () => {
+  const state = createGame(11);
+  const root = makeRoot();
+  const clock = { speed: 0, autoPaused: true, setSpeed() {} };
+  pushEvent(state, { id: 'client-offer', clientId: CLIENTS[0].id });
+  renderTopbar(root, view(state), clock);
+  assert.ok(root.textContent.includes(UI_TEXT.speed.autoPaused));
+  act(state, { type: 'resolve', index: state.inbox.length - 1, choiceId: 'accept' });
+  renderTopbar(root, view(state), clock);
+  assert.ok(!root.textContent.includes(UI_TEXT.speed.autoPaused));
+  assert.equal(clock.speed, 0);
+});
+
+test('people who are sick, on burnout, on leave or absent show their health state, not 퇴근', () => {
+  const state = createGame(11);
+  const [a, b, c, d] = state.people.filter((p) => p.role === 'agent');
+  state.minute = 22 * 60;
+  a.health = { kind: 'sick', daysLeft: 2 };
+  b.health = { kind: 'burnout', daysLeft: 2 };
+  c.health = { kind: 'leave', daysLeft: 2 };
+  const root = makeRoot();
+  const row = (v, p) => { renderPanel(root, v, 'people', (x) => act(state, x)); return root.querySelector(`[data-person="${p.id}"]`).textContent; };
+  for (const [p, kind] of [[a, 'sick'], [b, 'burnout'], [c, 'leave']]) {
+    const v = view(state);
+    assert.ok(row(v, p).includes(UI_TEXT.health[kind].name), row(v, p));
+    assert.ok(!row(v, p).includes(UI_TEXT.activity.off), row(v, p));
+  }
+  // absent today (shiftToday is computed by the sim; fake it on a view copy)
+  const v = structuredClone(view(state));
+  v.people.find((p) => p.id === d.id).shiftToday = 'absent';
+  const text = row(v, d);
+  assert.ok(text.includes(UI_TEXT.health.absent.name), text);
+  assert.ok(!text.includes(UI_TEXT.activity.off), text);
 });

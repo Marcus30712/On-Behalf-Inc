@@ -29,8 +29,8 @@ function savedStorage(state) {
 }
 
 // A page with fake time, frames and a no-op 2D context (jsdom has no canvas).
-function boot({ storage = fakeStorage(), seed = 7 } = {}) {
-  const { window } = new JSDOM(HTML);
+function boot({ storage = fakeStorage(), seed = 7, url } = {}) {
+  const { window } = new JSDOM(HTML, { url });
   const { document } = window;
   const ctx = new Proxy({}, { get: (t, k) => (k in t ? t[k] : () => {}), set: (t, k, v) => { t[k] = v; return true; } });
   window.HTMLCanvasElement.prototype.getContext = () => ctx;
@@ -303,4 +303,33 @@ test('the open panel has a close button that closes the tab', () => {
   page.click('.panel-root .panel-close');
   assert.equal(page.$('.panel-root .panel'), null);
   assert.equal(page.$('.tabs [data-tab="hiring"]').getAttribute('aria-selected'), 'false');
+});
+
+test('the top bar note clears once the last waiting choice is answered', () => {
+  const page = boot();
+  page.click('.start-new');
+  page.click('.intro-skip');
+  page.key('3');
+  runUntil(page, () => page.game.clock.autoPaused, { limit: 2000 });
+  page.frame(300); // the bars redraw
+  assert.ok(page.$('.topbar .auto-paused'), 'note shown while a choice waits');
+  const head = page.$('.inbox-item.needs-answer .inbox-head');
+  head.click();
+  page.$('.inbox-item .choice-btn').click();
+  for (let i = 0; i < 3 && page.$('.inbox-item.needs-answer'); i++) {
+    page.$('.inbox-item.needs-answer .inbox-head').click();
+    page.$('.inbox-item .choice-btn').click();
+  }
+  page.frame(300);
+  assert.ok(!page.$('.inbox-item.needs-answer'));
+  assert.equal(page.$('.topbar .auto-paused'), null, 'note gone');
+  assert.equal(page.game.clock.speed, 0);
+});
+
+test('a ?seed= query fixes the new-game seed', () => {
+  const a = boot({ seed: 1, url: 'http://localhost/index.html?seed=42' });
+  a.click('.start-new');
+  const b = boot({ seed: 2, url: 'http://localhost/index.html?seed=42' });
+  b.click('.start-new');
+  assert.equal(JSON.stringify(a.game.state.people), JSON.stringify(b.game.state.people));
 });

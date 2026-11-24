@@ -40,9 +40,24 @@ export function traitAdd(person, key) {
   return a;
 }
 
+// Long-term wear (v1.1): each workday that ends at `from` stress or more adds
+// a point, any other workday (also one off, sick or on leave) takes `recover`
+// off, up to `max`. Each point costs a point of morale, so weeks of strain wear
+// a person down even when every night's sleep looks fine. Saves without
+// history.wear read it as 0.
+export const WEAR = { from: 75, recover: 3, max: 30 };
+
 export function moraleOf(person) {
   const boost = person.moraleBoost ?? 0;
-  return clamp(100 - 0.4 * person.fatigue - 0.6 * person.stress + boost, 0, 100);
+  const wear = person.history?.wear ?? 0;
+  return clamp(100 - 0.4 * person.fatigue - 0.6 * person.stress - wear + boost, 0, 100);
+}
+
+// End of a workday: `strained` when the person ends it well and at WEAR.from stress or more.
+export function wearDay(person, strained) {
+  const wear = person.history.wear ?? 0;
+  person.history.wear = strained ? Math.min(WEAR.max, wear + 1) : Math.max(0, wear - WEAR.recover);
+  person.morale = moraleOf(person);
 }
 
 // Draw order is fixed and nation-independent: trait count, trait 1, trait 2,

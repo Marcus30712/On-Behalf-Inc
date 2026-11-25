@@ -84,7 +84,12 @@ export const BREAK_LENGTH = { am: 15, lunch: 60, pm: 15 };
 // group (0 or 1), kept until the plan is wired in (v1.6 Task 3).
 function breaksOf(shiftId, planOrGroup) {
   if (planOrGroup && typeof planOrGroup === 'object') {
-    return Object.entries(BREAK_LENGTH).map(([kind, length]) => [planOrGroup[kind], length]);
+    return Object.entries(BREAK_LENGTH).map(([kind, length]) => {
+      const start = planOrGroup[kind];
+      // A missing or bad break would quietly turn the work share into NaN.
+      if (!Number.isFinite(start)) throw new TypeError(`break plan: ${kind} is ${start}`);
+      return [start, length];
+    });
   }
   const start = SHIFTS[shiftId].start;
   const plans = BREAKS[shiftId];

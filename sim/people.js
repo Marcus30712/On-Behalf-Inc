@@ -13,10 +13,11 @@ const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
 // v1.6 스케줄링 (planning): how well a lead places the day's breaks
 // (sim/breaks.js). Not drawn from the rng, so every other draw keeps its
-// order: it comes from the person's id, within the role's range, one decimal.
-// It is not stored on new people, so a saved person (v1.5 and earlier) gets
-// the same value as a new one with that id; a stored skills.planning (tests,
-// tools) wins.
+// order: it comes from the person's id and name (ruling: the id alone made
+// every game's lead p8 the same), within the role's range, one decimal. The
+// name is drawn at creation, kept in saves and never changed. Planning is not
+// stored on new people, so a saved person (v1.5 and earlier) gets the value
+// they would have now; a stored skills.planning (tests, tools) wins.
 const PLANNING_RANGES = { agent: [0, 3], lead: [3, 8], qa: [1, 4] };
 
 // 32-bit FNV-1a with an fmix32 finish, so ids in sequence (p0.., h1..) spread.
@@ -39,7 +40,7 @@ export function planningOf(person) {
   if (Number.isFinite(stored)) return stored;
   const [lo, hi] = PLANNING_RANGES[person.role] ?? PLANNING_RANGES.agent;
   const steps = Math.round((hi - lo) * 10) + 1;
-  return (lo * 10 + (hashString(`planning:${person.id}`) % steps)) / 10;
+  return (lo * 10 + (hashString(`planning:${person.id}:${person.name ?? ''}`) % steps)) / 10;
 }
 
 // Stress per 30 minutes of work: a base for a working day with customers, more

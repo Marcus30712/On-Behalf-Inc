@@ -205,7 +205,10 @@ function picks(s, days) {
       for (const kind of Object.keys(WINDOWS)) {
         const cands = candidates(start, kind);
         const at = plan[p.id][kind];
-        out.push({ kind, index: cands.findIndex((c) => c.at === at), top: topQuarter(cands).has(at), share: topQuarter(cands).size / cands.length });
+        out.push({
+          kind, index: cands.findIndex((c) => c.at === at), bins: cands.length,
+          top: topQuarter(cands).has(at), share: topQuarter(cands).size / cands.length,
+        });
       }
     }
   }
@@ -232,9 +235,11 @@ test('with the lead away (q = 0) picks are uniform over each window', () => {
   assert.ok(Math.abs(inTop - expectedTop) < 0.05, `top ${inTop} vs chance ${expectedTop}`);
   // Chi-square over candidate positions per window (p = 0.001 bounds: df 7 → 24.3, df 6 → 22.5).
   for (const [kind, bound] of [['am', 24.3], ['lunch', 22.5], ['pm', 24.3]]) {
-    const idx = list.filter((x) => x.kind === kind).map((x) => x.index);
+    const inKind = list.filter((x) => x.kind === kind);
+    const idx = inKind.map((x) => x.index);
     assert.ok(idx.every((i) => i >= 0));
-    const n = Math.max(...idx) + 1;
+    const n = inKind[0].bins; // the window's candidate count, so an unpicked slot counts
+    assert.equal(n, kind === 'lunch' ? 7 : 8);
     const counts = Array(n).fill(0);
     for (const i of idx) counts[i]++;
     const e = idx.length / n;
@@ -276,5 +281,33 @@ test('pick quality rises with planning: fewer busiest-quarter picks at 0, 3, 5, 
   for (let i = 1; i < shares.length; i++) assert.ok(shares[i] < shares[i - 1], label);
   // Ruling (load ÷ window maximum): the lead range 3-5-8 matters evenly, each
   // step taking at least 0.05 off the share (raw load gave 0.033 and 0.040).
+  // Bounds measured on this seed with today's CURVE and clients: retune if those change.
   assert.ok(shares[1] - shares[2] >= 0.05 && shares[2] - shares[3] >= 0.05, `uneven: ${label}`);
+});
+
+test('a lead rostered on the late shift still makes the whole day\'s plan (ruling: works that day on any shift)', () => {
+  const s = newGame(15);
+  const lead = leadOf(s);
+  s.roster[lead.id] = { 0: 'late', 1: 'late', 2: 'late', 3: 'late', 4: 'late' };
+  const plan = planBreaks(s, 0);
+  assert.ok(Object.keys(plan).length > 0);
+  for (const b of Object.values(plan)) assert.equal(b.by, 'lead', 'early crew included');
+  const early = s.people.find((p) => s.roster[p.id][0] === 'early');
+  assert.ok(plan[early.id].am < H(12), 'the early crew\'s morning break is planned too');
+  // Away on the late shift: sick, absent, or rostered on a shift that does not run that day.
+  lead.health = { kind: 'sick', daysLeft: 1 };
+  for (const b of Object.values(planBreaks(s, 0))) assert.equal(b.by, 'auto');
+  lead.health = { kind: 'well', daysLeft: 0 };
+  s.absences.push({ personId: lead.id, day: 1 });
+  for (const b of Object.values(planBreaks(s, 1))) assert.equal(b.by, 'auto');
+  s.roster[lead.id][2] = 'weekend'; // the weekend shift does not run on Wednesday
+  for (const b of Object.values(planBreaks(s, 2))) assert.equal(b.by, 'auto');
+});
+
+test('workShare refuses a plan with a missing or bad break instead of returning NaN', () => {
+  const good = { am: H(10), lunch: H(12) + 30, pm: H(15) };
+  assert.equal(workShare(H(10), 'early', good), 0.5);
+  for (const bad of [{ am: H(10), lunch: H(12) + 30 }, { ...good, lunch: undefined }, { ...good, pm: NaN }, { ...good, am: '600' }]) {
+    assert.throws(() => workShare(H(10), 'early', bad), TypeError);
+  }
 });

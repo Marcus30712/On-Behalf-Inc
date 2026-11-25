@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRng } from '../sim/rng.js';
+import { newGame } from '../sim/state.js';
 import { TRAITS } from '../world/traits.js';
 import { NAMES } from '../world/names.js';
 import {
@@ -177,7 +178,7 @@ test('planning is in the role range, one decimal, and spread over it', () => {
     const values = [];
     for (let i = 0; i < 200; i++) {
       for (const id of [`p${i}`, `h${i}`]) {
-        const v = planningOf({ id, role, skills: { handling: 5, systems: 5, coaching: 0, evaluation: 0 } });
+        const v = planningOf({ id, name: `${id}-name`, role, skills: { handling: 5, systems: 5, coaching: 0, evaluation: 0 } });
         assert.ok(v >= lo && v <= hi, `${role} ${id} ${v}`);
         assert.equal(v, Math.round(v * 10) / 10);
         values.push(v);
@@ -188,18 +189,25 @@ test('planning is in the role range, one decimal, and spread over it', () => {
     assert.ok(new Set(values).size >= (hi - lo) * 10 * 0.8, `${role} distinct ${new Set(values).size}`);
   }
   // Same id, same value; a stored value wins.
-  assert.equal(planningOf({ id: 'p8', role: 'lead', skills: {} }), planningOf({ id: 'p8', role: 'lead', skills: {} }));
-  assert.equal(planningOf({ id: 'p8', role: 'lead', skills: { planning: 7.5 } }), 7.5);
+  // Same id and name, same value; a stored value wins.
+  const lead = { id: 'p8', name: 'Mira', role: 'lead', skills: {} };
+  assert.equal(planningOf(lead), planningOf({ ...lead }));
+  assert.equal(planningOf({ ...lead, skills: { planning: 7.5 } }), 7.5);
 });
 
-test('a saved person without planning gets the same value as a new one with that id', () => {
-  for (const role of Object.keys(PLANNING)) {
-    for (const id of ['p0', 'p8', 'p9', 'h3', 'h12']) {
-      const fresh = createPerson(createRng(3), { id, role, nation: 'veltora' });
-      const old = JSON.parse(JSON.stringify(fresh));
-      delete old.skills.planning;
-      assert.equal(planningOf(old), planningOf(fresh));
-      assert.equal(planningOf(fresh), planningOf({ id, role, skills: {} }));
+test('the lead\'s planning differs between games (ruling: from id and name)', () => {
+  const values = [1, 2, 3, 42, 999].map((seed) => planningOf(newGame(seed).people.find((p) => p.role === 'lead')));
+  assert.ok(new Set(values).size >= 3, `lead planning by seed: ${values.join(', ')}`);
+});
+
+test('a person loaded from a v1.5 save gets the planning a new game gives them', () => {
+  // A v1.5 save holds the person with id and name but no skills.planning;
+  // loading must give the value the live person has.
+  for (const seed of [1, 2, 3]) {
+    for (const p of newGame(seed).people) {
+      const saved = JSON.parse(JSON.stringify(p));
+      delete saved.skills.planning;
+      assert.equal(planningOf(saved), planningOf(p), `${seed} ${p.id}`);
     }
   }
 });

@@ -51,8 +51,11 @@ export function dayRng(state, day) {
   return createRng(h >>> 0);
 }
 
-// The shift a person works on `day`, or undefined when they do not work it
-// (off, sick, absent, center closed): on shift at their own shift start.
+// The shift a person works on `day`, or undefined when they do not work it:
+// well, not absent, and rostered on a shift that runs that weekday (onShift
+// at their own shift start). For the lead this is "present" (ruling): the plan
+// is made at day start whatever the lead's shift, so a late-shift lead also
+// plans the morning (as if made the day before).
 function shiftToday(state, person, day) {
   const { weekday } = dateOf(day);
   const shiftId = state.roster[person.id]?.[weekday];
@@ -98,6 +101,8 @@ export function planBreaks(state, day, rngForDay = dayRng(state, day)) {
   const workersAt = (clientId, minute) => working.filter(({ person, shift }) => minute >= shift.start
     && minute < shift.end && !onBreakAt(person.id, minute) && clientAt(person, minute) === clientId).length;
 
+  // People off phones (the lead and QA on coaching/qa) answer no client, so
+  // their load is 0 and their breaks fall by noise alone: intended.
   const loadOf = (person, start, length) => {
     let sum = 0;
     for (let m = start; m < start + length; m += GRID) {

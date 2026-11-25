@@ -3,6 +3,9 @@
 //
 // Assignment = { [personId]: { kind: 'phone', clientId } | { kind: 'coaching'|'qa'|'research'|'training' } }
 // A person with no assignment does no work: on shift or not, they rest.
+// v1.3: the kind stays 'phone' for every channel (save compatibility); the
+// client's `channel` (channelOf) decides how the work runs: phone as before,
+// chat with concurrent seats, email through the backlog (not the queue loop).
 import { intervalQueue } from './queue.js';
 import { dateOf, holidaysOn } from './calendar.js';
 import { ahtFor, applyWork, applyRest, traitMul, traitAdd } from './people.js';
@@ -14,6 +17,10 @@ const INTERVAL = 30;
 const CURVE_START = 540; // 09:00
 const SPIKE_MUL = 1.6;
 const NON_PHONE_OCCUPANCY = 0.2;
+// v1.3 chat: one person holds CHAT_CONCURRENCY chats at once, each handled at
+// CHAT_EFFICIENCY of a phone agent, so a seat counts for 1.5 phone agents.
+export const CHAT_CONCURRENCY = 2;
+export const CHAT_EFFICIENCY = 0.75;
 const PROGRESS_KINDS = ['coaching', 'qa', 'research', 'training'];
 
 // Share of a day's calls per interval, 09:00-21:00 (24 intervals, sum 1).
@@ -120,6 +127,11 @@ function staffAverage(list, valueOf, none) {
   return weight > 0 ? list.reduce((s, x) => s + x.share * valueOf(x.person), 0) / weight : none;
 }
 
+// 'phone' | 'chat' | 'email' (clients saved or defined without a channel are phone).
+export function channelOf(def) {
+  return def.channel ?? 'phone';
+}
+
 // The client's own days and hours (weekday clients Mon-Fri, weekend clients Sat-Sun).
 export function isOpen(def, day, minute) {
   const h = def.hours;
@@ -206,8 +218,11 @@ export function stepInterval(state, rng) {
     // Queues, in state.clients order (one rng draw each).
     const results = new Map();
     for (const { state: cs, def } of open) {
+      // Email is not a queue: its backlog is run elsewhere (Task 3).
+      if (channelOf(def) === 'email') continue;
       const list = staff.get(def.id);
-      const agents = list.reduce((s, x) => s + x.share * staffAvail(x.person, day), 0);
+      const seats = channelOf(def) === 'chat' ? CHAT_CONCURRENCY * CHAT_EFFICIENCY : 1;
+      const agents = list.reduce((s, x) => s + x.share * staffAvail(x.person, day), 0) * seats;
       const ahtMin = staffAverage(list, (p) => ahtFor(p, def), def.ahtMin);
       let calls = callsFor(def, day, minute, rng, state);
       if ((state.spikes ?? []).some((s) => s.clientId === def.id && s.day === day)) calls *= SPIKE_MUL;
@@ -250,8 +265,8 @@ export function stepInterval(state, rng) {
       let occupancy = NON_PHONE_OCCUPANCY;
       if (a?.kind === 'phone') {
         const clientId = answering.get(p.id);
-        if (openIds.has(clientId)) occupancy = results.get(clientId).occupancy;
-        else share = 0;
+        if (results.has(clientId)) occupancy = results.get(clientId).occupancy;
+        else if (!openIds.has(clientId)) share = 0;
       } else if (a && PROGRESS_KINDS.includes(a.kind) && share > 0) {
         let gain = share;
         if (a.kind === 'research') gain *= researchSkillMul(p);

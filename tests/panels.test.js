@@ -64,7 +64,7 @@ test('research panel warns when nobody is assigned to research', () => {
   const onAct = (a) => act(state, a);
   renderPanel(root, view(state), 'research', onAct);
   assert.ok(root.textContent.includes(UI_TEXT.research.nobody));
-  assert.equal(root.querySelectorAll('[data-research]').length, 4);
+  assert.equal(root.querySelectorAll('[data-research]').length, 6);
 
   const lead = state.people.find((p) => p.role === 'lead');
   assert.equal(act(state, { type: 'assign', personId: lead.id, kind: 'research' }).ok, true);

@@ -174,6 +174,7 @@ function runOffers(state, grade) {
   const level = officeLevel(state);
   const eligible = (d) => {
     if (d.start || (d.requiresOfficeLevel ?? 0) > level) return false;
+    if (d.requiresResearch && !state.research?.done?.includes(d.requiresResearch)) return false;
     const client = state.clients.find((c) => c.id === d.id);
     if (client?.active) return false;
     const record = state.offered.find((o) => o.id === d.id);

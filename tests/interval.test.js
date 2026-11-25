@@ -1,11 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRng } from '../sim/rng.js';
-import { createPerson } from '../sim/people.js';
+import { createPerson, ahtFor } from '../sim/people.js';
 import { defaultRoster } from '../sim/schedule.js';
 import { dateOf } from '../sim/calendar.js';
 import { CLIENTS } from '../world/clients.js';
-import { CURVE, CALL_GROWTH, callsFor, stepInterval } from '../sim/interval.js';
+import { CURVE, CALL_GROWTH, callsFor, stepInterval, CHAT_CONCURRENCY, CHAT_EFFICIENCY } from '../sim/interval.js';
+import { intervalQueue } from '../sim/queue.js';
 
 const H = (h, m = 0) => h * 60 + m;
 const A = CLIENTS[0]; // veltora
@@ -275,4 +276,36 @@ test('trait qaMul scales the QA points that person earns', () => {
   };
   assert.equal(qaPoints([]), 1);
   assert.ok(Math.abs(qaPoints(['meticulous']) - 1.2) < 1e-9);
+});
+
+test('chat uses concurrent seats', () => {
+  assert.equal(CHAT_CONCURRENCY, 2);
+  assert.equal(CHAT_EFFICIENCY, 0.75);
+  const chat = CLIENTS.find((c) => c.id === 'saebyeol-bank');
+  const s = makeState({ minute: H(10), phoneA: 0 });
+  s.clients = [{ id: chat.id, satisfaction: 70, active: true }];
+  for (const id of ['a0', 'a2']) s.assignment[id] = { kind: 'phone', clientId: chat.id };
+  const byId = (id) => s.people.find((p) => p.id === id);
+  const aht = (ahtFor(byId('a0'), chat) + ahtFor(byId('a2'), chat)) / 2; // before the step tires them
+  const r = stepInterval(s, flat).clients[chat.id];
+  assert.ok(r.agents > 0);
+  const calls = callsFor(chat, 0, H(10), flat, s);
+  // Effective seats: raw agents x 2 x 0.75 (raw is 2 here: two people at full share).
+  const expected = intervalQueue({
+    calls, ahtMin: aht, agents: 2 * 2 * 0.75,
+    targetSec: chat.slTarget.sec, patienceSec: chat.patienceSec,
+  });
+  assert.equal(r.agents, 2 * 2 * 0.75);
+  assert.equal(r.handled, expected.handled);
+  assert.equal(r.serviceLevel, expected.serviceLevel);
+});
+
+test('email clients are skipped by the queue loop', () => {
+  const books = CLIENTS.find((c) => c.id === 'solbang-books');
+  const s = makeState({ minute: H(10), phoneA: 0 });
+  s.clients = [{ id: books.id, satisfaction: 70, active: true }];
+  s.assignment.a0 = { kind: 'phone', clientId: books.id };
+  const report = stepInterval(s, flat);
+  assert.equal(report.clients[books.id], undefined);
+  assert.equal(s.clients[0].satisfaction, 70);
 });

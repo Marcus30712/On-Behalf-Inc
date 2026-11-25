@@ -6,6 +6,7 @@ import { NAMES } from '../world/names.js';
 import { TRAITS } from '../world/traits.js';
 import { CLIENTS } from '../world/clients.js';
 import { RESEARCH } from '../world/research.js';
+import { channelOf } from '../sim/interval.js';
 import { EVENTS } from '../world/events.js';
 import { ADVISOR } from '../world/advisor.js';
 import { holidaysOn } from '../sim/calendar.js';
@@ -51,8 +52,8 @@ test('at least 20 names per nation, no duplicates within a nation', () => {
   }
 });
 
-test('research has the four ids from the spec', () => {
-  assert.deepEqual(RESEARCH.map((r) => r.id).sort(), ['clinic', 'flexible-shifts', 'rest-room', 'stress-training']);
+test('research has the four ids from the spec and the two desks', () => {
+  assert.deepEqual(RESEARCH.map((r) => r.id).sort(), ['chat-desk', 'clinic', 'flexible-shifts', 'mail-desk', 'rest-room', 'stress-training']);
   for (const r of RESEARCH) {
     assert.ok(r.cost >= 60 && r.cost <= 120, r.id);
     assert.ok(r.buildHours >= 8 && r.buildHours <= 24, r.id);
@@ -62,7 +63,7 @@ test('research has the four ids from the spec', () => {
 
 test('two starting clients and three offers; weekday hours Mon-Fri 09:00-21:00 except the weekend client', () => {
   assert.equal(CLIENTS.filter((c) => c.start).length, 2);
-  assert.equal(CLIENTS.filter((c) => !c.start).length, 3);
+  assert.equal(CLIENTS.filter((c) => !c.start).length, 5);
   const weekend = CLIENTS.filter((c) => c.hours.days.includes(5));
   assert.deepEqual(weekend.map((c) => c.id), ['baram-delivery']);
   assert.deepEqual(weekend[0].hours, { days: [5, 6], open: 540, close: 1080 });
@@ -75,8 +76,8 @@ test('two starting clients and three offers; weekday hours Mon-Fri 09:00-21:00 e
   for (const c of CLIENTS) {
     assert.ok(NATIONS.some((n) => n.id === c.nation), c.id);
     assert.ok(c.callsPerDay >= 60 && c.callsPerDay <= 150, c.id);
-    assert.ok(c.ahtMin >= 4 && c.ahtMin <= 6, c.id);
-    assert.ok(c.patienceSec >= 60 && c.patienceSec <= 120, c.id);
+    assert.ok(c.ahtMin >= 4 && c.ahtMin <= (c.channel ? 9 : 6), c.id);
+    assert.ok(c.patienceSec === undefined || (c.patienceSec >= 60 && c.patienceSec <= (c.channel === 'chat' ? 240 : 120)), c.id);
   }
 });
 
@@ -112,4 +113,35 @@ test('no banned words in any copy string', () => {
 test('traits carry no nation', () => {
   for (const t of TRAITS) assert.ok(!('nation' in t), t.id);
   assert.ok(TRAITS.some((t) => t.effect.stressGainMul < 1));
+});
+
+test('every client channel is phone, chat or email', () => {
+  for (const c of CLIENTS) assert.ok(['phone', 'chat', 'email'].includes(channelOf(c)), c.id);
+  assert.equal(channelOf(CLIENTS[0]), 'phone');
+  assert.equal('channel' in CLIENTS[0], false, 'existing clients carry no channel key');
+  const bank = CLIENTS.find((c) => c.id === 'saebyeol-bank');
+  const books = CLIENTS.find((c) => c.id === 'solbang-books');
+  assert.deepEqual(
+    [bank.name, bank.industry, bank.nation, bank.channel, bank.requiresResearch, bank.monthlyFee, bank.start],
+    ['새벽별 은행', '인터넷 은행 상담', 'veltora', 'chat', 'chat-desk', 20000, false],
+  );
+  assert.deepEqual(bank.slTarget, { pct: 80, sec: 60 });
+  assert.deepEqual(
+    [books.name, books.industry, books.nation, books.channel, books.requiresResearch, books.monthlyFee, books.start],
+    ['솔방울 서점', '온라인 서점 주문·반품', 'kamuen', 'email', 'mail-desk', 12000, false],
+  );
+  assert.deepEqual(books.slTarget, { pct: 90, openMinutes: 720 });
+  for (const c of [bank, books]) assert.deepEqual(c.hours, { days: [0, 1, 2, 3, 4], open: 540, close: 1260 });
+});
+
+test('the two desk researches carry the approved copy and an empty effect', () => {
+  const chat = RESEARCH.find((r) => r.id === 'chat-desk');
+  const mail = RESEARCH.find((r) => r.id === 'mail-desk');
+  assert.equal(chat.name, '채팅 창구');
+  assert.equal(chat.blurb, '상담 화면에 채팅 창을 붙이고, 짧고 또렷하게 쓰는 법을 익혀요. 채팅 상담 계약을 받을 수 있어요.');
+  assert.equal(chat.doneText, '채팅 창구가 열렸어요. {name} 씨가 첫 인사 문장을 몇 번이나 고쳐 써 보네요.');
+  assert.equal(mail.name, '메일 창구');
+  assert.equal(mail.blurb, '메일함을 고객사별로 나누고 답장 서식을 만들어요. 이메일 상담 계약을 받을 수 있어요.');
+  assert.equal(mail.doneText, '메일 창구가 열렸어요. {name} 씨가 답장 서식을 벽에 붙여 두었어요.');
+  for (const r of [chat, mail]) { assert.deepEqual(r.effect, {}); assert.equal(r.cost, 90); assert.equal(r.buildHours, 20); }
 });

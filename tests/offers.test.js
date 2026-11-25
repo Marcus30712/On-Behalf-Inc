@@ -203,3 +203,26 @@ test('a never-offered eligible client is offered before a cooled-down re-offer',
     assert.equal(offers(s)[1].data.officeLevel, 1);
   });
 });
+
+test('research-gated client is not offered before its research', () => {
+  const run = (done) => {
+    const s = ready();
+    s.offered = [{ id: DALBIT, day: 0 }];
+    s.day = 40;
+    s.research = { done, current: null, points: 0, build: null };
+    dailyEconomy(s);
+    return offers(s).map((e) => e.clientId);
+  };
+  assert.deepEqual(run([]), [], 'no research: neither new client');
+  assert.deepEqual(run(['mail-desk']), ['solbang-books']);
+  assert.deepEqual(run(['chat-desk']), ['saebyeol-bank']);
+});
+
+test('a state without research at all offers neither gated client', () => {
+  const s = ready();
+  s.offered = [{ id: DALBIT, day: 0 }];
+  s.day = 40;
+  delete s.research;
+  dailyEconomy(s);
+  assert.equal(offers(s).length, 0);
+});

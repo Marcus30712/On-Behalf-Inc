@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  runPolicy, wornDown, idleYearVerdict, fullFeeShare, expansionVerdict, channelsVerdict, emailLost,
+  runPolicy, wornDown, idleYearVerdict, fullFeeShare, expansionVerdict, channelsVerdict, emailLost, emailStruggles,
 } from '../tools/autoplay.js';
 
 const SEEDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
@@ -133,6 +133,7 @@ function channelRuns() {
   channelGames ??= {
     staff: SEEDS.map((seed) => runPolicy({ seed, days: 720, policy: 'sensible', expand: 'keep', channels: 'staff' })),
     nostaff: SEEDS.map((seed) => runPolicy({ seed, days: 720, policy: 'sensible', expand: 'keep', channels: 'nostaff' })),
+    single: SEEDS.map((seed) => runPolicy({ seed, days: 720, policy: 'sensible', expand: 'keep', channels: 'single' })),
   };
   return channelGames;
 }
@@ -146,7 +147,9 @@ test('chat and email clients can be run well and are not a loss', () => {
   assert.equal(v.backlogOk, SEEDS.length,
     `email backlog within two days of mail: ${staff.map((r) => `${Math.round(r.email.maxBacklog)}/${Math.round(r.email.perDay)}`).join(' ')}`);
   assert.ok(v.fees.every((f) => f >= 0.65), `fees in full ${v.fees.map((f) => (f * 100).toFixed(1)).join('% / ')}%`);
-  assert.ok(v.notPoorer >= 8, `not poorer than keep-service on ${v.notPoorer}/10: ${cash(staff)} vs ${cash(keep)}`);
+  // Money (user decision 2026-11-25): the mean, not seed by seed (near-ties go either way).
+  assert.ok(v.meanCash >= v.keepMeanCash,
+    `mean cash ${Math.round(v.meanCash)} vs keep-service ${Math.round(v.keepMeanCash)} (not poorer on ${v.notPoorer}/10): ${cash(staff)} vs ${cash(keep)}`);
   for (const r of staff) assert.equal(r.gameOver, null, `game over on day ${r.survivedDays}`);
 });
 
@@ -155,4 +158,12 @@ test('an email client nobody answers is lost', () => {
   const { nostaff } = channelRuns();
   const lost = emailLost(nostaff);
   assert.ok(lost >= 8, `email client lost on ${lost}/10: ${nostaff.map((r) => `${r.email.days}d lost ${r.email.lost}`).join(' ')}`);
+});
+
+// The design's lesson: one email agent with nobody covering their days off is not enough.
+test('one email agent with no cover struggles', () => {
+  const { single } = channelRuns();
+  const n = emailStruggles(single);
+  const met = single.map((r) => (r.email.met === null ? '-' : r.email.met.toFixed(2)));
+  assert.ok(n >= 8, `struggled on ${n}/10: met ${met.join(' ')}, lost ${single.map((r) => r.email.lost).join(' ')}`);
 });

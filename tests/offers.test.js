@@ -205,9 +205,12 @@ test('a never-offered eligible client is offered before a cooled-down re-offer',
 });
 
 test('research-gated client is not offered before its research', () => {
+  // At office level 2 (every channel client's level, v1.3 Task 6); the v1.2
+  // clients needing level 1 count as offered lately.
   const run = (done) => {
     const s = ready();
-    s.offered = [{ id: DALBIT, day: 0 }];
+    s.office.level = 2;
+    s.offered = [DALBIT, 'bandi-repair', 'baram-delivery'].map((id) => ({ id, day: 0 }));
     s.day = 40;
     s.research = { done, current: null, points: 0, build: null };
     dailyEconomy(s);
@@ -225,4 +228,56 @@ test('a state without research at all offers neither gated client', () => {
   delete s.research;
   dailyEconomy(s);
   assert.equal(offers(s).length, 0);
+});
+
+// v1.3 Task 6 (design §4.1 revision): a channel client is offered only once its
+// research is done and the office has reached its requiresOfficeLevel, so the
+// offer comes when the seats can exist.
+const CHANNEL_IDS = ['saebyeol-bank', 'solbang-books'];
+const DESK = { 'saebyeol-bank': 'chat-desk', 'solbang-books': 'mail-desk' };
+const OTHERS = [DALBIT, 'bandi-repair', 'baram-delivery'];
+
+test('channel clients need an office level: chat 1, email at least 1', () => {
+  const level = (id) => CLIENTS.find((c) => c.id === id).requiresOfficeLevel;
+  assert.equal(level('saebyeol-bank'), 1);
+  assert.ok([1, 2].includes(level('solbang-books')), `email level ${level('solbang-books')}`);
+});
+
+test('with its research done, a channel client is not offered below its office level (never at 0), and is at it', () => {
+  for (const id of CHANNEL_IDS) {
+    // Never at level 0 (no seats for a new desk), whatever the level field says.
+    const need = Math.max(1, CLIENTS.find((c) => c.id === id).requiresOfficeLevel ?? 0);
+    const s = ready();
+    s.offered = OTHERS.map((o) => ({ id: o, day: 30 })); // every other client offered lately
+    s.day = 40;
+    s.research = { done: [DESK[id]], current: null, points: 0, build: null };
+    for (let level = 0; level < need; level++) {
+      s.office.level = level;
+      s.offerStreak = 19;
+      dailyEconomy(s);
+      assert.equal(offers(s).length, 0, `${id} offered at level ${level}`);
+    }
+    s.office.level = need;
+    s.offerStreak = 19;
+    dailyEconomy(s);
+    assert.deepEqual(offers(s).map((e) => e.clientId), [id], `${id} at level ${need}`);
+  }
+});
+
+test('at its level, a never-offered channel client still comes before a cooled-down re-offer', () => {
+  for (const id of CHANNEL_IDS) {
+    const s = ready();
+    s.office.level = CLIENTS.find((c) => c.id === id).requiresOfficeLevel;
+    s.offered = OTHERS.map((o) => ({ id: o, day: 0 })); // all cooled down by day 400
+    s.day = 400;
+    s.research = { done: [DESK[id]], current: null, points: 0, build: null };
+    dailyEconomy(s);
+    assert.equal(offers(s)[0].clientId, id);
+    assert.equal(offers(s)[0].data?.again, undefined);
+    s.offerStreak = 19;
+    s.day = 410;
+    dailyEconomy(s);
+    assert.equal(offers(s)[1].clientId, DALBIT, 'then the re-offer, in CLIENTS order');
+    assert.equal(offers(s)[1].data.again, true);
+  }
 });

@@ -141,10 +141,10 @@ test('the two desk researches carry the approved copy and an empty effect', () =
   const chat = RESEARCH.find((r) => r.id === 'chat-desk');
   const mail = RESEARCH.find((r) => r.id === 'mail-desk');
   assert.equal(chat.name, '채팅 창구');
-  assert.equal(chat.blurb, '상담 화면에 채팅 창을 붙이고, 짧고 또렷하게 쓰는 법을 익혀요. 채팅 상담 계약을 받을 수 있어요.');
+  assert.equal(chat.blurb, '상담 화면에 채팅 창을 붙이고, 짧고 또렷하게 쓰는 법을 익혀요. 사무실을 한 번 넓히면 채팅 상담 계약 제안이 와요.');
   assert.equal(chat.doneText, '채팅 창구가 열렸어요. {name} 씨가 첫 인사 문장을 몇 번이나 고쳐 써 보네요.');
   assert.equal(mail.name, '메일 창구');
-  assert.equal(mail.blurb, '메일함을 고객사별로 나누고 답장 서식을 만들어요. 이메일 상담 계약을 받을 수 있어요.');
+  assert.equal(mail.blurb, '메일함을 고객사별로 나누고 답장 서식을 만들어요. 사무실을 두 번 넓히면 이메일 상담 계약 제안이 와요.');
   assert.equal(mail.doneText, '메일 창구가 열렸어요. {name} 씨가 답장 서식을 벽에 붙여 두었어요.');
   for (const r of [chat, mail]) { assert.deepEqual(r.effect, {}); assert.equal(r.cost, 90); assert.equal(r.buildHours, 20); }
 });

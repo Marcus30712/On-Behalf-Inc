@@ -20,17 +20,19 @@ export const CLIENTS = [
     slTarget: { pct: 90, sec: 15 }, monthlyFee: 24000,
     callsPerDay: 80, ahtMin: 4, patienceSec: 60, hours: { ...WEEKDAY_HOURS },
   },
-  // v1.2: offered after expansion 1 (requiresOfficeLevel 1). callsPerDay, ahtMin and
-  // patienceSec are placeholders for Task 8 to retune. The weekend client's callsPerDay is
-  // set high because the 09:00-18:00 window sees only about 80% of the daily CURVE.
+  // v1.2: offered after expansion 1 (requiresOfficeLevel 1). callsPerDay set by the v1.2
+  // balance task (balance record, v1.2 section): they arrive once calls have grown
+  // (x1.14, up to x1.28 after expansion 1), so 70 grows to about 90; four agents
+  // mostly meet the weekday client and a crew of three the weekend one, whose
+  // 09:00-18:00 window sees about 80% of the daily CURVE.
   {
     id: 'bandi-repair', name: '반딧불 가전', industry: '가전 수리 접수', nation: 'kamuen', start: false,
     slTarget: { pct: 80, sec: 30 }, monthlyFee: 17000, requiresOfficeLevel: 1,
-    callsPerDay: 90, ahtMin: 5, patienceSec: 90, hours: { ...WEEKDAY_HOURS },
+    callsPerDay: 70, ahtMin: 5, patienceSec: 90, hours: { ...WEEKDAY_HOURS },
   },
   {
     id: 'baram-delivery', name: '바람개비 배달', industry: '음식 배달 주문', nation: 'veltora', start: false,
     slTarget: { pct: 80, sec: 20 }, monthlyFee: 9000, requiresOfficeLevel: 1,
-    callsPerDay: 100, ahtMin: 4, patienceSec: 60, hours: { days: [5, 6], open: 540, close: 1080 },
+    callsPerDay: 60, ahtMin: 4, patienceSec: 60, hours: { days: [5, 6], open: 540, close: 1080 },
   },
 ];

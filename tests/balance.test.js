@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  runPolicy, wornDown, idleYearVerdict, fullFeeShare,
+  runPolicy, wornDown, idleYearVerdict, fullFeeShare, expansionVerdict,
 } from '../tools/autoplay.js';
 
 const SEEDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
@@ -68,11 +68,44 @@ test('sensible play that takes client offers can still reach S within a year', (
   assert.ok(s >= 3, `S milestone on ${s}/10 seeds`);
 });
 
+// Two years of sensible play, without and with office expansion (v1.2),
+// played once and shared by the tests below.
+let twoYears;
+function twoYear() {
+  twoYears ??= {
+    plain: SEEDS.map((seed) => runPolicy({ seed, days: 720, policy: 'sensible' })),
+    expand: SEEDS.map((seed) => runPolicy({ seed, days: 720, policy: 'sensible', expand: true })),
+  };
+  return twoYears;
+}
+
 test('sensible play keeps its fees over two years (calls stop growing after two quarters)', () => {
-  const runs = SEEDS.map((seed) => runPolicy({ seed, days: 720, policy: 'sensible' }));
+  const runs = twoYear().plain;
   assert.equal(runs.filter((r) => r.gameOver).length, 0);
   for (const [from, to] of [[0, 360], [360, 720]]) {
     const share = fullFeeShare(runs, from, to);
     assert.ok(share >= 0.65, `full fee in ${(share * 100).toFixed(1)}% of client-months, days ${from}-${to}`);
   }
+});
+
+// v1.2: sensible play that expands the office when it can afford it, hires
+// into the new seats and takes the offers the office level can staff
+// (the weekend client too, with a weekend crew).
+test('sensible play finishes expansion 1 within two years and is not poorer for it', () => {
+  const { plain, expand } = twoYear();
+  const v = expansionVerdict(expand, plain);
+  const days = expand.map((r) => r.level1Day ?? '-').join(' ');
+  assert.ok(v.built >= 8, `expansion 1 finished on ${v.built}/10 seeds (days ${days})`);
+  const cash = (runs) => runs.map((r) => Math.round(r.cash)).join(' ');
+  assert.equal(v.notPoorer, v.built, `expanded ${cash(expand)} vs not ${cash(plain)}`);
+  for (const r of expand) assert.equal(r.gameOver, null, `game over on day ${r.survivedDays}`);
+  // The weekend crew keeps a five-day week: nobody is rostered six days (x1.5 fatigue).
+  assert.ok(expand.some((r) => r.weekendDays > 0), 'no seed opened on a weekend');
+  for (const r of expand) assert.equal(r.sixDay, 0, `person-days rostered six days or more: ${r.sixDay}`);
+});
+
+test('sensible play that expands and takes offers reaches S within a year as often as v1.1 (3/10)', () => {
+  const runs = twoYear().expand;
+  const s = runs.filter((r) => r.rankSDay !== null && r.rankSDay < 360).length;
+  assert.ok(s >= 3, `S milestone within 360 days on ${s}/10 seeds (days ${runs.map((r) => r.rankSDay ?? '-').join(' ')})`);
 });

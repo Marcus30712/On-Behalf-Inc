@@ -18,11 +18,21 @@
 //   (calls grow every quarter, v1.1); hires into free seats, picks the first
 //   candidate, tries to keep people who hand in notice and declines new
 //   clients (with acceptOffers, takes them).
+// - sensible with expand (v1.2): also builds expansion 1, then 2, when the
+//   cash covers the cost plus EXPAND_RESERVE; hires up to the seats of the
+//   built office; takes an offer when the office can staff it (a weekday
+//   client while there are four seats per weekday client, a weekend client
+//   from expansion 1 on) and declines the rest. A weekend client gets a crew
+//   of WEEKEND_CREW agents on the weekend shift, who take Tuesday and
+//   Wednesday off so they still work five days; on weekdays they answer
+//   for a weekday client. Moves by met-rate, headcount and QA look at the
+//   weekday clients only.
 //
 // The checks also play sensible over 720 days (fees in years 1 and 2) and
 // sensible taking client offers (the S milestone after losing a client).
 import { pathToFileURL } from 'node:url';
 import { createGame, advance, act, view } from '../sim/game.js';
+import { CLIENTS } from '../world/clients.js';
 
 const DAY = 1440;
 const OPEN = 540; // 09:00
@@ -41,6 +51,11 @@ const MOVE_DAYS = 5; // recorded days compared when moving an agent by met-rate
 const MOVE_GAP = 0.1; // met-rate gap that justifies a move
 const MOVE_COOLDOWN = 10; // days between moves by met-rate
 const QA_PHONE_BELOW = 0.85; // QA answers the phone while a client's recent met-rate is under this
+const EXPAND_RESERVE = 20000; // cash kept back when paying for an expansion (v1.2)
+const SEATS_PER_CLIENT = 4; // seats per weekday client before taking another one
+const WEEKEND_CREW = 3; // agents on the weekend shift for a weekend client (two cannot cover each other's breaks)
+const WEEKEND_DAYS = [5, 6];
+const CREW_DAYS_OFF = [1, 2]; // Tuesday, Wednesday: the crew still works five days
 
 const mean = (xs) => (xs.length === 0 ? 0 : xs.reduce((s, x) => s + x, 0) / xs.length);
 
@@ -49,13 +64,15 @@ const mean = (xs) => (xs.length === 0 ? 0 : xs.reduce((s, x) => s + x, 0) / xs.l
 // hours), read the day's queues (on Fridays, plan next week's rest days),
 // then play through the night.
 // `acceptOffers` (sensible only): take every new-client offer instead of
-// declining it.
-export function runPolicy({ seed, days, policy, acceptOffers = false }) {
+// declining it. `expand` (sensible only, v1.2): expand the office and take
+// the offers it can staff.
+export function runPolicy({ seed, days, policy, acceptOffers = false, expand = false }) {
   const state = createGame(seed);
   const sensible = policy === 'sensible';
-  const plan = sensible ? sensiblePlan(view(state), acceptOffers) : null;
+  const plan = sensible ? sensiblePlan(view(state), acceptOffers, expand) : null;
   const tally = {
     seen: 0, sick: 0, sickDays: 0, burnouts: 0, burnoutLog: [], helped: 0, clinicHelped: 0, helpedNames: [], offers: 0, builtOn: {},
+    levelDay: {}, rankSDay: null, sixDay: 0, weekendDays: 0,
     left: 0, slSum: 0, slCount: 0, days: [], monthCash: [], minSatisfaction: 100,
   };
   let known = new Set(view(state).people.map((p) => p.id));
@@ -75,6 +92,7 @@ export function runPolicy({ seed, days, policy, acceptOffers = false }) {
 
     v = view(state);
     recordDay(v, tally);
+    countSixDays(v, tally);
     if (sensible && v.date.weekday === PLAN_WEEKDAY) planRestDays(state, v, plan);
     advance(state, DAY - state.minute + OPEN);
 
@@ -105,6 +123,14 @@ export function runPolicy({ seed, days, policy, acceptOffers = false }) {
     researched: v.research.done,
     rankS: (v.milestones ?? []).includes('milestone-rank-s'),
     builtOn: tally.builtOn,
+    // v1.2: the day expansion 1 and 2 finished (null if not), the day of the S milestone.
+    level1Day: tally.levelDay[1] ?? null,
+    level2Day: tally.levelDay[2] ?? null,
+    rankSDay: tally.rankSDay,
+    sixDay: tally.sixDay,
+    weekendDays: tally.weekendDays,
+    clients: v.clients.filter((c) => c.active).map((c) => c.id.split('-')[0]),
+    agents: agentsOf(v).length,
     feeMonths: feeMonths(tally.days, v.day),
     days: tally.days,
   };
@@ -178,6 +204,17 @@ export function idleYearVerdict(idle, sensible) {
   };
 }
 
+// Office expansion is not a loss (v1.2): on how many seeds the expanding
+// sensible game finished expansion 1, and on how many of those it ended with
+// at least the cash of the same seed's sensible game without expansion.
+export function expansionVerdict(expand, plain) {
+  const built = expand.map((r, i) => [r, plain[i]]).filter(([r]) => r.level1Day !== null);
+  return {
+    built: built.length,
+    notPoorer: built.filter(([r, p]) => r.cash >= p.cash).length,
+  };
+}
+
 // New inbox events since the last look.
 function collect(v, tally) {
   for (const e of v.inbox) {
@@ -185,6 +222,8 @@ function collect(v, tally) {
     if (e.id === 'sick') { tally.sick += 1; tally.sickDays += e.data.days; }
     if (e.id === 'burnout') { tally.burnouts += 1; tally.burnoutLog.push(`${e.day}:${e.personId}`); }
     if (e.id === 'client-offer') tally.offers += 1;
+    if (e.id === 'expansion-done') tally.levelDay[e.data.level] = e.day;
+    if (e.id === 'milestone-rank-s') tally.rankSDay = e.day;
     if (e.id === 'build-done') tally.builtOn[e.data.researchId] = e.day;
     if (e.id === 'build-done' && e.data.names.length > 0) {
       tally.helped += 1;
@@ -211,11 +250,25 @@ function recordDay(v, tally) {
   if (Object.keys(clients).length > 0) tally.days.push({ day: v.day, weekday: v.date.weekday, clients });
 }
 
+// v1.2: person-days rostered six or more days a week (the x1.5 fatigue), and
+// weekend days the center opened.
+const SHIFT_DAYS = { early: [0, 1, 2, 3, 4], late: [0, 1, 2, 3, 4], weekend: [5, 6] };
+function countSixDays(v, tally) {
+  const open = (w) => w < 5 || v.flags.weekend;
+  if (v.date.weekday >= 5 && v.flags.weekend) tally.weekendDays += 1;
+  for (const p of v.people) {
+    const days = p.week.filter((shift, w) => SHIFT_DAYS[shift]?.includes(w) && open(w)).length;
+    if (days >= 6) tally.sixDay += 1;
+  }
+}
+
 // --- sensible policy -------------------------------------------------------
 
-function sensiblePlan(v, acceptOffers) {
+function sensiblePlan(v, acceptOffers, expand) {
   return {
     acceptOffers,
+    expand,
+    crew: [], // [{ personId, home }]: the weekend crew and their weekday shift (v1.2)
     leadId: v.people.find((p) => p.role === 'lead')?.id,
     restOff: [], // [{ personId, shift }]: next Wednesday off, and the usual shift
     lastMove: -Infinity, // day of the last move by met-rate
@@ -223,9 +276,17 @@ function sensiblePlan(v, acceptOffers) {
 }
 
 const agentsOf = (v) => v.people.filter((p) => p.role === 'agent');
+const defOf = (id) => CLIENTS.find((d) => d.id === id);
+// Weekend clients open on no weekday (Mon-Fri); the rest are weekday clients.
+const isWeekendClient = (id) => !defOf(id).hours.days.some((w) => w < 5);
+const weekdayClients = (v) => v.clients.filter((c) => c.active && !isWeekendClient(c.id)).map((c) => c.id);
 
 function decide(state, v, plan, tally) {
   answerInbox(state, v, plan);
+  if (plan.expand) {
+    expandOffice(state, view(state));
+    weekendCrew(state, view(state), plan);
+  }
   moveToNeediest(state, view(state), plan, tally);
   balanceClients(state, view(state));
   qaOnPhone(state, view(state), tally);
@@ -233,7 +294,67 @@ function decide(state, v, plan, tally) {
     const next = RESEARCH_ORDER.find((id) => !v.research.done.includes(id));
     if (next) act(state, { type: 'startResearch', researchId: next });
   }
-  if (agentsOf(v).length < 8 && !v.hiring) act(state, { type: 'startHiring' });
+  if (agentsOf(v).length < v.office.seats && !v.hiring) act(state, { type: 'startHiring' });
+}
+
+// v1.2: build the next office level when the cash covers it with a reserve left.
+function expandOffice(state, v) {
+  const next = v.office.next;
+  if (!next || v.office.build || v.cash < next.cost + EXPAND_RESERVE) return;
+  act(state, { type: 'startExpansion' });
+}
+
+// v1.2: an offer the office can staff: a weekday client while every weekday
+// client keeps SEATS_PER_CLIENT seats, a weekend client (one at a time) once
+// expansion 1 is built.
+function canStaff(v, clientId) {
+  if (isWeekendClient(clientId)) {
+    return v.office.level >= 1 && !v.clients.some((c) => c.active && isWeekendClient(c.id));
+  }
+  return (weekdayClients(v).length + 1) * SEATS_PER_CLIENT <= v.office.seats;
+}
+
+// v1.2: with a weekend client, WEEKEND_CREW agents (least stressed, taken
+// from the early and late shifts in turn) work Saturday and Sunday on the
+// weekend shift and take Tuesday and Wednesday off; on the weekend they
+// answer the weekend client.
+// On weekdays anyone answering a weekend client moves to the weekday client
+// with the fewest agents. Without a weekend client the crew goes back to Mon-Fri.
+function weekendCrew(state, v, plan) {
+  const weekend = v.clients.find((c) => c.active && isWeekendClient(c.id))?.id;
+  const ids = new Set(v.people.map((p) => p.id));
+  if (!weekend) {
+    for (const { personId, home } of plan.crew) {
+      if (!ids.has(personId)) continue;
+      for (const w of WEEKEND_DAYS) act(state, { type: 'setRoster', personId, weekday: w, shift: 'off' });
+      for (const w of CREW_DAYS_OFF) act(state, { type: 'setRoster', personId, weekday: w, shift: home });
+    }
+    plan.crew = [];
+    return;
+  }
+  plan.crew = plan.crew.filter((c) => ids.has(c.personId));
+  const inCrew = (id) => plan.crew.some((c) => c.personId === id);
+  while (plan.crew.length < WEEKEND_CREW) {
+    // Alternate the weekday shifts the crew comes from.
+    const want = plan.crew.length % 2 === 0 ? 'early' : 'late';
+    const pool = agentsOf(v).filter((p) => p.health.kind === 'well' && !inCrew(p.id) && SHIFT_IDS.includes(p.week[0]));
+    if (pool.length === 0) break;
+    const pick = [...pool].sort((a, b) => (a.week[0] === want ? 0 : 1) - (b.week[0] === want ? 0 : 1) || a.stress - b.stress)[0];
+    plan.crew.push({ personId: pick.id, home: pick.week[0] });
+    for (const w of WEEKEND_DAYS) act(state, { type: 'setRoster', personId: pick.id, weekday: w, shift: 'weekend' });
+    for (const w of CREW_DAYS_OFF) act(state, { type: 'setRoster', personId: pick.id, weekday: w, shift: 'off' });
+  }
+  if (WEEKEND_DAYS.includes(v.date.weekday)) {
+    for (const { personId } of plan.crew) act(state, { type: 'assign', personId, kind: 'phone', clientId: weekend });
+    return;
+  }
+  const weekdays = weekdayClients(v);
+  const count = (id) => agentsOf(v).filter((p) => p.task?.kind === 'phone' && p.task.clientId === id).length;
+  for (const p of agentsOf(v)) {
+    if (p.task?.kind !== 'phone' || !isWeekendClient(p.task.clientId) || weekdays.length === 0) continue;
+    const to = [...weekdays].sort((a, b) => count(a) - count(b))[0];
+    act(state, { type: 'assign', personId: p.id, kind: 'phone', clientId: to });
+  }
 }
 
 function answerInbox(state, v, plan) {
@@ -243,7 +364,9 @@ function answerInbox(state, v, plan) {
     if (e.id === 'holiday-leave') choice = 'grant';
     else if (e.id === 'resign-notice') choice = 'keep-trying';
     else if (e.id === 'candidate') choice = 'pick-1';
-    else if (e.id === 'client-offer') choice = plan.acceptOffers ? 'accept' : 'decline';
+    else if (e.id === 'client-offer') {
+      choice = plan.acceptOffers || (plan.expand && canStaff(v, e.clientId)) ? 'accept' : 'decline';
+    }
     else if (e.id === 'friday-off') choice = 'keep';
     if (choice) act(state, { type: 'resolve', index: e.index, choiceId: choice });
   }
@@ -253,13 +376,15 @@ function answerInbox(state, v, plan) {
 // stressed agent of each client and shift, and the lead or QA if stressed
 // (stress >= REST_STRESS at the end of the day), get next Wednesday off.
 function planRestDays(state, v, plan) {
+  const inCrew = (id) => plan.crew.some((c) => c.personId === id);
   for (const { personId, shift } of plan.restOff) {
-    act(state, { type: 'setRoster', personId, weekday: REST_WEEKDAY, shift });
+    // The weekend crew already has Wednesday off (v1.2).
+    if (!inCrew(personId)) act(state, { type: 'setRoster', personId, weekday: REST_WEEKDAY, shift });
   }
   plan.restOff = [];
   const byClient = new Map();
   for (const p of v.people) {
-    if (p.health.kind !== 'well' || p.stress < REST_STRESS) continue;
+    if (p.health.kind !== 'well' || p.stress < REST_STRESS || inCrew(p.id)) continue;
     if (!SHIFT_IDS.includes(p.rosterShift)) continue;
     // Agents: one per client and shift; the lead and QA each on their own.
     const key = p.role === 'agent' ? `${p.task?.clientId}/${p.rosterShift}` : p.role;
@@ -289,7 +414,7 @@ function staffOn(v, active, shift) {
 // At most one move per MOVE_COOLDOWN days, so agents do not ping-pong.
 function moveToNeediest(state, v, plan, tally) {
   if (v.day - plan.lastMove < MOVE_COOLDOWN) return;
-  const active = v.clients.filter((c) => c.active).map((c) => c.id);
+  const active = weekdayClients(v);
   if (active.length < 2) return;
   const recent = tally.days.slice(-MOVE_DAYS);
   const rate = (id) => mean(recent.map((d) => d.clients[id]?.met).filter((m) => m !== undefined));
@@ -311,7 +436,7 @@ function moveToNeediest(state, v, plan, tally) {
 // Headcount second: on each shift, if one client has two more agents at work
 // today than another, one moves over to the short-handed client.
 function balanceClients(state, v) {
-  const active = v.clients.filter((c) => c.active).map((c) => c.id);
+  const active = weekdayClients(v);
   if (active.length < 2) return;
   for (const shift of SHIFT_IDS) {
     const staff = staffOn(v, active, shift);
@@ -329,7 +454,7 @@ function balanceClients(state, v) {
 // otherwise QA goes back to QA work.
 function qaOnPhone(state, v, tally) {
   const qa = v.people.find((p) => p.role === 'qa');
-  const active = v.clients.filter((c) => c.active).map((c) => c.id);
+  const active = weekdayClients(v);
   if (!qa || active.length === 0) return;
   const recent = tally.days.slice(-MOVE_DAYS);
   const rate = (id) => mean(recent.map((d) => d.clients[id]?.met).filter((m) => m !== undefined));
@@ -362,7 +487,7 @@ function printRuns(label, runs) {
 // Average met-share per weekday, and on heavy days (offered >= 1.25 x that
 // client's median weekday volume) against ordinary days.
 function weekdayProfile(runs) {
-  const byWeekday = [[], [], [], [], []];
+  const byWeekday = Array.from({ length: 7 }, () => []);
   const heavy = [];
   const normal = [];
   for (const r of runs) {
@@ -379,7 +504,7 @@ function weekdayProfile(runs) {
       }
     }
   }
-  return { byWeekday: byWeekday.map(mean), heavy: mean(heavy), heavyDays: heavy.length, normal: mean(normal) };
+  return { byWeekday: byWeekday.slice(0, 5).map(mean), heavy: mean(heavy), heavyDays: heavy.length, normal: mean(normal) };
 }
 
 function main() {
@@ -394,10 +519,12 @@ function main() {
   const sensible = SEEDS.map((seed) => runPolicy({ seed, days: 360, policy: 'sensible' }));
   const offers = SEEDS.map((seed) => runPolicy({ seed, days: 360, policy: 'sensible', acceptOffers: true }));
   const twoYears = SEEDS.map((seed) => runPolicy({ seed, days: 720, policy: 'sensible' }));
+  const expanding = SEEDS.map((seed) => runPolicy({ seed, days: 720, policy: 'sensible', expand: true }));
   printRuns('idle, 360 days', idleYear);
   printRuns('sensible, 360 days', sensible);
   printRuns('sensible taking client offers, 360 days', offers);
   printRuns('sensible, 720 days', twoYears);
+  printRuns('sensible expanding the office (takes offers it can staff), 720 days', expanding);
 
   const target = 0.8;
   const worn = idle.filter((r) => wornDown(r, 180)).length;
@@ -417,6 +544,9 @@ function main() {
   const offersS = offers.filter((r) => r.rankS).length;
   const fee2 = [fullFeeShare(twoYears, 0, 360), fullFeeShare(twoYears, 360, 720)];
   const over2 = twoYears.filter((r) => r.gameOver).length;
+  const grown = expansionVerdict(expanding, twoYears);
+  const grownS = expanding.filter((r) => r.rankSDay !== null && r.rankSDay < 360).length;
+  const dayList = (runs, key) => runs.map((r) => r[key] ?? '-').join(' ');
 
   console.log('\nfirst month, default roster (idle): met-share by weekday Mon..Fri',
     start.byWeekday.map(pct).join(' '), `| heavy days ${pct(start.heavy)} (${start.heavyDays}) vs ordinary ${pct(start.normal)}`);
@@ -426,6 +556,13 @@ function main() {
   console.log('research that helped someone (seed 1):', sensible[0].helpedNames.join(' | ') || '-');
   console.log('sensible year: clinic shortened a sick leave on', sensible.filter((r) => r.clinicHelped > 0).length,
     'of 10 seeds; client offers per seed:', sensible.map((r) => r.offers).join(' '));
+  console.log('expanding: expansion 1 done on day', dayList(expanding, 'level1Day'), '| expansion 2', dayList(expanding, 'level2Day'),
+    '| S milestone', dayList(expanding, 'rankSDay'));
+  console.log('expanding: clients at the end', expanding.map((r) => r.clients.join('+') || '-').join(' '),
+    '| agents', expanding.map((r) => r.agents).join(' '));
+  console.log('expanding: fees in full year 1', pct(fullFeeShare(expanding, 0, 360)), 'year 2', pct(fullFeeShare(expanding, 360, 720)),
+    '| weekend days open', dayList(expanding, 'weekendDays'), '| person-days rostered 6+ days a week', dayList(expanding, 'sixDay'),
+    '| burnouts', expanding.reduce((s, r) => s + r.burnouts, 0), 'resigned', expanding.reduce((s, r) => s + r.resigned, 0));
   console.log('');
 
   const results = [
@@ -452,6 +589,10 @@ function main() {
       `sensible play that takes client offers still reaches the S milestone: ${offersS}/10 seeds (>= 3)`),
     check(over2 === 0 && fee2.every((f) => f >= 0.65),
       `sensible play over two years: fees in full year 1 ${pct(fee2[0])}, year 2 ${pct(fee2[1])} (each >= 65%), game over ${over2}/10`),
+    check(grown.built >= 8 && grown.notPoorer === grown.built,
+      `sensible play finishes expansion 1 within 720 days: ${grown.built}/10 seeds (>= 8), not poorer than without on ${grown.notPoorer}/${grown.built}`),
+    check(grownS >= 3,
+      `sensible play that expands and takes offers reaches S within 360 days: ${grownS}/10 seeds (>= 3, as v1.1)`),
   ];
   console.log(`\n${results.filter(Boolean).length}/${results.length} checks pass (${((Date.now() - t0) / 1000).toFixed(1)} s)`);
   if (!results.every(Boolean)) process.exitCode = 1;

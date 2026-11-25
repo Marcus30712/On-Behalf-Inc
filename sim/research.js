@@ -101,7 +101,13 @@ export function advanceBuild(state, minutes) {
   }
   if (eff.flexibleShifts) (state.flags ??= {}).flexibleShifts = true;
   const helped = applyNow(state, build.researchId);
-  pushEvent(state, {
-    id: 'build-done', data: { researchId: build.researchId, names: helped.map((h) => h.name), helped },
-  });
+  const data = { researchId: build.researchId, names: helped.map((h) => h.name), helped };
+  // A build with no effect (the chat and mail desks) helps nobody, yet its done text has {name}:
+  // it names the first agent in state.people (else the first person), a fixed choice.
+  const rd = defOf(build.researchId);
+  if (helped.length === 0 && Object.keys(rd.effect).length === 0 && rd.doneText?.includes('{name}')) {
+    const who = state.people.find((p) => p.role === 'agent') ?? state.people[0];
+    if (who) data.featured = { personId: who.id, name: who.name };
+  }
+  pushEvent(state, { id: 'build-done', data });
 }

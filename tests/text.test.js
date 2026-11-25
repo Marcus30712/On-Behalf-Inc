@@ -28,6 +28,7 @@ const REPRESENTATIVE = {
   'resign-notice': { data: { name: '하나', days: 3, leaveDay: 9 } },
   candidate: { data: { cand1: '가을', cand2: '나무' } },
   'client-offer': { data: { client: '달빛몰' }, clientId: 'dalbit-mall' },
+  'backlog-warning': { clientId: 'solbang-books', data: { n: 120 } },
   'expansion-start': { data: { level: 1, days: 10 } },
   'expansion-done': { data: { level: 2, seats: 16 } },
 };
@@ -310,4 +311,68 @@ test('rendered money lines read right: refusals, offers and the holiday line', (
   assert.ok(seed.text.startsWith('내일부터 씨앗날이에요. 하나 씨가'), seed.text);
   const year = eventText({ id: 'holiday-leave', day: 1, data: { name: '하나', holidayId: 'year-turn', nationId: 'veltora' } });
   assert.ok(year.text.startsWith('내일부터 해넘이 연휴예요. '), year.text);
+});
+
+// v1.3 channels: literal rendered strings (numbers and 예요/이에요 settle at render time).
+test('chat and email offers use their own variants, fee and target', () => {
+  const chat = offer('saebyeol-bank');
+  assert.equal(chat.text, '새벽별 은행에서 채팅 상담 계약을 제안했어요. 한 사람이 채팅 두 건을 함께 받아요. 목표는 60초 안에 80%, 월 계약금은 💰 20,000이에요.');
+  assert.equal(chat.choices[0].result, '새벽별 은행이 새 고객사가 돼요. 업무 배치에서 채팅을 맡을 사람을 정해 주세요.');
+  assert.equal(chat.advisor, '채팅은 동시에 받으니 사람이 적어 보여도 돼요. 다만 한 건이 길어지는 건 각오해야 해요.');
+  const mail = offer('solbang-books');
+  assert.equal(mail.text, '솔방울 서점에서 이메일 상담 계약을 제안했어요. 메일은 쌓아 두었다가 답해도 되지만 기한이 있어요. 목표는 영업시간 12시간 안에 90%, 월 계약금은 💰 12,000이에요.');
+  assert.equal(mail.choices[0].result, '솔방울 서점이 새 고객사가 돼요. 업무 배치에서 메일을 맡을 사람을 정해 주세요. 아무도 없으면 메일이 계속 쌓여요.');
+  assert.equal(mail.advisor, '메일은 조용히 쌓여요. 한가한 사람이 생기면 메일부터 맡겨 봐요.');
+  // Channel wins over the v1.2 office-level variant; a re-offer keeps its prefix.
+  assert.equal(offer('saebyeol-bank', { officeLevel: 1 }).text, chat.text);
+  assert.equal(offer('solbang-books', { officeLevel: 2, again: true }).text,
+    '예전에 인연이 닿지 않았던 솔방울 서점에서 다시 연락이 왔어요. ' + mail.text);
+  assert.equal(offer('saebyeol-bank', { again: true }).choices[1].result, '지금 인원으로 지금 고객사에 집중해요.');
+});
+
+test('backlog-warning renders its copy and advice', () => {
+  const out = eventText({ id: 'backlog-warning', day: 3, clientId: 'solbang-books', data: { n: 120 } });
+  assert.equal(out.title, '솔방울 서점 메일이 밀려요');
+  assert.equal(out.text, '답장을 기다리는 메일이 120통이에요. 기한을 넘긴 메일이 늘면 솔방울 서점의 만족도가 떨어져요.');
+  assert.equal(out.advisor, '솔방울 서점 메일이 120통 밀렸어요. 오늘 안에 다 못 보면 내일 아침이 더 무거워요.');
+});
+
+test('desk build-done events show the done text with the featured person', () => {
+  const data = (researchId) => ({ researchId, names: [], helped: [], featured: { personId: 'p1', name: '하나' } });
+  assert.equal(eventText({ id: 'build-done', day: 1, data: data('chat-desk') }).text,
+    '채팅 창구가 열렸어요. 하나 씨가 첫 인사 문장을 몇 번이나 고쳐 써 보네요.');
+  assert.equal(eventText({ id: 'build-done', day: 1, data: data('mail-desk') }).text,
+    '메일 창구가 열렸어요. 하나 씨가 답장 서식을 벽에 붙여 두었어요.');
+  // Nobody to name: the nobody text.
+  assert.equal(eventText({ id: 'build-done', day: 1, data: { researchId: 'chat-desk', helped: [] } }).text,
+    '채팅 창구가 완공됐어요. 다들 반가워해요.');
+});
+
+test('v1.3 UI_TEXT keys hold the approved copy', () => {
+  const t = UI_TEXT;
+  assert.equal(t.channel.phone, '📞 전화');
+  assert.equal(t.channel.chat, '💬 채팅');
+  assert.equal(t.channel.email, '✉️ 이메일');
+  assert.equal(t.channel.chatTip, '한 사람이 채팅 두 건을 함께 받아요. 고객은 전화보다 조금 더 기다려 줘요.');
+  assert.equal(t.channel.emailTip, '바로 받지 않아도 되지만, 미루면 밀린 메일이 쌓여요. 문을 닫은 시간에는 기한이 흐르지 않아요.');
+  const want = { backlog: '밀린 메일', backlogUnit: '{n}통', onTime: '기한 안 답장',
+    targetEmail: '영업시간 {hours}시간 안에 {pct}%', answered: '답장한 메일', received: '들어온 메일', chats: '들어온 채팅',
+    chatsHandled: '받은 채팅', noneEmail: '오늘은 아직 메일이 없어요.', noneChat: '오늘은 아직 채팅이 없어요.' };
+  for (const [k, v] of Object.entries(want)) assert.equal(t.metrics[k], v, k);
+});
+
+test('the email target reads hours from openMinutes', () => {
+  const out = offer('solbang-books');
+  assert.ok(out.text.includes('목표는 영업시간 12시간 안에 90%,'));
+});
+
+test('no leftover braces in any new v1.3 event or variant', () => {
+  for (const [clientId, data] of [['saebyeol-bank', {}], ['solbang-books', {}], ['solbang-books', { again: true }]]) {
+    const out = offer(clientId, data);
+    for (const s of [out.title, out.text, out.advisor, ...out.choices.flatMap((c) => [c.label, c.result])]) {
+      assert.ok(!/[{}]/.test(s), s);
+    }
+  }
+  const w = eventText({ id: 'backlog-warning', day: 1, clientId: 'solbang-books', data: { n: 120 } });
+  for (const s of [w.title, w.text, w.advisor]) assert.ok(!/[{}]/.test(s), s);
 });

@@ -8,6 +8,8 @@
 import { dateOf, holidaysOn } from './calendar.js';
 import { moraleOf, overnight, wearDay, WEAR } from './people.js';
 import { pushEvent, expireEvents } from './events.js';
+import { backlogWarnings } from './backlog.js';
+import { channelOf } from './interval.js';
 import { SHIFTS, isCenterOpen, shiftRunsOn } from './schedule.js';
 import { CLIENTS } from '../world/clients.js';
 import { NATIONS } from '../world/nations.js';
@@ -222,11 +224,14 @@ function grow(state) {
   progress.training = 0;
 }
 
-// A spike lands on the client's own next open day.
+// A spike lands on the client's own next open day. v1.3: only phone clients
+// spike (the event's copy is about calls); chat and email clients still take
+// their roll, so the rng draws stay as before, but never spike.
 function planSpikes(state, rng) {
   for (const c of state.clients) {
     if (!c.active || !rng.chance(SPIKE_CHANCE)) continue;
     const def = CLIENTS.find((d) => d.id === c.id);
+    if (def && channelOf(def) !== 'phone') continue;
     const day = def ? nextClientDay(def, state.day) : nextWorkday(state, state.day);
     state.spikes.push({ clientId: c.id, day });
     pushEvent(state, { id: 'call-spike', clientId: c.id, data: { day } });
@@ -259,6 +264,7 @@ export function endOfDay(state, rng) {
     }
     grow(state);
     planSpikes(state, rng);
+    backlogWarnings(state);
     (state.history ??= []).push({ day: state.day, clients: structuredClone(state.today?.clients ?? {}) });
   }
   state.today = { clients: {} };

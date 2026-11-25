@@ -62,8 +62,14 @@ export const EVENTS = {
     textWeekend: '{client}에서 주말 계약을 제안했어요. 토·일 09:00~18:00에 전화를 받아요. 목표는 {sl}, 월 계약금은 {fee}예요.',
     acceptMore: '{client}가 새 고객사가 돼요. 업무 배치에서 응대 인원을 정해 주세요.',
     acceptWeekend: '{client}가 새 고객사가 돼요. 근무표에 토·일 칸이 생겼어요. 주말 조를 짜 주세요.',
+    // v1.3 channel variants: chosen before the weekend/more variants.
+    textChat: '{client}에서 채팅 상담 계약을 제안했어요. 한 사람이 채팅 두 건을 함께 받아요. 목표는 {sl}, 월 계약금은 {fee}예요.',
+    textEmail: '{client}에서 이메일 상담 계약을 제안했어요. 메일은 쌓아 두었다가 답해도 되지만 기한이 있어요. 목표는 {sl}, 월 계약금은 {fee}예요.',
+    acceptChat: '{client}가 새 고객사가 돼요. 업무 배치에서 채팅을 맡을 사람을 정해 주세요.',
+    acceptEmail: '{client}가 새 고객사가 돼요. 업무 배치에서 메일을 맡을 사람을 정해 주세요. 아무도 없으면 메일이 계속 쌓여요.',
     again: '예전에 인연이 닿지 않았던 {client}에서 다시 연락이 왔어요.',
   },
+  'backlog-warning': { title: '{client} 메일이 밀려요', text: '답장을 기다리는 메일이 {n}통이에요. 기한을 넘긴 메일이 늘면 {client}의 만족도가 떨어져요.' },
   'expansion-start': { title: '{stage} 공사 시작', text: '{stage} 공사를 시작했어요. {days}근무일 뒤에 완공돼요. 그동안 조금 시끄러울 거예요.' },
   'expansion-done': { title: '{stage} 완공', text: '{stage}이 문을 열었어요. 이제 상담사 좌석이 {seats}개예요. 채용 탭에서 새 사람을 뽑을 수 있어요.' },
 };

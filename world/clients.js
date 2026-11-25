@@ -35,4 +35,26 @@ export const CLIENTS = [
     slTarget: { pct: 80, sec: 20 }, monthlyFee: 9000, requiresOfficeLevel: 1,
     callsPerDay: 60, ahtMin: 4, patienceSec: 60, hours: { days: [5, 6], open: 540, close: 1080 },
   },
+  // v1.3: channel clients, offered only after their research (requiresResearch) and once
+  // the office has the seats (requiresOfficeLevel; design §4.1, revised by the balance
+  // task: an offer that came earlier was declined and then queued behind re-offers). Chat:
+  // slTarget sec like phone; email: slTarget.openMinutes is the reply deadline counted in
+  // the client's open minutes. Volumes set by the v1.3 balance task (balance record, v1.3
+  // section): four chat agents (two a shift, 1.5 seats each) mostly meet 80 chats a day at
+  // 9 minutes, where one a shift cannot; the email client needs about two agents (84 mails
+  // at 6 minutes), so its fee per agent (6,000) is in line with the other clients. 84, not
+  // the first 100 (final review I5): two agents assigned once, with nobody standing in on
+  // their days off, keep the client on 10/10 seeds 1-10 (100: 2/10; 85: 7/10).
+  {
+    id: 'saebyeol-bank', name: '새벽별 은행', industry: '인터넷 은행 상담', nation: 'veltora', start: false,
+    channel: 'chat', requiresResearch: 'chat-desk', requiresOfficeLevel: 1,
+    slTarget: { pct: 80, sec: 60 }, monthlyFee: 20000,
+    callsPerDay: 80, ahtMin: 9, patienceSec: 240, hours: { ...WEEKDAY_HOURS },
+  },
+  {
+    id: 'solbang-books', name: '솔방울 서점', industry: '온라인 서점 주문·반품', nation: 'kamuen', start: false,
+    channel: 'email', requiresResearch: 'mail-desk', requiresOfficeLevel: 2,
+    slTarget: { pct: 90, openMinutes: 720 }, monthlyFee: 12000,
+    callsPerDay: 84, ahtMin: 6, hours: { ...WEEKDAY_HOURS },
+  },
 ];

@@ -8,7 +8,8 @@ through Playwright at 1280x720 and 1024x640: new game, 3x speed to game day 5,
 no console or page errors, no raw template text, no sideways scroll, a click
 at 1x, a choice answered, continue after reload, a game-over save, a long
 inbox, every open panel fully on screen, an office expansion started from the
-hiring tab and a weekend client's roster, metrics and Saturday hours. Screenshots go to tools/out/. Prints only failures; the last line is
+hiring tab and a weekend client's roster, metrics and Saturday hours, and both channel clients accepted and
+staffed (v1.3). Screenshots go to tools/out/. Prints only failures; the last line is
 ALL CHECKS PASSED when there are none.
 """
 import functools
@@ -388,6 +389,90 @@ def check_expansion_weekend(browser):
     page.context.close()
 
 
+def check_channels(browser):
+    """v1.3: both desk researches done and both channel offers waiting; the
+    player accepts them, puts an agent on each, and the metrics, clients tab
+    and office show the chat and email clients."""
+    tag = 'channels'
+    size = VIEWPORTS[0]
+    text = node_save("game.research.done.push('chat-desk', 'mail-desk'); game.cash = 100000;"
+                     "for (const id of ['saebyeol-bank', 'solbang-books']) pushEvent(game, { id: 'client-offer', clientId: id, deadlineDay: game.day + 7 });"
+                     "advance(game, Math.max(0, 600 - game.minute));"
+                     "if (game.gameOver) throw new Error('game ended');")
+    page = open_page(browser, size, text)
+    page.click('.start-continue')
+    page.wait_for_selector('.overlay', state='hidden')
+    page.keyboard.press(' ')
+    page.wait_for_timeout(200)
+    for n in range(2):  # the two offers (their titles do not name the client)
+        item = page.locator('.inbox-item.needs-answer[data-id="client-offer"]').first
+        if item.count() == 0:
+            fail(f'{tag}: only {n} channel offer(s) to answer')
+            break
+        index = item.get_attribute('data-index')
+        if item.locator('.inbox-head').get_attribute('aria-expanded') != 'true':
+            item.locator('.inbox-head').click()
+        sel = f'.inbox-item[data-index="{index}"]'
+        page.locator(f'{sel} .choice-btn', has_text='계약한다').click()
+        try:
+            page.wait_for_selector(f'{sel} .choice-result', timeout=3000)
+        except Exception:
+            fail(f'{tag}: accepting offer #{index} showed no result text')
+    for cid, mark in [('saebyeol-bank', '💬 채팅'), ('solbang-books', '✉️ 이메일')]:
+        chip = page.locator(f'.metrics [data-client="{cid}"]')
+        if chip.count() == 0 or mark not in chip.inner_text():
+            fail(f'{tag}: no metrics chip with {mark} for {cid}')
+
+    # One agent at work now (전화 중 in the people tab) on each new client,
+    # through the tasks tab's client choice.
+    page.click('[data-tab="people"]')
+    page.wait_for_selector('.panel .person-list')
+    working = page.eval_on_selector_all('.person-list .person',
+                                        "bs => bs.filter((b) => b.innerText.includes('전화 중')).map((b) => b.dataset.person)")
+    page.click('[data-tab="tasks"]')
+    page.wait_for_selector('.panel .tasks')
+    if len(working) < 2:
+        fail(f'{tag}: fewer than two people on the phone to move: {working}')
+    else:
+        for pid, cid in zip(working, ['saebyeol-bank', 'solbang-books']):
+            page.select_option(f'select[data-field="client"][data-person="{pid}"]', cid)
+            page.wait_for_timeout(100)
+        page.click('[data-tab="people"]')
+        page.wait_for_timeout(100)
+        for pid, mark in zip(working, ['💬 채팅', '✉️ 이메일']):
+            if mark not in page.inner_text(f'.person-list [data-person="{pid}"]'):
+                fail(f'{tag}: {pid} moved to a {mark} client does not show {mark}')
+        page.click('[data-tab="tasks"]')
+        page.wait_for_selector('.panel .tasks')
+    check_panel_visible(page, size, f'{tag} tasks')
+    check_text(page, f'{tag} tasks')
+    page.click('[data-tab="clients"]')
+    page.wait_for_timeout(100)
+    target = page.locator('.clients tr[data-client="solbang-books"]').inner_text()
+    if '영업시간 12시간 안에 90%' not in target or '밀린 메일' not in target:
+        fail(f'{tag}: the email row lacks its target or backlog: {target!r}')
+    check_panel_visible(page, size, f'{tag} clients')
+    check_text(page, f'{tag} clients')
+    page.click('.panel-root .panel-close')
+
+    # Let the hour run so mail and chats come in and the agents sit down.
+    run_until(page, tag, lambda p: p.inner_text('.topbar .time') >= '11:00')
+    page.keyboard.press('1')
+    page.wait_for_timeout(2500)
+    page.keyboard.press(' ')
+    mail = page.locator('.metrics [data-client="solbang-books"]').inner_text()
+    if '밀린 메일' not in mail or '기한 안 답장' not in mail:
+        fail(f'{tag}: the email chip lacks backlog or on-time share: {mail!r}')
+    box = page.locator('.metrics').bounding_box()
+    if not box or box['y'] + box['height'] > size[1]:
+        fail(f'{tag}: metrics pushed below the viewport: {box}')
+    page.screenshot(path=str(OUT / 'channels.png'))
+    check_text(page, tag)
+    check_no_sideways(page, tag)
+    check_errors(page, tag)
+    page.context.close()
+
+
 def main():
     global base_url
     OUT.mkdir(parents=True, exist_ok=True)
@@ -402,6 +487,7 @@ def main():
                 check_game_over(browser)
                 check_long_inbox(browser)
                 check_expansion_weekend(browser)
+                check_channels(browser)
             finally:
                 browser.close()
     except Exception as e:  # a broken step is a failure, not a crash

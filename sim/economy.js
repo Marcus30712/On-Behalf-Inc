@@ -133,6 +133,8 @@ function checkBigClient(state) {
 function loseClient(state, client) {
   client.active = false;
   client.lostDay = state.day;
+  // v1.3: a lost email client's mail goes with it (a re-taken client starts fresh).
+  if (state.backlog) delete state.backlog[client.id];
   const to = neediestClient(state);
   for (const [personId, a] of Object.entries(state.assignment)) {
     if (a.kind !== 'phone' || a.clientId !== client.id) continue;
@@ -174,6 +176,7 @@ function runOffers(state, grade) {
   const level = officeLevel(state);
   const eligible = (d) => {
     if (d.start || (d.requiresOfficeLevel ?? 0) > level) return false;
+    if (d.requiresResearch && !state.research?.done?.includes(d.requiresResearch)) return false;
     const client = state.clients.find((c) => c.id === d.id);
     if (client?.active) return false;
     const record = state.offered.find((o) => o.id === d.id);

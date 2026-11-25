@@ -429,6 +429,26 @@ test('call spikes are planned for the next workday per active client', () => {
   ]);
 });
 
+test('call spikes never land on chat or email clients; the rolls stay the same', () => {
+  const state = makeState({ day: 0 });
+  state.clients.push({ id: 'saebyeol-bank', satisfaction: 70, active: true });
+  state.clients.push({ id: 'solbang-books', satisfaction: 70, active: true });
+  let spikeRolls = 0;
+  let workdays = 0;
+  for (let day = 0; day < 200; day++) {
+    state.day = day;
+    state.minute = 1260;
+    if (isWorkday(day)) workdays += 1;
+    // Every spike roll comes up: only phone clients may still be spiked.
+    endOfDay(state, { ...never, chance: (p) => (p === 0.05 ? (spikeRolls += 1, true) : false) });
+    state.people.forEach((p) => { p.health = { kind: 'well', daysLeft: 0 }; });
+  }
+  const spiked = new Set(ids(state, 'call-spike').map((e) => e.clientId));
+  assert.deepEqual([...spiked].sort(), [GUREUM, MULBIT]);
+  // One roll per active client per workday, channel clients included (same draws).
+  assert.equal(spikeRolls, 4 * workdays);
+});
+
 test('workday report goes to history and today is cleared; weekends only count down', () => {
   const state = makeState({ day: 0 });
   state.today = { clients: { [GUREUM]: { offered: 300, handled: 290 } } };

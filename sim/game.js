@@ -4,8 +4,9 @@
 import { newGame, serialize, deserialize } from './state.js';
 import { restoreRng } from './rng.js';
 import { dateOf, upcomingHolidays, holidaysOn, DAYS_PER_MONTH } from './calendar.js';
-import { stepInterval, breakGroups, answeringClient } from './interval.js';
+import { stepInterval, breakGroups, answeringClient, channelOf } from './interval.js';
 import { endOfDay } from './day.js';
+import { backlogCount } from './backlog.js';
 import { advanceResearch, advanceBuild, startResearch } from './research.js';
 import { dailyEconomy, monthEnd, reputation } from './economy.js';
 import { advanceHiring, startHiring } from './hiring.js';
@@ -158,18 +159,31 @@ function clientView(state, c) {
   const intervals = t?.intervals ?? 0;
   const offered = t?.offered ?? 0;
   const handled = t?.handled ?? 0;
+  const channel = channelOf(def);
+  // Email (v1.3): mails waiting now, and today's share answered on time
+  // (on time over mails counted, each mail once: answered, or gone overdue);
+  // null before the first.
+  const email = channel === 'email' ? {
+    backlog: Math.round(backlogCount(state.backlog?.[c.id])),
+    onTime: offered > 0 ? (t.inTarget ?? 0) / offered : null,
+  } : {};
+  // Email: mail that came in today (today.offered counts answered or overdue mail).
+  const arrived = channel === 'email' ? { arrived: t?.arrived ?? 0 } : {};
   return {
     id: c.id,
     name: def.name,
     active: c.active,
     satisfaction: c.satisfaction,
     slTarget: def.slTarget,
+    channel,
+    ...email,
     // Workdays left before a warned client leaves; null without a warning.
     churnWorkdaysLeft: state.churn?.find((e) => e.clientId === c.id)?.workdaysLeft ?? null,
     today: {
       offered,
       handled,
       abandoned: t?.abandoned ?? 0,
+      ...arrived,
       // Service level so far today: calls answered within the target over
       // calls offered. Null before the first call.
       serviceLevel: offered > 0 ? (t.inTarget ?? 0) / offered : null,

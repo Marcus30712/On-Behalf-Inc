@@ -3,7 +3,12 @@
 //
 // Assignment = { [personId]: { kind: 'phone', clientId } | { kind: 'coaching'|'qa'|'research'|'training' } }
 // A person with no assignment does no work: on shift or not, they rest.
+// v1.3: the kind stays 'phone' for every channel (save compatibility); the
+// client's `channel` (channelOf) decides how the work runs: phone as before,
+// chat with concurrent seats, email through the backlog (sim/backlog.js) in
+// the same staff/satisfaction/occupancy path as a queue.
 import { intervalQueue } from './queue.js';
+import { stepBacklog, newBacklog } from './backlog.js';
 import { dateOf, holidaysOn } from './calendar.js';
 import { ahtFor, applyWork, applyRest, traitMul, traitAdd } from './people.js';
 import { onShift, workShare, rosteredDays } from './schedule.js';
@@ -14,6 +19,10 @@ const INTERVAL = 30;
 const CURVE_START = 540; // 09:00
 const SPIKE_MUL = 1.6;
 const NON_PHONE_OCCUPANCY = 0.2;
+// v1.3 chat: one person holds CHAT_CONCURRENCY chats at once, each handled at
+// CHAT_EFFICIENCY of a phone agent, so a seat counts for 1.5 phone agents.
+export const CHAT_CONCURRENCY = 2;
+export const CHAT_EFFICIENCY = 0.75;
 const PROGRESS_KINDS = ['coaching', 'qa', 'research', 'training'];
 
 // Share of a day's calls per interval, 09:00-21:00 (24 intervals, sum 1).
@@ -120,6 +129,11 @@ function staffAverage(list, valueOf, none) {
   return weight > 0 ? list.reduce((s, x) => s + x.share * valueOf(x.person), 0) / weight : none;
 }
 
+// 'phone' | 'chat' | 'email' (clients saved or defined without a channel are phone).
+export function channelOf(def) {
+  return def.channel ?? 'phone';
+}
+
 // The client's own days and hours (weekday clients Mon-Fri, weekend clients Sat-Sun).
 export function isOpen(def, day, minute) {
   const h = def.hours;
@@ -203,17 +217,28 @@ export function stepInterval(state, rng) {
       if (share > 0) staff.get(clientId).push({ person: p, share });
     }
 
-    // Queues, in state.clients order (one rng draw each).
+    // Queues (phone, chat) and backlogs (email), in state.clients order (one rng draw each).
     const results = new Map();
     for (const { state: cs, def } of open) {
+      const channel = channelOf(def);
       const list = staff.get(def.id);
-      const agents = list.reduce((s, x) => s + x.share * staffAvail(x.person, day), 0);
+      const seats = channel === 'chat' ? CHAT_CONCURRENCY * CHAT_EFFICIENCY : 1;
+      const agents = list.reduce((s, x) => s + x.share * staffAvail(x.person, day), 0) * seats;
       const ahtMin = staffAverage(list, (p) => ahtFor(p, def), def.ahtMin);
       let calls = callsFor(def, day, minute, rng, state);
       if ((state.spikes ?? []).some((s) => s.clientId === def.id && s.day === day)) calls *= SPIKE_MUL;
-      const q = intervalQueue({
-        calls, ahtMin, agents, targetSec: def.slTarget.sec, patienceSec: def.patienceSec,
-      });
+      let q;
+      if (channel === 'email') {
+        state.backlog ??= {};
+        const entry = (state.backlog[def.id] ??= newBacklog());
+        q = stepBacklog(entry, {
+          arrivals: calls, agents, ahtMin, targetMin: def.slTarget.openMinutes,
+        });
+      } else {
+        q = intervalQueue({
+          calls, ahtMin, agents, targetSec: def.slTarget.sec, patienceSec: def.patienceSec,
+        });
+      }
       results.set(def.id, q);
 
       const target = def.slTarget.pct / 100;
@@ -225,6 +250,9 @@ export function stepInterval(state, rng) {
       cs.satisfaction = clamp(cs.satisfaction + satisfactionDelta(q, target, traits), 0, 100);
 
       const t = todayEntry(state, def.id);
+      // Email only (keeps phone-only today entries as before): mail that came
+      // in today; `offered` counts mail answered or gone overdue instead.
+      if (channel === 'email') t.arrived = (t.arrived ?? 0) + calls;
       t.offered += q.offered;
       t.handled += q.handled;
       t.abandoned += q.abandoned;
@@ -239,6 +267,7 @@ export function stepInterval(state, rng) {
         offered: q.offered, handled: q.handled, abandoned: q.abandoned,
         serviceLevel: q.serviceLevel, asaSec: q.asaSec, agents,
       };
+      if (channel === 'email') report.clients[def.id].overdue = q.overdue;
     }
 
     // People: work, or rest for the time not worked.

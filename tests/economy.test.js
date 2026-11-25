@@ -194,6 +194,29 @@ test('a churned client is marked with the day it was lost, and the mark goes aft
   assert.equal(s.clients[0].lostDay, undefined);
 });
 
+test('a lost email client leaves its backlog behind: taken back, it starts with no mail waiting', () => {
+  const BOOKS = 'solbang-books';
+  const s = makeState({ clients: [GUREUM, BOOKS] });
+  s.history = monthHistory({ [GUREUM]: 22 });
+  s.clients[1].satisfaction = 0;
+  s.backlog = { [BOOKS]: { openMin: 30000, items: [{ at: 1000, n: 4000 }], carry: 0.5, warnedAt: 29000 } };
+  s.churn = [{ clientId: BOOKS, workdaysLeft: 1 }];
+  dailyEconomy(s);
+  assert.equal(s.clients[1].active, false);
+  assert.equal(s.backlog[BOOKS], undefined, 'the lost client\'s mail goes with it');
+  // Re-offered and accepted: a fresh desk, so new mail is answered on time.
+  acceptClient(s, BOOKS);
+  s.assignment.a0 = { kind: 'phone', clientId: BOOKS };
+  s.assignment.a1 = { kind: 'phone', clientId: BOOKS };
+  s.day = 7; // Monday
+  s.minute = 540;
+  s.today = { clients: {} };
+  const r = stepInterval(s, { next: () => 0.5 }).clients[BOOKS];
+  assert.ok(r.handled > 0);
+  assert.equal(r.serviceLevel, 1);
+  assert.equal(s.backlog[BOOKS].openMin, 30);
+});
+
 test('20 workdays at A or better bring one client offer; accepting adds the client', () => {
   const s = makeState();
   s.history = monthHistory({ [GUREUM]: 22, [MULBIT]: 22 });

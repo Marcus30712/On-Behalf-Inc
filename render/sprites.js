@@ -122,9 +122,6 @@ export function personLook(person) {
   });
 }
 
-// Until the drawer switches to personLook.
-export const personPalette = (person) => personLook(person).palette;
-
 // Same per-person value for purely visual offsets (walk phase).
 export const personPhase = (id) => hashId(id) % 1000;
 
@@ -874,9 +871,8 @@ const SPARKLE = [
 ];
 
 export const SPRITES = Object.freeze({
-  // people (16x24): the default look, then the same poses flat for the drawer
+  // people (16x24): the default look; every look is in PERSON_SPRITES
   person: PERSON_SPRITES.short,
-  ...PERSON_SPRITES.short,
   miso: sprite('miso', MISO_STAND),
   headset: sprite('office', HEADSET),
   headsetBack: sprite('office', HEADSET_BACK),

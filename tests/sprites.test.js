@@ -1,12 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  SPRITES, PALETTES, TILE_SPRITES, PERSON_SPRITES, personPalette, personLook, personSprite,
+  SPRITES, PALETTES, TILE_SPRITES, PERSON_SPRITES, personLook, personSprite,
 } from '../render/sprites.js';
 import { MAP } from '../render/map.js';
 import { createDrawer, TILE_PX } from '../render/draw.js';
 
-const paletteFor = (name) => (name === 'person' ? personPalette({ id: 'p0' }) : PALETTES[name]);
+const paletteFor = (name) => (name === 'person' ? personLook({ id: 'p0' }).palette : PALETTES[name]);
 
 // Every sprite, with groups (SPRITES.person) flattened as 'person.stand'.
 const allSprites = () => Object.entries(SPRITES).flatMap(([name, s]) => (s.rows ? [[name, s]]
@@ -82,7 +82,6 @@ test('personLook is deterministic and ignores nation', () => {
     assert.deepEqual(one, personLook({ id }));
     assert.ok(HAIRS.includes(one.hair));
     assert.equal(typeof one.glasses, 'boolean');
-    assert.deepEqual(personPalette({ id }), one.palette, 'personPalette wraps personLook');
   }
 });
 
@@ -168,11 +167,12 @@ test('Kim Miso keeps her chestnut bob, round glasses, mustard cardigan and green
 
 test('person palettes differ between people and do not depend on nation', () => {
   const ids = Array.from({ length: 12 }, (_, i) => `p${i}`);
-  const seen = new Set(ids.map((id) => JSON.stringify(personPalette({ id, nation: 'veltora' }))));
+  const palette = (p) => personLook(p).palette;
+  const seen = new Set(ids.map((id) => JSON.stringify(palette({ id, nation: 'veltora' }))));
   assert.equal(seen.size, ids.length);
-  assert.deepEqual(personPalette({ id: 'p3', nation: 'veltora' }), personPalette({ id: 'p3', nation: 'veltora' }));
-  assert.deepEqual(personPalette({ id: 'p3', nation: 'veltora' }), personPalette({ id: 'p3', nation: 'kamuen' }));
-  assert.deepEqual(personPalette({ id: 'p3' }), personPalette({ id: 'p3', nation: 'kamuen' }));
+  assert.deepEqual(palette({ id: 'p3', nation: 'veltora' }), palette({ id: 'p3', nation: 'veltora' }));
+  assert.deepEqual(palette({ id: 'p3', nation: 'veltora' }), palette({ id: 'p3', nation: 'kamuen' }));
+  assert.deepEqual(palette({ id: 'p3' }), palette({ id: 'p3', nation: 'kamuen' }));
 });
 
 test('all map tile characters have a sprite', () => {

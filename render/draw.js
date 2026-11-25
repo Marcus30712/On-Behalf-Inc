@@ -5,7 +5,7 @@
 // from the person's id.
 
 import { MAP, tileAt } from './map.js';
-import { SPRITES, PALETTES, FACILITY_TILES, personPalette, personPhase } from './sprites.js';
+import { SPRITES, PALETTES, FACILITY_TILES, personLook, personSprite, personPhase } from './sprites.js';
 
 export const SCALE = 3;
 export const TILE_PX = 16 * SCALE;
@@ -19,6 +19,14 @@ const SPARKLE_MS = 3000;
 const STRESS_ALERT = 80;
 const CHANNEL_MARKS = { chat: '💬', email: '✉️' }; // phone keeps the headset sprite
 const MARK_PX = 7 * U;
+// People are 16x24: they stand on their tile's bottom edge and reach 8 sprite
+// pixels into the tile above.
+const PERSON_W = 16 * U;
+const PERSON_H = 24 * U;
+const PERSON_LIFT = PERSON_H - TILE_PX;
+// Bubbles and channel marks hang off this line, 3 sprite pixels above the
+// sprite's top, so they clear the tallest hair (the tied topknot on row 0).
+const MARK_LIFT = 3 * U;
 
 function defaultMakeCanvas(w, h) {
   if (typeof OffscreenCanvas !== 'undefined') return new OffscreenCanvas(w, h);
@@ -31,16 +39,13 @@ function defaultMakeCanvas(w, h) {
 const snap = (v) => Math.round(v / U) * U;
 
 export function createDrawer(makeCanvas = defaultMakeCanvas) {
-  const sprites = new Map(); // `${paletteKey}|${name}` -> canvas
+  const sprites = new Map(); // cache key (palette or person, sprite name) -> canvas
   let office = null; // { key, canvas }
 
-  // A sprite painted with a palette at 1x. paletteKey names the palette for
-  // caching (a person's id for person palettes).
-  function spriteCanvas(name, palette = PALETTES[SPRITES[name].palette], paletteKey = SPRITES[name].palette) {
-    const key = `${paletteKey}|${name}`;
+  // A sprite painted with a palette at 1x, cached under key.
+  function paint(s, palette, key) {
     let c = sprites.get(key);
     if (c) return c;
-    const s = SPRITES[name];
     c = makeCanvas(s.w, s.h);
     const g = c.getContext('2d');
     s.rows.forEach((row, y) => {
@@ -55,10 +60,22 @@ export function createDrawer(makeCanvas = defaultMakeCanvas) {
     return c;
   }
 
-  function blit(ctx, name, px, py, palette, paletteKey) {
-    const c = spriteCanvas(name, palette, paletteKey);
+  // A named office, icon or Miso sprite in its own palette.
+  function spriteCanvas(name) {
     const s = SPRITES[name];
-    ctx.drawImage(c, px, py, s.w * U, s.h * U);
+    return paint(s, PALETTES[s.palette], `${s.palette}|${name}`);
+  }
+
+  // A person in a pose, in their own look (hair, glasses, colours from their
+  // id), so one cache entry per person and pose.
+  function personCanvas(p, poseName) {
+    const look = personLook(p);
+    return paint(personSprite(poseName, look), look.palette, `person:${p.id}|${poseName}`);
+  }
+
+  function blit(ctx, name, px, py) {
+    const s = SPRITES[name];
+    ctx.drawImage(spriteCanvas(name), px, py, s.w * U, s.h * U);
   }
 
   // ---- office ---------------------------------------------------------------
@@ -199,8 +216,10 @@ export function createDrawer(makeCanvas = defaultMakeCanvas) {
       .sort((l, r) => l.a.y - r.a.y || (l.a.id < r.a.id ? -1 : 1));
   }
 
-  // Top-left screen position of a person's 16x16 sprite.
-  const spot = (a) => [snap(a.x * TILE_PX), snap(a.y * TILE_PX) - 3 * U];
+  // Top-left screen position of a person's 16x24 sprite: its bottom edge on
+  // the bottom edge of the tile the person stands on. Drawn in order of y
+  // (the feet), so a person in a lower row covers the head of one above.
+  const spot = (a) => [snap(a.x * TILE_PX), snap(a.y * TILE_PX) - PERSON_LIFT];
 
   function pose(a, p, timeMs) {
     const moving = a.path.length > 0;
@@ -224,7 +243,7 @@ export function createDrawer(makeCanvas = defaultMakeCanvas) {
     ctx.font = `${MARK_PX}px sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(mark, px + 14 * U, py + 2 * U);
+    ctx.fillText(mark, px + 14 * U, py - MARK_LIFT + 2 * U);
     ctx.restore();
   }
 
@@ -238,7 +257,8 @@ export function createDrawer(makeCanvas = defaultMakeCanvas) {
     for (const { a, p } of visible(actors, peopleView)) {
       const [px, py] = spot(a);
       const { name, back } = pose(a, p, timeMs);
-      blit(ctx, name, px, py, personPalette(p), `person:${p.id}`);
+      ctx.drawImage(personCanvas(p, name), px, py, PERSON_W, PERSON_H);
+      if (p.role === 'qa' && !back) blit(ctx, 'lanyard', px, py);
       if (p.role !== 'agent' || p.activity !== 'phone') continue;
       const mark = CHANNEL_MARKS[channelOf.get(p.answering ?? p.task?.clientId)];
       if (mark) channelMark(ctx, mark, px, py);
@@ -256,10 +276,11 @@ export function createDrawer(makeCanvas = defaultMakeCanvas) {
     return null;
   }
 
-  // A speech bubble 11x11 sprite pixels with a tail, holding a 9x9 icon.
+  // A speech bubble 11x11 sprite pixels with a tail, holding a 9x9 icon,
+  // over the head; never above the canvas (people in the row under the wall).
   function bubble(ctx, px, py, icon) {
     const bx = px + 2 * U;
-    const by = py - 11 * U;
+    const by = Math.max(0, py - MARK_LIFT - 11 * U);
     const W = 11 * U;
     ctx.fillStyle = OUTLINE;
     ctx.fillRect(bx + U, by, W - 2 * U, W);
@@ -283,11 +304,25 @@ export function createDrawer(makeCanvas = defaultMakeCanvas) {
       if (start != null && timeMs >= start && timeMs - start < SPARKLE_MS) {
         const twinkle = Math.floor((timeMs - start) / 250) % 2;
         const sx = px + (twinkle ? 9 : -2) * U;
-        const sy = py + (icon ? -4 : twinkle ? -6 : -2) * U;
+        const sy = Math.max(0, py - MARK_LIFT + (icon ? -4 : twinkle ? -6 : -2) * U);
         blit(ctx, 'sparkle', sx, sy);
       }
     }
   }
 
-  return { drawOffice, drawActors, drawBubbles, spriteCanvas };
+  return { drawOffice, drawActors, drawBubbles, spriteCanvas, personCanvas };
+}
+
+// The person under a canvas point (canvas pixels), or null: the whole 16x24
+// sprite counts, and where two overlap the lower one (drawn on top) wins.
+export function personAt(actors, x, y) {
+  const hit = actors
+    .filter((a) => !a.gone)
+    .filter((a) => {
+      const left = a.x * TILE_PX;
+      const bottom = (a.y + 1) * TILE_PX;
+      return x >= left && x < left + PERSON_W && y >= bottom - PERSON_H && y < bottom;
+    })
+    .sort((l, r) => r.y - l.y)[0];
+  return hit ? hit.id : null;
 }

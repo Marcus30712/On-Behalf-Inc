@@ -95,8 +95,9 @@ export function renderAdvisor(root, event, { drawer }) {
   const line = event ? eventText(event).advisor : '';
   if (!line) { root.replaceChildren(); return; } // nothing to say: no bubble
   const face = h('canvas', { class: 'advisor-face', width: 16, height: 16, role: 'img', 'aria-label': UI_TEXT.advisor.name });
+  // Miso is 16x24: the face shows her top 16 rows (head, collar, shoulders).
   const source = drawer.spriteCanvas('miso');
-  face.getContext('2d')?.drawImage(source, 0, 0);
+  face.getContext('2d')?.drawImage(source, 0, 0, 16, 16, 0, 0, 16, 16);
   root.replaceChildren(h('section', { class: 'advisor' },
     face,
     h('div', { class: 'bubble' },

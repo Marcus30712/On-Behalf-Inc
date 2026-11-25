@@ -207,7 +207,7 @@ test('map: chat and email agents at their desks show 💬 or ✉️ instead of t
   drawer.drawActors(ctx, actors, v.people, 0, v.clients);
   const at = (p) => actors.find((a) => a.id === p.id);
   const px = (p) => Math.round(at(p).x * 48);
-  const py = (p) => Math.round(at(p).y * 48) - 9; // spot(): the sprite stands 3 sprite pixels up
+  const py = (p) => Math.round(at(p).y * 48) - 24; // spot(): the 16x24 sprite reaches 8 sprite pixels above its tile
   const ops = ctx.ops;
   const headsetAt = (p) => ops.some((o) => o[0] === 'drawImage' && [headset, headsetBack].includes(o[1])
     && o[2] === px(p) && o[3] === py(p));

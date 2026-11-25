@@ -76,25 +76,39 @@ export function defaultRoster(people) {
   return roster;
 }
 
+// v1.6 break lengths, in minutes (sim/breaks.js places them).
+export const BREAK_LENGTH = { am: 15, lunch: 60, pm: 15 };
+
+// The person's breaks as [start, length] in minutes since midnight: from a
+// day plan `{ am, lunch, pm }` (sim/breaks.js), or else from the fixed break
+// group (0 or 1), kept until the plan is wired in (v1.6 Task 3).
+function breaksOf(shiftId, planOrGroup) {
+  if (planOrGroup && typeof planOrGroup === 'object') {
+    return Object.entries(BREAK_LENGTH).map(([kind, length]) => [planOrGroup[kind], length]);
+  }
+  const start = SHIFTS[shiftId].start;
+  const plans = BREAKS[shiftId];
+  return (plans[planOrGroup ?? 0] ?? plans[0]).map(([offset, length]) => [start + offset, length]);
+}
+
 // Share (0, 0.5 or 1) of the 30-minute interval starting at `minute` actually
-// worked, for break group 0 (default) or 1.
-export function workShare(minute, shiftId, group = 0) {
+// worked, given the person's day plan `{ am, lunch, pm }`, or else break
+// group 0 (default) or 1.
+export function workShare(minute, shiftId, plan = 0) {
   const shift = SHIFTS[shiftId];
   if (!shift) return 0;
   const end = minute + INTERVAL;
   let worked = overlap(minute, end, shift.start, shift.end);
-  const plans = BREAKS[shiftId];
-  for (const [offset, length] of plans[group] ?? plans[0]) {
-    const b0 = shift.start + offset;
+  for (const [b0, length] of breaksOf(shiftId, plan)) {
     worked -= overlap(minute, end, b0, b0 + length);
   }
   return Math.max(0, worked) / INTERVAL;
 }
 
-export function onBreak(minute, shiftId, group = 0) {
+export function onBreak(minute, shiftId, plan = 0) {
   const shift = SHIFTS[shiftId];
   if (!shift || minute < shift.start || minute >= shift.end) return false;
-  return workShare(minute, shiftId, group) < 1;
+  return workShare(minute, shiftId, plan) < 1;
 }
 
 // On shift: the center opens that day, the person is well and not absent, and

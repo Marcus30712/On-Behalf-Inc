@@ -11,6 +11,37 @@ const SKILL_ORDER = ['handling', 'systems', 'coaching', 'evaluation'];
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
+// v1.6 스케줄링 (planning): how well a lead places the day's breaks
+// (sim/breaks.js). Not drawn from the rng, so every other draw keeps its
+// order: it comes from the person's id, within the role's range, one decimal.
+// It is not stored on new people, so a saved person (v1.5 and earlier) gets
+// the same value as a new one with that id; a stored skills.planning (tests,
+// tools) wins.
+const PLANNING_RANGES = { agent: [0, 3], lead: [3, 8], qa: [1, 4] };
+
+// 32-bit FNV-1a with an fmix32 finish, so ids in sequence (p0.., h1..) spread.
+function hashString(text) {
+  let h = 0x811c9dc5;
+  for (const ch of text) {
+    h ^= ch.codePointAt(0);
+    h = Math.imul(h, 0x01000193);
+  }
+  h ^= h >>> 16;
+  h = Math.imul(h, 0x85ebca6b);
+  h ^= h >>> 13;
+  h = Math.imul(h, 0xc2b2ae35);
+  h ^= h >>> 16;
+  return h >>> 0;
+}
+
+export function planningOf(person) {
+  const stored = person.skills?.planning;
+  if (Number.isFinite(stored)) return stored;
+  const [lo, hi] = PLANNING_RANGES[person.role] ?? PLANNING_RANGES.agent;
+  const steps = Math.round((hi - lo) * 10) + 1;
+  return (lo * 10 + (hashString(`planning:${person.id}`) % steps)) / 10;
+}
+
 // Stress per 30 minutes of work: a base for a working day with customers, more
 // the busier the queue keeps the person, and a steep extra once occupancy
 // passes overloadFrom (no breathing room between calls).

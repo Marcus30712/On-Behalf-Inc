@@ -84,17 +84,24 @@ function holidayMul(nation, day) {
   return mul;
 }
 
-// Expected calls for one interval: callsPerDay x growth x curve x weekday x holiday x wobble.
-// Spikes (state.spikes) are not applied here; stepInterval multiplies them in.
-export function callsFor(client, day, minute, rng, state) {
+// Calls expected in the interval before the day's wobble: callsPerDay x
+// growth x curve x weekday x holiday. Draws nothing, so the break plan
+// (sim/breaks.js) can forecast with it without moving the game rng.
+export function expectedCalls(client, day, minute, state) {
   const slot = Math.floor((minute - CURVE_START) / INTERVAL);
   const { weekday } = dateOf(day);
   // No calls on a day the client does not open (a weekday client at the weekend).
   const weekMul = client.hours.days.includes(weekday) ? WEEKDAY_MUL[weekday] ?? 0 : 0;
-  const wobble = 0.85 + 0.3 * rng.next();
   const curve = CURVE[slot] ?? 0;
   const holiday = holidayMul(nationOf(client.nation), day);
-  return client.callsPerDay * growthMul(day, state?.office?.level1Day) * curve * weekMul * holiday * wobble;
+  return client.callsPerDay * growthMul(day, state?.office?.level1Day) * curve * weekMul * holiday;
+}
+
+// Calls for one interval: expectedCalls x wobble (one rng draw).
+// Spikes (state.spikes) are not applied here; stepInterval multiplies them in.
+export function callsFor(client, day, minute, rng, state) {
+  const wobble = 0.85 + 0.3 * rng.next();
+  return expectedCalls(client, day, minute, state) * wobble;
 }
 
 // Research points per full interval of work: 1 + average(coaching, evaluation) / 10.

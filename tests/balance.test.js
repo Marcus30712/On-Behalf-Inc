@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  runPolicy, wornDown, idleYearVerdict, fullFeeShare, expansionVerdict,
+  runPolicy, wornDown, idleYearVerdict, fullFeeShare, expansionVerdict, channelsVerdict, emailLost,
 } from '../tools/autoplay.js';
 
 const SEEDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
@@ -123,4 +123,36 @@ test('the weekend crew keeps a five-day week', () => {
   const runs = [...keep, ...greedy];
   assert.ok(runs.some((r) => r.weekendDays > 0), 'no seed opened on a weekend');
   for (const r of runs) assert.equal(r.sixDay, 0, `person-days rostered six days or more: ${r.sixDay}`);
+});
+
+// v1.3: the keep-service game that also researches the chat and mail desks and
+// takes both channel clients (staffing the mail), and the same game leaving
+// the mail unstaffed, over 720 days. Compared with keep-service (above).
+let channelGames;
+function channelRuns() {
+  channelGames ??= {
+    staff: SEEDS.map((seed) => runPolicy({ seed, days: 720, policy: 'sensible', expand: 'keep', channels: 'staff' })),
+    nostaff: SEEDS.map((seed) => runPolicy({ seed, days: 720, policy: 'sensible', expand: 'keep', channels: 'nostaff' })),
+  };
+  return channelGames;
+}
+
+test('chat and email clients can be run well and are not a loss', () => {
+  const { staff } = channelRuns();
+  const { keep } = twoYear();
+  const v = channelsVerdict(staff, keep);
+  const cash = (runs) => runs.map((r) => Math.round(r.cash)).join(' ');
+  assert.ok(v.active >= 8, `both channel clients active at day 720 on ${v.active}/10: ${staff.map((r) => r.clients.join('+')).join(' ')}`);
+  assert.equal(v.backlogOk, SEEDS.length,
+    `email backlog within two days of mail: ${staff.map((r) => `${Math.round(r.email.maxBacklog)}/${Math.round(r.email.perDay)}`).join(' ')}`);
+  assert.ok(v.fees.every((f) => f >= 0.65), `fees in full ${v.fees.map((f) => (f * 100).toFixed(1)).join('% / ')}%`);
+  assert.ok(v.notPoorer >= 8, `not poorer than keep-service on ${v.notPoorer}/10: ${cash(staff)} vs ${cash(keep)}`);
+  for (const r of staff) assert.equal(r.gameOver, null, `game over on day ${r.survivedDays}`);
+});
+
+// Failure condition of the design: email is not free money. Nobody on the mail, the client leaves.
+test('an email client nobody answers is lost', () => {
+  const { nostaff } = channelRuns();
+  const lost = emailLost(nostaff);
+  assert.ok(lost >= 8, `email client lost on ${lost}/10: ${nostaff.map((r) => `${r.email.days}d lost ${r.email.lost}`).join(' ')}`);
 });

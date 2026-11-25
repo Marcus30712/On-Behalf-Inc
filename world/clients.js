@@ -35,19 +35,23 @@ export const CLIENTS = [
     slTarget: { pct: 80, sec: 20 }, monthlyFee: 9000, requiresOfficeLevel: 1,
     callsPerDay: 60, ahtMin: 4, patienceSec: 60, hours: { days: [5, 6], open: 540, close: 1080 },
   },
-  // v1.3: channel clients, offered only after their research (requiresResearch). Volumes
-  // are placeholders until the v1.3 balance task. Chat: slTarget sec like phone; email:
-  // slTarget.openMinutes is the reply deadline counted in the client's open minutes.
+  // v1.3: channel clients, offered only after their research (requiresResearch). Chat:
+  // slTarget sec like phone; email: slTarget.openMinutes is the reply deadline counted in
+  // the client's open minutes. Chat callsPerDay and email ahtMin set by the v1.3 balance
+  // task (balance record, v1.3 section): four chat agents (two a shift, 1.5 seats each)
+  // mostly meet 80 chats a day at 9 minutes, where one a shift cannot; one email agent
+  // answers 60 mails a day at 5 minutes within the day (a second helps while half a
+  // day's mail waits).
   {
     id: 'saebyeol-bank', name: '새벽별 은행', industry: '인터넷 은행 상담', nation: 'veltora', start: false,
     channel: 'chat', requiresResearch: 'chat-desk',
     slTarget: { pct: 80, sec: 60 }, monthlyFee: 20000,
-    callsPerDay: 60, ahtMin: 9, patienceSec: 240, hours: { ...WEEKDAY_HOURS },
+    callsPerDay: 80, ahtMin: 9, patienceSec: 240, hours: { ...WEEKDAY_HOURS },
   },
   {
     id: 'solbang-books', name: '솔방울 서점', industry: '온라인 서점 주문·반품', nation: 'kamuen', start: false,
     channel: 'email', requiresResearch: 'mail-desk',
     slTarget: { pct: 90, openMinutes: 720 }, monthlyFee: 12000,
-    callsPerDay: 60, ahtMin: 8, hours: { ...WEEKDAY_HOURS },
+    callsPerDay: 60, ahtMin: 5, hours: { ...WEEKDAY_HOURS },
   },
 ];

@@ -32,10 +32,23 @@
 //   for a weekday client; a crew member out that day is covered by an agent
 //   with the day off, who takes next Wednesday off. Moves by met-rate, headcount and QA look at the
 //   weekday clients only.
+// - keeping service with channels (v1.3, expand 'keep', channels 'staff'):
+//   also researches the chat desk once expansion 1 is under way and the mail
+//   desk once expansion 2 is, so their offers come with the seats; keeps two
+//   weekday phone clients (CHANNEL_PHONE_CLIENTS) and takes the chat client
+//   (four agents, two a shift), the email client (one agent) and the weekend
+//   client when the agents already hired cover them all, the weekend client
+//   only once the seats hold the phone clients, the chat desk, the email desk
+//   and the crew (16 >= 8 + 4 + 1 + 3). Each day the desks are filled with
+//   agents at work today, the email first, never leaving a phone client fewer
+//   than DESK_KEEPS_PHONE; a second agent helps on the email while more than
+//   half a day's mail waits. Moves by met-rate, headcount and QA look at the
+//   phone clients only. channels 'nostaff' is the same, nobody on the email.
 //
 // The checks also play sensible over 720 days (fees in years 1 and 2) and
 // sensible taking client offers (the S milestone after losing a client; also
-// the v1.2 brief's offers-S guard), and both expanding policies over 720 days.
+// the v1.2 brief's offers-S guard), both expanding policies over 720 days, and
+// keeping service with channels, staffed and not, over 720 days (v1.3).
 import { pathToFileURL } from 'node:url';
 import { createGame, advance, act, view, SHIFTS } from '../sim/game.js';
 import { CLIENTS } from '../world/clients.js';
@@ -63,6 +76,14 @@ const KEEP_WEEKDAY_CLIENTS = 3; // expand 'keep': weekday clients at most
 const WEEKEND_CREW = 3; // agents on the weekend shift for a weekend client (two cannot cover each other's breaks)
 const WEEKEND_DAYS = [5, 6];
 const CREW_DAYS_OFF = [1, 2]; // Tuesday, Wednesday: the crew still works five days
+// v1.3 channels: the desk research done after RESEARCH_ORDER, agents kept on
+// each channel client (chat: two a shift, as one alone gets 1.5 seats, too
+// few for the 60-second target; email: one), and weekday phone clients at
+// most, so the desks, the weekend crew and the phone clients fit 16 seats.
+const CHANNEL_RESEARCH = ['chat-desk', 'mail-desk'];
+const CHANNEL_STAFF = { chat: 4, email: 1 };
+const CHANNEL_PHONE_CLIENTS = 2;
+const DESK_KEEPS_PHONE = 2; // working agents a desk leaves each phone client
 
 const mean = (xs) => (xs.length === 0 ? 0 : xs.reduce((s, x) => s + x, 0) / xs.length);
 
@@ -73,14 +94,18 @@ const mean = (xs) => (xs.length === 0 ? 0 : xs.reduce((s, x) => s + x, 0) / xs.l
 // `acceptOffers` (sensible only): take every new-client offer instead of
 // declining it. `expand` (sensible only, v1.2): 'greedy' or 'keep', expand
 // the office and take the offers it can staff (see the policy notes above).
-export function runPolicy({ seed, days, policy, acceptOffers = false, expand = false }) {
+// `channels` (with expand 'keep', v1.3): 'staff' or 'nostaff', also research
+// the chat and mail desks and take both channel clients; 'nostaff' leaves the
+// email client without anyone (see the policy notes above).
+export function runPolicy({ seed, days, policy, acceptOffers = false, expand = false, channels = false }) {
   const state = createGame(seed);
   const sensible = policy === 'sensible';
-  const plan = sensible ? sensiblePlan(view(state), acceptOffers, expand) : null;
+  const plan = sensible ? sensiblePlan(view(state), acceptOffers, expand, channels) : null;
   const tally = {
     seen: 0, sick: 0, sickDays: 0, burnouts: 0, burnoutLog: [], helped: 0, clinicHelped: 0, helpedNames: [], offers: 0, builtOn: {},
     levelDay: {}, rankSDay: null, sixDay: 0, weekendDays: 0,
     left: 0, slSum: 0, slCount: 0, days: [], monthCash: [], minSatisfaction: 100,
+    email: { days: 0, mail: 0, maxBacklog: 0, active: false, lost: 0 }, offerLog: [],
   };
   let known = new Set(view(state).people.map((p) => p.id));
 
@@ -125,6 +150,7 @@ export function runPolicy({ seed, days, policy, acceptOffers = false, expand = f
     helped: tally.helped,
     clinicHelped: tally.clinicHelped,
     offers: tally.offers,
+    offerLog: tally.offerLog,
     helpedNames: tally.helpedNames,
     minSatisfaction: tally.minSatisfaction,
     researched: v.research.done,
@@ -140,6 +166,15 @@ export function runPolicy({ seed, days, policy, acceptOffers = false, expand = f
     agents: agentsOf(v).length,
     feeMonths: feeMonths(tally.days, v.day),
     days: tally.days,
+    // v1.3: workdays with an email client, mails counted per such day (each
+    // mail once: answered, or gone overdue), the largest backlog at a close,
+    // and how many times the email client was lost.
+    email: {
+      days: tally.email.days,
+      lost: tally.email.lost,
+      perDay: tally.email.days > 0 ? tally.email.mail / tally.email.days : 0,
+      maxBacklog: tally.email.maxBacklog,
+    },
   };
 }
 
@@ -224,13 +259,30 @@ export function expansionVerdict(expand, plain) {
   };
 }
 
+// v1.3 channels: on how many seeds both channel clients are active at the end;
+// on how many the email backlog at the close of every workday stayed within
+// two days of arrivals (mails counted per day, each mail once); the share of
+// client-months paid in full in years 1 and 2; on how many seeds the cash is
+// not below the same seed's keep-service game (`keep`).
+export function channelsVerdict(runs, keep) {
+  return {
+    active: runs.filter((r) => r.clients.includes('saebyeol') && r.clients.includes('solbang')).length,
+    backlogOk: runs.filter((r) => r.email.maxBacklog <= 2 * r.email.perDay).length,
+    fees: [fullFeeShare(runs, 0, 360), fullFeeShare(runs, 360, 720)],
+    notPoorer: runs.filter((r, i) => r.cash >= keep[i].cash).length,
+  };
+}
+
+// v1.3: seeds where the email client was lost at least once.
+export const emailLost = (runs) => runs.filter((r) => r.email.lost > 0).length;
+
 // New inbox events since the last look.
 function collect(v, tally) {
   for (const e of v.inbox) {
     if (e.index < tally.seen) continue;
     if (e.id === 'sick') { tally.sick += 1; tally.sickDays += e.data.days; }
     if (e.id === 'burnout') { tally.burnouts += 1; tally.burnoutLog.push(`${e.day}:${e.personId}`); }
-    if (e.id === 'client-offer') tally.offers += 1;
+    if (e.id === 'client-offer') { tally.offers += 1; tally.offerLog.push(`${e.day}:${e.clientId.split('-')[0]}`); }
     if (e.id === 'expansion-done') tally.levelDay[e.data.level] = e.day;
     if (e.id === 'milestone-rank-s') tally.rankSDay = e.day;
     if (e.id === 'build-done') tally.builtOn[e.data.researchId] = e.day;
@@ -245,6 +297,9 @@ function collect(v, tally) {
 
 function recordDay(v, tally) {
   const clients = {};
+  const emailActive = v.clients.some((c) => c.channel === 'email' && c.active);
+  if (tally.email.active && !emailActive) tally.email.lost += 1;
+  tally.email.active = emailActive;
   for (const c of v.clients) {
     if (!c.active) continue;
     tally.minSatisfaction = Math.min(tally.minSatisfaction, c.satisfaction);
@@ -252,7 +307,13 @@ function recordDay(v, tally) {
     clients[c.id] = {
       met: c.today.intervalsMetRate, offered: c.today.offered, abandoned: c.today.abandoned,
       agents: c.today.agents, satisfaction: c.satisfaction,
+      ...(c.channel === 'email' ? { backlog: c.backlog } : {}),
     };
+    if (c.channel === 'email') {
+      tally.email.days += 1;
+      tally.email.mail += c.today.offered;
+      tally.email.maxBacklog = Math.max(tally.email.maxBacklog, c.backlog);
+    }
     tally.slSum += c.today.intervalsMetRate;
     tally.slCount += 1;
   }
@@ -272,11 +333,14 @@ function countSixDays(v, tally) {
 
 // --- sensible policy -------------------------------------------------------
 
-function sensiblePlan(v, acceptOffers, expand) {
+function sensiblePlan(v, acceptOffers, expand, channels) {
   return {
     acceptOffers,
     expand,
-    maxWeekdayClients: expand === 'keep' ? KEEP_WEEKDAY_CLIENTS : Infinity,
+    channels,
+    research: channels ? [...RESEARCH_ORDER, ...CHANNEL_RESEARCH] : RESEARCH_ORDER,
+    desk: [], // [{ personId, clientId }]: agents kept on a channel client (v1.3)
+    maxWeekdayClients: expand === 'keep' ? (channels ? CHANNEL_PHONE_CLIENTS : KEEP_WEEKDAY_CLIENTS) : Infinity,
     crew: [], // [{ personId, home }]: the weekend crew and their weekday shift (v1.2)
     standIns: [], // [{ personId, weekday }]: covering a crew member who is out this weekend
     leadId: v.people.find((p) => p.role === 'lead')?.id,
@@ -289,7 +353,14 @@ const agentsOf = (v) => v.people.filter((p) => p.role === 'agent');
 const defOf = (id) => CLIENTS.find((d) => d.id === id);
 // Weekend clients open on no weekday (Mon-Fri); the rest are weekday clients.
 const isWeekendClient = (id) => !defOf(id).hours.days.some((w) => w < 5);
-const weekdayClients = (v) => v.clients.filter((c) => c.active && !isWeekendClient(c.id)).map((c) => c.id);
+// v1.3: 'phone', 'chat' or 'email'. Moves by met-rate, headcount and QA look
+// at the weekday phone clients only; the channel desks are staffed apart.
+const channelOfId = (id) => defOf(id).channel ?? 'phone';
+const weekdayClients = (v) => v.clients
+  .filter((c) => c.active && !isWeekendClient(c.id) && channelOfId(c.id) === 'phone').map((c) => c.id);
+const channelClients = (v) => v.clients.filter((c) => c.active && channelOfId(c.id) !== 'phone').map((c) => c.id);
+// Agents a channel client keeps ('nostaff': none on the email).
+const deskNeed = (plan, id) => (plan.channels === 'nostaff' && channelOfId(id) === 'email' ? 0 : CHANNEL_STAFF[channelOfId(id)]);
 
 function decide(state, v, plan, tally) {
   answerInbox(state, v, plan);
@@ -297,14 +368,24 @@ function decide(state, v, plan, tally) {
     expandOffice(state, view(state));
     weekendCrew(state, view(state), plan);
   }
+  if (plan.channels) channelDesks(state, view(state), plan);
   moveToNeediest(state, view(state), plan, tally);
   balanceClients(state, view(state));
   qaOnPhone(state, view(state), tally);
   if (!v.research.current && !v.research.build) {
-    const next = RESEARCH_ORDER.find((id) => !v.research.done.includes(id));
+    const next = plan.research.find((id) => !v.research.done.includes(id) && researchReady(v, id));
     if (next) act(state, { type: 'startResearch', researchId: next });
   }
   if (agentsOf(v).length < v.office.seats && !v.hiring) act(state, { type: 'startHiring' });
+}
+
+// v1.3: a desk is researched once the office is being built for it: the
+// chat desk from expansion 1, the mail desk from expansion 2 (started or
+// done), so the offers come when the seats do.
+const DESK_LEVEL = { 'chat-desk': 1, 'mail-desk': 2 };
+function researchReady(v, id) {
+  const level = Math.max(v.office.level, v.office.build?.level ?? 0);
+  return level >= (DESK_LEVEL[id] ?? 0);
 }
 
 // v1.2: build the next office level when the cash covers it with a reserve left.
@@ -321,6 +402,7 @@ function expandOffice(state, v) {
 function canStaff(v, clientId, plan) {
   const weekend = v.clients.some((c) => c.active && isWeekendClient(c.id));
   const n = weekdayClients(v).length;
+  if (plan.expand === 'keep' && plan.channels) return canStaffChannels(v, clientId, plan);
   if (plan.expand === 'keep') {
     // Keeping service: only with the agents already hired for every client,
     // the new one included (SEATS_PER_CLIENT each, a weekend crew); the
@@ -334,6 +416,79 @@ function canStaff(v, clientId, plan) {
   if (isWeekendClient(clientId)) return v.office.level >= 1 && !weekend;
   return (n + 1) * SEATS_PER_CLIENT <= v.office.seats;
 }
+
+// v1.3 channels, keeping service: every client only with the agents already
+// hired for all of them, the new one included (SEATS_PER_CLIENT per weekday
+// phone client, deskNeed per channel client, a weekend crew). At most
+// plan.maxWeekdayClients phone clients; the weekend client only once the
+// seats also hold the phone clients' share and both desks.
+function canStaffChannels(v, clientId, plan) {
+  const weekend = v.clients.some((c) => c.active && isWeekendClient(c.id));
+  const desks = channelClients(v);
+  let phone = weekdayClients(v).length;
+  let crew = weekend;
+  if (isWeekendClient(clientId)) {
+    const deskSeats = Object.values(CHANNEL_STAFF).reduce((s, n) => s + n, 0);
+    if (weekend || v.office.seats < plan.maxWeekdayClients * SEATS_PER_CLIENT + WEEKEND_CREW + deskSeats) return false;
+    crew = true;
+  } else if (channelOfId(clientId) === 'phone') {
+    if (phone >= plan.maxWeekdayClients) return false;
+    phone += 1;
+  } else desks.push(clientId);
+  const need = phone * SEATS_PER_CLIENT + desks.reduce((s, id) => s + deskNeed(plan, id), 0) + (crew ? WEEKEND_CREW : 0);
+  return agentsOf(v).length >= need;
+}
+
+// v1.3: each day, the chat client keeps deskNeed agents working today, late
+// and early in turn, taken (least stressed) from the phone client with the
+// most agents; the email client gets its agent, and one more while more than
+// a day's mail waits ('nostaff': nobody). Anyone
+// else answering a channel client (a new hire, someone moved when a client
+// left, a desk agent who is out today) goes to the phone client with the
+// fewest agents. Desk agents stay out of the weekend crew.
+function channelDesks(state, v, plan) {
+  const ids = new Set(v.people.map((p) => p.id));
+  const desks = channelClients(v);
+  const working = (p) => p.health.kind === 'well' && SHIFT_IDS.includes(p.shiftToday);
+  plan.desk = plan.desk.filter((d) => ids.has(d.personId) && desks.includes(d.clientId)
+    && !plan.crew.some((c) => c.personId === d.personId) && working(v.people.find((p) => p.id === d.personId)));
+  const phone = weekdayClients(v);
+  if (phone.length === 0) return;
+  const onDesk = (id) => plan.desk.some((d) => d.personId === id);
+  const inCrew = (id) => plan.crew.some((c) => c.personId === id);
+  // Working agents per phone client; a desk never takes a client's last DESK_KEEPS_PHONE.
+  const count = new Map(phone.map((id) => [id, 0]));
+  for (const p of agentsOf(v)) if (count.has(p.task?.clientId) && !inCrew(p.id) && working(p)) count.set(p.task.clientId, count.get(p.task.clientId) + 1);
+  // The email first: a missed day of mail is late all the next day too.
+  for (const clientId of [...desks].sort((a, b) => (channelOfId(a) === 'email' ? 0 : 1) - (channelOfId(b) === 'email' ? 0 : 1))) {
+    const mine = () => plan.desk.filter((d) => d.clientId === clientId);
+    const need = deskNeed(plan, clientId) + (deskNeed(plan, clientId) > 0 && behind(v, clientId) ? 1 : 0);
+    while (mine().length < need) {
+      const want = mine().length % 2 === 0 ? 'late' : 'early';
+      const pool = agentsOf(v).filter((p) => !onDesk(p.id) && !inCrew(p.id) && working(p)
+        && count.get(p.task?.clientId) > DESK_KEEPS_PHONE);
+      if (pool.length === 0) break;
+      const pick = [...pool].sort((a, b) => (a.shiftToday === want ? 0 : 1) - (b.shiftToday === want ? 0 : 1)
+        || count.get(b.task.clientId) - count.get(a.task.clientId) || a.stress - b.stress)[0];
+      count.set(pick.task.clientId, count.get(pick.task.clientId) - 1);
+      plan.desk.push({ personId: pick.id, clientId });
+    }
+    for (const d of mine().slice(need)) plan.desk.splice(plan.desk.indexOf(d), 1);
+    for (const d of mine()) {
+      const p = v.people.find((x) => x.id === d.personId);
+      if (p.task?.kind !== 'phone' || p.task.clientId !== clientId) act(state, { type: 'assign', personId: d.personId, kind: 'phone', clientId });
+    }
+  }
+  for (const p of agentsOf(v)) {
+    if (onDesk(p.id) || inCrew(p.id) || p.task?.kind !== 'phone' || channelOfId(p.task.clientId) === 'phone') continue;
+    const to = [...phone].sort((a, b) => count.get(a) - count.get(b))[0];
+    if (act(state, { type: 'assign', personId: p.id, kind: 'phone', clientId: to }).ok) count.set(to, count.get(to) + 1);
+  }
+}
+
+// v1.3: an email client with more than a day's mail waiting.
+const behind = (v, clientId) => channelOfId(clientId) === 'email'
+  && v.clients.find((c) => c.id === clientId).backlog > defOf(clientId).callsPerDay / 2;
 
 // v1.2: with a weekend client, WEEKEND_CREW agents (least stressed, taken
 // from the early and late shifts in turn) work Saturday and Sunday on the
@@ -358,7 +513,8 @@ function weekendCrew(state, v, plan) {
   while (plan.crew.length < WEEKEND_CREW) {
     // Alternate the weekday shifts the crew comes from.
     const want = plan.crew.length % 2 === 0 ? 'early' : 'late';
-    const pool = agentsOf(v).filter((p) => p.health.kind === 'well' && !inCrew(p.id) && SHIFT_IDS.includes(p.week[0]));
+    const pool = agentsOf(v).filter((p) => p.health.kind === 'well' && !inCrew(p.id) && SHIFT_IDS.includes(p.week[0])
+      && !plan.desk.some((d) => d.personId === p.id));
     if (pool.length === 0) break;
     const pick = [...pool].sort((a, b) => (a.week[0] === want ? 0 : 1) - (b.week[0] === want ? 0 : 1) || a.stress - b.stress)[0];
     plan.crew.push({ personId: pick.id, home: pick.week[0] });
@@ -571,12 +727,16 @@ function main() {
   const twoYears = SEEDS.map((seed) => runPolicy({ seed, days: 720, policy: 'sensible' }));
   const greedy = SEEDS.map((seed) => runPolicy({ seed, days: 720, policy: 'sensible', expand: 'greedy' }));
   const keep = SEEDS.map((seed) => runPolicy({ seed, days: 720, policy: 'sensible', expand: 'keep' }));
+  const channels = SEEDS.map((seed) => runPolicy({ seed, days: 720, policy: 'sensible', expand: 'keep', channels: 'staff' }));
+  const noStaff = SEEDS.map((seed) => runPolicy({ seed, days: 720, policy: 'sensible', expand: 'keep', channels: 'nostaff' }));
   printRuns('idle, 360 days', idleYear);
   printRuns('sensible, 360 days', sensible);
   printRuns('sensible taking client offers, 360 days', offers);
   printRuns('sensible, 720 days', twoYears);
   printRuns('sensible expanding the office, greedy (every offer it can staff), 720 days', greedy);
   printRuns('sensible expanding the office, keeping service (at most 3 weekday clients), 720 days', keep);
+  printRuns('keeping service with the chat and email clients, 720 days (v1.3)', channels);
+  printRuns('keeping service with the chat and email clients, nobody on the email, 720 days (v1.3)', noStaff);
 
   const target = 0.8;
   const worn = idle.filter((r) => wornDown(r, 180)).length;
@@ -597,6 +757,8 @@ function main() {
   const fee2 = [fullFeeShare(twoYears, 0, 360), fullFeeShare(twoYears, 360, 720)];
   const over2 = twoYears.filter((r) => r.gameOver).length;
   const grown = expansionVerdict(keep, twoYears);
+  const ch = channelsVerdict(channels, keep);
+  const lostEmail = emailLost(noStaff);
   const dayList = (runs, key) => runs.map((r) => r[key] ?? '-').join(' ');
 
   console.log('\nfirst month, default roster (idle): met-share by weekday Mon..Fri',
@@ -616,6 +778,12 @@ function main() {
       '| burnouts', runs.reduce((s, r) => s + r.burnouts, 0), 'resigned', runs.reduce((s, r) => s + r.resigned, 0));
   }
   console.log('plain sensible 720: cash at day 360', twoYears.map((r) => Math.round(r.monthCash[11] ?? r.cash)).join(' '));
+  for (const [label, runs] of [['channels', channels], ['channels, email unstaffed', noStaff]]) {
+    console.log(`${label}: clients at the end`, runs.map((r) => r.clients.join('+') || '-').join(' '),
+      '| email workdays', runs.map((r) => r.email.days).join(' '), '| times lost', runs.map((r) => r.email.lost).join(' '),
+      '| largest email backlog / mails a day', runs.map((r) => `${Math.round(r.email.maxBacklog)}/${Math.round(r.email.perDay)}`).join(' '),
+      '| fees in full year 1', pct(fullFeeShare(runs, 0, 360)), 'year 2', pct(fullFeeShare(runs, 360, 720)));
+  }
   console.log('');
 
   const results = [
@@ -644,6 +812,9 @@ function main() {
       `sensible play over two years: fees in full year 1 ${pct(fee2[0])}, year 2 ${pct(fee2[1])} (each >= 65%), game over ${over2}/10`),
     check(grown.built >= 8 && grown.notPoorer >= 8 && grown.fees.every((f) => f >= 0.65),
       `sensible play that keeps service expands within 720 days on ${grown.built}/10 seeds (>= 8), fees in full year 1 ${pct(grown.fees[0])}, year 2 ${pct(grown.fees[1])} (each >= 65%), not poorer than without on ${grown.notPoorer}/10 (>= 8)`),
+    check(ch.active >= 8 && ch.backlogOk === SEEDS.length && ch.fees.every((f) => f >= 0.65) && ch.notPoorer >= 8,
+      `keeping service with the chat and email clients (v1.3): both active at day 720 on ${ch.active}/10 (>= 8), email backlog within two days of mail on ${ch.backlogOk}/10, fees in full year 1 ${pct(ch.fees[0])}, year 2 ${pct(ch.fees[1])} (each >= 65%), not poorer than keeping service without on ${ch.notPoorer}/10 (>= 8)`),
+    check(lostEmail >= 8, `an email client nobody answers is lost (v1.3): ${lostEmail}/10 seeds (>= 8)`),
   ];
   console.log(`\n${results.filter(Boolean).length}/${results.length} checks pass (${((Date.now() - t0) / 1000).toFixed(1)} s)`);
   if (!results.every(Boolean)) process.exitCode = 1;

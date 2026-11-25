@@ -70,8 +70,10 @@ function mixedView({ chat = {}, email = {}, emailClient = {} } = {}) {
   Object.assign(books, { backlog: 0, onTime: null, satisfaction: 70 }, emailClient);
   const agents = v.people.filter((p) => p.role === 'agent');
   agents[0].task = { kind: 'phone', clientId: 'saebyeol-bank' };
+  agents[0].answering = 'saebyeol-bank';
   agents[0].activity = 'phone';
   agents[1].task = { kind: 'phone', clientId: 'solbang-books' };
+  agents[1].answering = 'solbang-books';
   agents[1].activity = 'phone';
   return { v, chatAgent: agents[0], mailAgent: agents[1] };
 }

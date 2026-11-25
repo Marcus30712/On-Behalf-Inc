@@ -227,7 +227,9 @@ export function createDrawer(makeCanvas = defaultMakeCanvas) {
   }
 
   // clients: view.clients; an agent answering a chat or email client gets
-  // that channel's mark instead of the headset.
+  // that channel's mark instead of the headset. The client answered now
+  // (p.answering) decides, so an email agent covering a phone client wears the
+  // headset.
   function drawActors(ctx, actors, peopleView, timeMs = 0, clients = []) {
     ctx.imageSmoothingEnabled = false;
     const channelOf = new Map(clients.map((c) => [c.id, c.channel]));
@@ -236,7 +238,7 @@ export function createDrawer(makeCanvas = defaultMakeCanvas) {
       const { name, back } = pose(a, p, timeMs);
       blit(ctx, name, px, py, personPalette(p), `person:${p.id}`);
       if (p.role !== 'agent' || p.activity !== 'phone') continue;
-      const mark = CHANNEL_MARKS[channelOf.get(p.task?.clientId)];
+      const mark = CHANNEL_MARKS[channelOf.get(p.answering ?? p.task?.clientId)];
       if (mark) channelMark(ctx, mark, px, py);
       else blit(ctx, back ? 'headsetBack' : 'headset', px, py);
     }

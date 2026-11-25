@@ -155,6 +155,7 @@ function freeze(value) {
 
 function clientView(state, c) {
   const def = CLIENTS.find((d) => d.id === c.id);
+  const weekday = dateOf(state.day).weekday;
   const t = state.today.clients[c.id];
   const intervals = t?.intervals ?? 0;
   const offered = t?.offered ?? 0;
@@ -176,6 +177,8 @@ function clientView(state, c) {
     satisfaction: c.satisfaction,
     slTarget: def.slTarget,
     channel,
+    // The client opens at some hour today (its own days; a weekday client is closed at the weekend).
+    openToday: def.hours.days.includes(weekday),
     ...email,
     // Workdays left before a warned client leaves; null without a warning.
     churnWorkdaysLeft: state.churn?.find((e) => e.clientId === c.id)?.workdaysLeft ?? null,
@@ -232,6 +235,12 @@ function holidaysAhead(state, p) {
   }));
 }
 
+function answeringNow(state, p) {
+  const a = state.assignment[p.id];
+  if (a?.kind !== 'phone') return null;
+  return answeringClient(state, a, state.day, state.minute) ?? a.clientId;
+}
+
 function personView(state, p, weekday, groups) {
   const rosterShift = state.roster[p.id]?.[weekday] ?? 'off';
   const breakGroup = groups.get(p.id) ?? 0;
@@ -254,6 +263,10 @@ function personView(state, p, weekday, groups) {
     activity: activity(state, p, rosterShift, breakGroup),
     breakGroup,
     task: state.assignment[p.id] ?? null,
+    // The client the person answers now: their own, or an open one they cover
+    // while theirs is closed (sim/interval.js); their own when none is open;
+    // null off phones.
+    answering: answeringNow(state, p),
     holidays: holidaysAhead(state, p),
   };
 }

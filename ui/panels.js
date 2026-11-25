@@ -103,6 +103,9 @@ export function renderPanel(root, v, tab, onAct, { onClose } = {}) {
   root.replaceChildren(h('section', { class: `panel panel-${tab}`, 'data-tab': tab }, close, body, notice));
 }
 
+// A label after other text in a cell: a space, then the label (nothing without one).
+const withSpace = (label) => label && [' ', label];
+
 const title = (h, text, help) => [h('h2', {}, text), help && h('p', { class: 'help' }, help)];
 
 const bar = (h, key, value) => {
@@ -126,8 +129,9 @@ function activityText(v, p) {
   if (p.shiftToday === 'absent') return UI_TEXT.health.absent.name;
   if (p.health?.kind && p.health.kind !== 'well' && UI_TEXT.health[p.health.kind]) return UI_TEXT.health[p.health.kind].name;
   const shift = SHIFTS[p.shiftToday];
-  // An agent answering chat or email is not 전화 중: the channel says what they do.
-  const channel = p.activity === 'phone' && p.task?.kind === 'phone' ? channelOf(v, p.task.clientId) : 'phone';
+  // An agent answering chat or email is not 전화 중: the channel says what they
+  // do, by the client answered now (a covered client's, not their own).
+  const channel = p.activity === 'phone' && p.task?.kind === 'phone' ? channelOf(v, p.answering ?? p.task.clientId) : 'phone';
   if (channel !== 'phone') return UI_TEXT.channel[channel];
   if (p.activity === 'off' && shift && v.minute < shift.start) return UI_TEXT.shift[p.shiftToday].full;
   return UI_TEXT.activity[p.activity] ?? '';
@@ -139,6 +143,15 @@ function taskText(v, task) {
   if (task.kind !== 'phone') return name;
   const channel = channelOf(v, task.clientId);
   return [name, clientName(v, task.clientId), channel !== 'phone' && UI_TEXT.channel[channel]].filter(Boolean).join(' · ');
+}
+
+// "{client} 돕는 중" while the person, on the phone now, answers an open client
+// because their own (still active) client is closed; otherwise null.
+function coveringLabel(h, v, p) {
+  if (p.activity !== 'phone' || p.task?.kind !== 'phone' || !p.answering || p.answering === p.task.clientId) return null;
+  if (!v.clients.some((c) => c.id === p.task.clientId && c.active)) return null;
+  const client = clientName(v, p.answering);
+  return h('span', { class: 'covering', title: fill(UI_TEXT.tasks.coveringTip, { client }) }, fill(UI_TEXT.tasks.covering, { client }));
 }
 
 function personCard({ h, v, rerender }) {
@@ -161,7 +174,7 @@ function personCard({ h, v, rerender }) {
       h('dt', {}, C.nation), h('dd', {}, nationName(p.nation)),
       h('dt', {}, C.health), h('dd', {}, healthText(p)),
       h('dt', {}, C.shiftToday), h('dd', {}, shift),
-      h('dt', {}, C.task), h('dd', {}, taskText(v, p.task))),
+      h('dt', {}, C.task), h('dd', {}, taskText(v, p.task), withSpace(coveringLabel(h, v, p)))),
     h('h4', {}, C.traits), h('ul', { class: 'traits' }, traits),
     h('h4', {}, C.skills), h('ul', { class: 'skills' }, skills),
     h('h4', {}, C.condition), bar(h, 'fatigue', p.fatigue), bar(h, 'stress', p.stress), bar(h, 'morale', p.morale),
@@ -269,7 +282,8 @@ function tasksPanel({ h, v, run, rerender }) {
       h('th', { scope: 'row' }, p.name),
       h('td', {}, roleText(p)),
       h('td', {}, taskSelect),
-      h('td', {}, clientSelect || '', ended && h('span', { class: 'warn' }, ` ${T.clientEnded}`)));
+      h('td', {}, clientSelect || '', ended && h('span', { class: 'warn' }, ` ${T.clientEnded}`),
+        !pendingPhone.has(p.id) && withSpace(coveringLabel(h, v, p))));
   });
   return [title(h, T.title, T.help),
     h('p', { class: 'seats' }, fill(T.seatsOf, { n: seated, seats: v.office.seats }), byClient.length > 0 && ` · ${byClient.join(' · ')}`),

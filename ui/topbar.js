@@ -90,6 +90,11 @@ export function renderMetrics(root, v) {
       return h('li', { class: 'metric weekend-only', 'data-client': c.id, title: M.weekendOnlyTip },
         h('strong', {}, c.name), label, h('span', {}, M.weekendOnly));
     }
+    // A client that does not open at all today (a weekday client at the weekend).
+    if (c.openToday === false) {
+      return h('li', { class: 'metric closed-today', 'data-client': c.id, title: M.closedTodayTip },
+        h('strong', {}, c.name), label, h('span', {}, M.closedToday));
+    }
     const t = c.today;
     const email = c.channel === 'email';
     const share = email ? c.onTime ?? null : t.serviceLevel;

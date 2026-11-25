@@ -299,25 +299,28 @@ test('roster with a weekend client: week header, six-day column heading, equal c
     callsPerDay: 60, ahtMin: 5, patienceSec: 90, hours: { days: [5, 6], open: 540, close: 1080 },
   };
   CLIENTS.push(fake);
-  const state = createGame(3);
-  state.clients.push({ id: fake.id, satisfaction: 70, active: true });
-  const p = state.people[0];
-  state.roster[p.id] = { 0: 'early', 1: 'early', 2: 'early', 3: 'early', 4: 'early', 5: 'weekend' };
+  let weekView;
+  try {
+    const state = createGame(3);
+    state.clients.push({ id: fake.id, satisfaction: 70, active: true });
+    const p = state.people[0];
+    state.roster[p.id] = { 0: 'early', 1: 'early', 2: 'early', 3: 'early', 4: 'early', 5: 'weekend' };
+    weekView = view(state);
+  } finally {
+    CLIENTS.splice(CLIENTS.indexOf(fake), 1);
+  }
   const root = makeRoot();
-  const weekView = view(state);
-  CLIENTS.splice(CLIENTS.indexOf(fake), 1);
   renderPanel(root, weekView, 'roster', () => ({ ok: true }));
   const table = root.querySelector('table.roster');
-  assert.equal(table.getAttribute('aria-label'), '월 · 화 · 수 · 목 · 금 · 토 · 일');
   const heads = [...table.querySelectorAll('thead th')];
   assert.ok(heads.some((th) => th.textContent === '주 6일'), heads.map((th) => th.textContent).join('|'));
-  const row = table.querySelector('tbody tr.six-days');
-  assert.ok(row, 'the six-day row shows');
-  assert.equal(heads.length, row.children.length, 'header cells equal row cells');
+  assert.ok(table.querySelector('tbody tr.six-days'), 'the six-day row shows');
+  const rows = [...table.querySelectorAll('tbody tr, tfoot tr')];
+  assert.ok(table.querySelector('tfoot tr'), 'the weekend count row shows');
+  for (const r of rows) assert.equal(r.children.length, heads.length, 'every row has as many cells as the header');
   // Without a six-day row there is no extra heading.
   const calm = createGame(3);
   const root2 = makeRoot();
   renderPanel(root2, view(calm), 'roster', () => ({ ok: true }));
-  assert.equal(root2.querySelector('table.roster').getAttribute('aria-label'), '월 · 화 · 수 · 목 · 금');
   assert.ok(![...root2.querySelectorAll('thead th')].some((th) => th.textContent === '주 6일'));
 });

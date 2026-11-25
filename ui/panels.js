@@ -224,11 +224,12 @@ function rosterPanel({ h, v, run }) {
   const count = (w) => v.people.filter((p) => p.week?.[w] === 'weekend').length;
   const foot = weekend && h('tfoot', {}, h('tr', {}, h('th', {}),
     PLANET.weekdays.slice(0, WEEKDAYS).map(() => h('td', {})),
-    [WEEKDAYS, WEEKDAYS + 1].map((w) => h('td', { 'data-weekend-count': w }, fill(R.weekendCount, { n: count(w) })))));
+    [WEEKDAYS, WEEKDAYS + 1].map((w) => h('td', { 'data-weekend-count': w }, fill(R.weekendCount, { n: count(w) }))),
+    sixAny && h('td', {})));
   return [title(h, R.title, R.help),
     weekend && h('p', { class: 'help' }, R.weekendHelp),
     h('p', { class: 'help' }, R.hours),
-    h('table', { class: 'roster', 'aria-label': weekend ? R.colDaysWeekend : R.colDays }, h('thead', {}, head), h('tbody', {}, rows), foot)];
+    h('table', { class: 'roster' }, h('thead', {}, head), h('tbody', {}, rows), foot)];
 }
 
 function tasksPanel({ h, v, run, rerender }) {

@@ -823,6 +823,200 @@ const PLANT = [
   '................',
 ];
 
+// ---- Office props (v1.5) ----------------------------------------------------
+// Placed by MAP.props (render/map.js): each stands on the bottom edge of its
+// cell. Wall-row props (back wall, row 0) hang on the wall face or stand on
+// the floor line against it; floor props sit on furniture cells nobody walks
+// on, and the taller ones reach up over a wall or desk cell.
+
+// Wall clock: white face, hands at three o'clock.
+const CLOCK = [
+  '................',
+  '................',
+  '................',
+  '................',
+  '.....OOOOO......',
+  '....OiigiiO.....',
+  '...OiiikiisO....',
+  '...OiiikiisO....',
+  '...OgiikkkgO....',
+  '...OiiiiiisO....',
+  '...OiiiiissO....',
+  '....OsigssO.....',
+  '.....OOOOO......',
+  '......xxxx......',
+  '................',
+  '................',
+];
+// Whiteboard: marker notes, a small bar chart, a sticky note and a pen tray.
+const WALL_BOARD = [
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '..OOOOOOOOOOOOOOOOOOOOOOOOOOOO..',
+  '..OGGGGGGGGGGGGGGGGGGGGGGGGGGO..',
+  '..OGiNNNNiiiRRRiiiiiiiiiiYYiGO..',
+  '..OGiiiiiiiiiiiiiiiiiLiiiYYiGO..',
+  '..OGiNNNiiNNNNiiiiiLiLiiiiiiGO..',
+  '..OGiiiiiiiiiiiiiNiLiLiiRRRiGO..',
+  '..OGiRRiiNNNNNiiiNiLiLiiiiiiGO..',
+  '..OGssssssssssssssssssssssssGO..',
+  '..OOOOOOOOOOOOOOOOOOOOOOOOOOOO..',
+  '....OgRgNgLgggggggggggggggggO...',
+  '.....OOOOOOOOOOOOOOOOOOOOOOO....',
+  '................................',
+];
+// Cork board: pinned notes in four colours.
+const CORKBOARD = [
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '...OOOOOOOOOOOOOOOOOOOOOOOOOO...',
+  '...OeeeeeeeeeeeeeeeeeeeeeeeeO...',
+  '...OerrdriRrrrrdrrYRYrrrrdreO...',
+  '...OeriiiirruuRrrrYYYrrBBrreO...',
+  '...OeriNiirruuurdrYYYrrBBrreO...',
+  '...OeriiiirrrrrrrrrrrdrrrrreO...',
+  '...OedrrrrriiiRirrrrrruuurreO...',
+  '...OerrBRrriNiiirrdrrruuurreO...',
+  '...OeeeeeeeeeeeeeeeeeeeeeeeeO...',
+  '...OOOOOOOOOOOOOOOOOOOOOOOOOO...',
+  '................................',
+  '................................',
+];
+// Pantry counter against the back wall: microwave, coffee maker, two mugs.
+const PANTRY_COUNTER = [
+  '................................',
+  '................................',
+  '................................',
+  '..OOOOOOOOOOOO....OOOOOOO.......',
+  '..OGGGGGGGGGGO....OmmmmmO.......',
+  '..OGmmmmmmOggO....OmRmmmO.......',
+  '..OGmNmmmmOgYO....OOOOOOO.......',
+  '..OGmmNmmmOggO.....OzzzO..OO.OO.',
+  '..OGmmmmmmOgRO....OmOzzzOmOiOOuO',
+  'OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO',
+  'OssssssssssssssssssssssssssssssO',
+  'OGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGO',
+  'OdddddddOdddddddOdddddddOddddddO',
+  'OddGGdddOdddGGddOddGGdddOdddGGdO',
+  'OeeeeeeeOeeeeeeeOeeeeeeeOeeeeeeO',
+  'OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO',
+];
+// Water cooler (16x32): blue bottle on a white cabinet, red and blue taps.
+const COOLER = [
+  ...Array(10).fill('................'),
+  '......OOOO......',
+  '.....OnnnnO.....',
+  '....OnniinnO....',
+  '....OnNinnNO....',
+  '....OnNnnnNO....',
+  '....ONNNNNNO....',
+  '.....OOOOOO.....',
+  '...OOOOOOOOOO...',
+  '...OiiiiiiisO...',
+  '...OiOOOOOOsO...',
+  '...OiORmmjOsO...',
+  '...OiOmmmmOsO...',
+  '...OiOggggOsO...',
+  '...OiOOOOOOsO...',
+  '...OiiiiiiisO...',
+  '...OsOOOOOOGO...',
+  '...OsOssssOGO...',
+  '...OsOssssOGO...',
+  '...OsOOOOOOGO...',
+  '...OGGGGGGGGO...',
+  '...OOOOOOOOOO...',
+  '................',
+];
+// Cubicle divider over a desk pair: a fabric panel along the line between
+// the facing desks, with a post at each end.
+const DIVIDER = [
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  'OO............................OO',
+  'GOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOG',
+  'GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG',
+  'OTtTtTtTtTtTtTtTtTtTtTtTtTtTtTtO',
+  'OTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTO',
+  'OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO',
+];
+// Bin against the wall, a crumpled sheet on top.
+const BIN = [
+  ...Array(7).fill('................'),
+  '.......OO.......',
+  '.....OOiiOO.....',
+  '....OmmmmmmO....',
+  '....OGGgGGgO....',
+  '....OGGgGGgO....',
+  '....OGGgGGgO....',
+  '....OGGgGGgO....',
+  '.....OOOOOO.....',
+  '................',
+];
+// Tall plant (16x32): broad leaves on a slim stem, in a terracotta pot.
+const PLANT_TALL = [
+  ...Array(3).fill('................'),
+  '.......OO.......',
+  '......OLLO......',
+  '.....OLlLLO.OO..',
+  '.OO..OLlLLOOLLO.',
+  'OLLO.OLLlLOLLlO.',
+  'OLlLOOLLlOLLlLO.',
+  '.OLlLOOLlOLlLO..',
+  '..OLLlOOlOlLO...',
+  '...OOLlOlOOO.OO.',
+  '..OO.OOlOO..OLLO',
+  '.OLLO..lO..OLLlO',
+  'OLlLLO.l..OLLlO.',
+  'OLLlLLOl.OLLlO..',
+  '.OLLlLOlOLLlO...',
+  '..OOLLllLLOO....',
+  '....OOOlOO......',
+  '...OLLOlO.......',
+  '..OLlLLlO.......',
+  '...OOLLlO.......',
+  '.....OOlO.......',
+  '....OOOOOOO.....',
+  '....OpppppO.....',
+  '....OpppPpO.....',
+  '....OppppPO.....',
+  '.....OpppO......',
+  '.....OppPO......',
+  '.....OPPPO......',
+  '.....OOOOO......',
+  '................',
+];
+// Bushy plant: a round leafy bush with small blossoms in a woven basket.
+const PLANT_BUSH = [
+  '.....OOOOOO.....',
+  '...OOLLLLlLOO...',
+  '..OLLuLLLLLLlO..',
+  '.OLLLLlLLLuLLLO.',
+  '.OLlLLLLlLLLlLO.',
+  'OLLLuLLLLLLLLLLO',
+  'OLlLLLlLLLuLlLLO',
+  'OlLLLLLLlLLLLLlO',
+  '.OlLLlLLLLLlLlO.',
+  '..OllLLlLLLllO..',
+  '..OOllllllllOO..',
+  '...OdedededeO...',
+  '...OededededO...',
+  '...OdedededeO...',
+  '....OeeeeeeO....',
+  '.....OOOOOO.....',
+];
+
 // ---- Status icons (9x9, drawn inside a speech bubble) ----------------------
 
 const ICON_SICK = [
@@ -889,6 +1083,8 @@ export const SPRITES = Object.freeze({
   papers: sprite('office', PAPERS),
   chair: sprite('office', CHAIR),
   chairBack: sprite('office', flip(CHAIR)),
+  // the backrest alone, drawn over a person sitting with their back to the viewer
+  chairRest: sprite('office', flip(CHAIR).map((r, y) => (y < 10 ? '................' : r))),
   sofa: sprite('office', SOFA_M),
   sofaL: sprite('office', SOFA_L),
   sofaR: sprite('office', mirror(SOFA_L)),
@@ -898,11 +1094,21 @@ export const SPRITES = Object.freeze({
   coffee: sprite('office', COFFEE),
   coffeePlus: sprite('office', COFFEE_PLUS),
   table: sprite('office', TABLE),
-  whiteboard: sprite('office', WHITEBOARD),
+  tableBoard: sprite('office', WHITEBOARD),
   bed: sprite('office', BED),
   placeholder: sprite('office', PLACEHOLDER),
   construction: sprite('office', CONSTRUCTION),
   plant: sprite('office', PLANT),
+  // props (MAP.props)
+  clock: sprite('office', CLOCK),
+  whiteboard: sprite('office', WALL_BOARD),
+  corkboard: sprite('office', CORKBOARD),
+  pantryCounter: sprite('office', PANTRY_COUNTER),
+  cooler: sprite('office', COOLER),
+  divider: sprite('office', DIVIDER),
+  bin: sprite('office', BIN),
+  plantTall: sprite('office', PLANT_TALL),
+  plantBush: sprite('office', PLANT_BUSH),
   // icons
   iconSick: sprite('office', ICON_SICK),
   iconStress: sprite('office', ICON_STRESS),

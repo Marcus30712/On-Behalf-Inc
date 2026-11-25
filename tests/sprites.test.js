@@ -240,3 +240,51 @@ test('expansion areas draw by office level: empty, under construction, furnished
   check({ level: 2, build: null }, ['built', 'built']);
   check({ level: 0, build: null }, ['empty', 'empty']); // the cache follows the level back down
 });
+
+// ---- v1.5 office props ----------------------------------------------------------
+
+const PROPS = ['cooler', 'pantryCounter', 'whiteboard', 'corkboard', 'clock', 'divider', 'bin', 'plantTall', 'plantBush'];
+
+test('prop sprites: office palette, whole cells wide, at most two cells tall', () => {
+  for (const name of PROPS) {
+    const s = SPRITES[name];
+    assert.ok(s, `${name} exists`);
+    assert.equal(s.palette, 'office', name);
+    assert.ok(s.w % 16 === 0 && s.w >= 16, `${name}: width ${s.w}`);
+    assert.ok(s.h >= 8 && s.h <= 32, `${name}: height ${s.h}`);
+    assert.ok(s.rows.join('').replace(/\./g, '').length > 0, `${name}: not empty`);
+  }
+});
+
+test('props are painted on the office layer, standing on their cell, at every level', () => {
+  const drawer = createDrawer(fakeCanvas);
+  const U = TILE_PX / 16;
+  for (const office of [undefined, { level: 0, build: null }, { level: 0, build: { level: 1, workdaysLeft: 3 } },
+    { level: 1, build: null }, { level: 2, build: null }]) {
+    const screen = fakeCanvas(960, 576);
+    drawer.drawOffice(screen.getContext(), MAP, null, office);
+    const ops = screen.ops.at(-1)[1].ops.filter((o) => o[0] === 'drawImage');
+    const label = JSON.stringify(office);
+    let lastTile = -1;
+    ops.forEach((o, i) => { if (o[1] === drawer.spriteCanvas('floor')) lastTile = i; });
+    for (const p of MAP.props) {
+      const s = SPRITES[p.id];
+      const want = [p.x * TILE_PX, (p.y + 1) * TILE_PX - s.h * U, s.w * U, s.h * U];
+      const hits = ops.map((o, i) => [o, i]).filter(([o]) => o[1] === drawer.spriteCanvas(p.id)
+        && JSON.stringify(o.slice(2)) === JSON.stringify(want));
+      assert.equal(hits.length, 1, `${label}: ${p.id}@${p.x},${p.y} drawn once at ${want}`);
+      assert.ok(hits[0][1] > lastTile, `${label}: ${p.id} drawn after every tile`);
+    }
+    for (const p of MAP.props) { // a prop on a plant corner replaces the old plant
+      if (MAP.tiles[p.y][p.x] !== 'P') continue;
+      const plant = ops.filter((o) => o[1] === drawer.spriteCanvas('plant') && o[2] === p.x * TILE_PX && o[3] === p.y * TILE_PX);
+      assert.equal(plant.length, 0, `${label}: ${p.id} replaces the old plant at ${p.x},${p.y}`);
+    }
+  }
+});
+
+test('the task-table board of stress training keeps its own sprite', () => {
+  assert.ok(SPRITES.tableBoard, 'renamed from whiteboard, which is now the wall board');
+  assert.equal(SPRITES.tableBoard.w, 16);
+  assert.equal(SPRITES.tableBoard.h, 16);
+});

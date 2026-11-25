@@ -170,3 +170,27 @@ test('a click on the head (above the tile) picks the person; above the head does
   assert.equal(personAt(actors, x, 6 * TILE_PX - 4 * U), 'front', 'the lower person is in front');
   assert.equal(personAt([{ ...seated('gone', [3, 5]), gone: true }], x, 5 * TILE_PX), null);
 });
+
+// v1.5 Task 4: the chair back shows in front of a person sitting with their
+// back to the viewer (it was hidden under them); nobody else gets it.
+test('a back-facing sitter has the chair back drawn over them; front sitters and walkers do not', () => {
+  const { drawer, ctx } = setup();
+  const back = MAP.spots.seats[4]; // [3,5]
+  const front = MAP.spots.seats[0]; // [3,2]
+  const people = [person('p1', 'agent', 'phone', { task: { kind: 'phone', clientId: 'x' }, answering: 'x' }),
+    person('p2', 'agent', 'idle'), person('p3', 'agent', 'idle')];
+  const walker = { id: 'p3', x: 5, y: 5, path: [[5, 6]], target: [5, 6], gone: false }; // on a chair tile, walking
+  drawer.drawActors(ctx, [seated('p1', back), seated('p2', front), walker], people, 0, [{ id: 'x', channel: 'phone' }]);
+  const rest = drawer.spriteCanvas('chairRest').id;
+  const rests = ctx.ops.map((o, i) => [o, i]).filter(([o]) => o[0] === 'drawImage' && o[1] === rest);
+  assert.equal(rests.length, 1, 'one chair back');
+  const [[op, at]] = rests;
+  assert.deepEqual(op.slice(2), [back[0] * TILE_PX, back[1] * TILE_PX, TILE_PX, TILE_PX], 'on the seat tile');
+  const sitter = ctx.ops.findIndex((o) => o[0] === 'drawImage' && o[1] === drawer.personCanvas(people[0], 'sitBack').id);
+  const headset = ctx.ops.findIndex((o) => o[0] === 'drawImage' && o[1] === drawer.spriteCanvas('headsetBack').id);
+  assert.ok(sitter >= 0 && sitter < at, 'after the sitter');
+  assert.ok(headset > at, 'the headset still goes on last');
+  // only the backrest: the top 10 rows (seat and legs, under the sitter) are clear
+  assert.ok(SPRITES.chairRest.rows.slice(0, 10).every((r) => /^\.+$/.test(r)));
+  assert.deepEqual(SPRITES.chairRest.rows.slice(10), SPRITES.chairBack.rows.slice(10));
+});

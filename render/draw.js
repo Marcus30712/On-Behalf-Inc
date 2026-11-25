@@ -127,7 +127,14 @@ export function createDrawer(makeCanvas = defaultMakeCanvas) {
     g.fillRect(x0 + w - U, y0, U, h);
   }
 
-  function drawTile(g, map, x, y, fac, unbuilt) {
+  // A prop stands on the bottom edge of its cell and may reach up over the
+  // cell above (a wall or desk: nobody stands there).
+  function drawProp(g, p) {
+    const s = SPRITES[p.id];
+    g.drawImage(spriteCanvas(p.id), p.x * TILE_PX, (p.y + 1) * TILE_PX - s.h * U, s.w * U, s.h * U);
+  }
+
+  function drawTile(g, map, x, y, fac, unbuilt, propCells) {
     const ch = tileAt(map, x, y);
     const px = x * TILE_PX;
     const py = y * TILE_PX;
@@ -147,7 +154,7 @@ export function createDrawer(makeCanvas = defaultMakeCanvas) {
     put('floor');
     switch (ch) {
       case 'E': put('door'); break;
-      case 'P': put('plant'); break;
+      case 'P': if (!propCells.has(`${x},${y}`)) put('plant'); break;
       case 'C': put(tileAt(map, x, y - 1) === 'D' ? 'chairBack' : 'chair'); break;
       case 'D': {
         put('desk');
@@ -170,7 +177,7 @@ export function createDrawer(makeCanvas = defaultMakeCanvas) {
         runEdges(g, map, x, y, 'T', px, py, { from: 2, to: 14 });
         if (fac.done.has('stress-training')) {
           const middle = tileAt(map, x - 1, y) === 'T' && tileAt(map, x + 1, y) === 'T';
-          put(middle ? 'whiteboard' : 'papers');
+          put(middle ? 'tableBoard' : 'papers');
         }
         break;
       }
@@ -196,9 +203,12 @@ export function createDrawer(makeCanvas = defaultMakeCanvas) {
       const g = canvas.getContext('2d');
       g.imageSmoothingEnabled = false;
       const unbuilt = unbuiltTiles(map, officeState);
+      const props = [...(map.props ?? [])].sort((l, r) => l.y - r.y || l.x - r.x);
+      const propCells = new Set(props.flatMap((p) => Array.from({ length: SPRITES[p.id].w / 16 }, (_, i) => `${p.x + i},${p.y}`)));
       for (let y = 0; y < map.height; y++) {
-        for (let x = 0; x < map.width; x++) drawTile(g, map, x, y, fac, unbuilt);
+        for (let x = 0; x < map.width; x++) drawTile(g, map, x, y, fac, unbuilt, propCells);
       }
+      for (const p of props) drawProp(g, p);
       for (const e of map.expansions ?? []) if (e.level > level) areaOutline(g, e);
       office = { key, canvas };
     }
@@ -258,6 +268,7 @@ export function createDrawer(makeCanvas = defaultMakeCanvas) {
       const [px, py] = spot(a);
       const { name, back } = pose(a, p, timeMs);
       ctx.drawImage(personCanvas(p, name), px, py, PERSON_W, PERSON_H);
+      if (name === 'sitBack') blit(ctx, 'chairRest', px, py + PERSON_LIFT); // the chair back is nearer than they are
       if (p.role === 'qa' && !back) blit(ctx, 'lanyard', px, py);
       if (p.role !== 'agent' || p.activity !== 'phone') continue;
       const mark = CHANNEL_MARKS[channelOf.get(p.answering ?? p.task?.clientId)];

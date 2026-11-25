@@ -291,3 +291,36 @@ test('people who are sick, on burnout, on leave or absent show their health stat
   assert.ok(text.includes(UI_TEXT.health.absent.name), text);
   assert.ok(!text.includes(UI_TEXT.activity.off), text);
 });
+
+test('roster with a weekend client: week header, six-day column heading, equal cell counts', () => {
+  const fake = {
+    id: 'panel-weekend', name: '주말 시험 고객사', industry: '시험', nation: 'veltora', start: false,
+    slTarget: { pct: 80, sec: 20 }, monthlyFee: 10000,
+    callsPerDay: 60, ahtMin: 5, patienceSec: 90, hours: { days: [5, 6], open: 540, close: 1080 },
+  };
+  CLIENTS.push(fake);
+  let weekView;
+  try {
+    const state = createGame(3);
+    state.clients.push({ id: fake.id, satisfaction: 70, active: true });
+    const p = state.people[0];
+    state.roster[p.id] = { 0: 'early', 1: 'early', 2: 'early', 3: 'early', 4: 'early', 5: 'weekend' };
+    weekView = view(state);
+  } finally {
+    CLIENTS.splice(CLIENTS.indexOf(fake), 1);
+  }
+  const root = makeRoot();
+  renderPanel(root, weekView, 'roster', () => ({ ok: true }));
+  const table = root.querySelector('table.roster');
+  const heads = [...table.querySelectorAll('thead th')];
+  assert.ok(heads.some((th) => th.textContent === '주 6일'), heads.map((th) => th.textContent).join('|'));
+  assert.ok(table.querySelector('tbody tr.six-days'), 'the six-day row shows');
+  const rows = [...table.querySelectorAll('tbody tr, tfoot tr')];
+  assert.ok(table.querySelector('tfoot tr'), 'the weekend count row shows');
+  for (const r of rows) assert.equal(r.children.length, heads.length, 'every row has as many cells as the header');
+  // Without a six-day row there is no extra heading.
+  const calm = createGame(3);
+  const root2 = makeRoot();
+  renderPanel(root2, view(calm), 'roster', () => ({ ok: true }));
+  assert.ok(![...root2.querySelectorAll('thead th')].some((th) => th.textContent === '주 6일'));
+});

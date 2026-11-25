@@ -2,7 +2,7 @@
 // Pure rules, no DOM.
 //
 // state.hiring = null | { workdays, waitDays?, candidates? }; state.nextId numbers new people.
-// The game calls advanceHiring once per workday, after endOfDay.
+// The game calls advanceHiring once per Mon-Fri workday (v1.4, even with a weekend client), after endOfDay.
 import { createPerson } from './people.js';
 import { pushEvent } from './events.js';
 import { neediestClient } from './economy.js';

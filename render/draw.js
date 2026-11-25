@@ -220,14 +220,18 @@ export function createDrawer(makeCanvas = defaultMakeCanvas) {
   // A chat or email agent at work: a small 💬 or ✉️ by the head in place of
   // the headset (no art of its own).
   function channelMark(ctx, mark, px, py) {
+    ctx.save();
     ctx.font = `${MARK_PX}px sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(mark, px + 14 * U, py + 2 * U);
+    ctx.restore();
   }
 
   // clients: view.clients; an agent answering a chat or email client gets
-  // that channel's mark instead of the headset.
+  // that channel's mark instead of the headset. The client answered now
+  // (p.answering) decides, so an email agent covering a phone client wears the
+  // headset.
   function drawActors(ctx, actors, peopleView, timeMs = 0, clients = []) {
     ctx.imageSmoothingEnabled = false;
     const channelOf = new Map(clients.map((c) => [c.id, c.channel]));
@@ -236,7 +240,7 @@ export function createDrawer(makeCanvas = defaultMakeCanvas) {
       const { name, back } = pose(a, p, timeMs);
       blit(ctx, name, px, py, personPalette(p), `person:${p.id}`);
       if (p.role !== 'agent' || p.activity !== 'phone') continue;
-      const mark = CHANNEL_MARKS[channelOf.get(p.task?.clientId)];
+      const mark = CHANNEL_MARKS[channelOf.get(p.answering ?? p.task?.clientId)];
       if (mark) channelMark(ctx, mark, px, py);
       else blit(ctx, back ? 'headsetBack' : 'headset', px, py);
     }

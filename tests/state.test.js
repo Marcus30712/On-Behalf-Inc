@@ -138,3 +138,28 @@ test('v1.2 save loads without backlog', async () => {
   assert.equal(advance(s, 1440), 1440);
   assert.equal(s.day, 1);
 });
+
+// v1.4 Task 6: a malformed backlog entry in a save resets to an empty entry; it never throws.
+test('deserialize resets a malformed backlog entry', () => {
+  const raw = JSON.parse(serialize(newGame(2)));
+  raw.backlog = { x: 5, y: { openMin: 30, items: 'no' }, z: null, w: [], ok: { openMin: 60, items: [{ at: 30, n: 2 }], carry: 0.5 } };
+  const s = deserialize(JSON.stringify(raw));
+  assert.ok(s);
+  for (const k of ['x', 'y', 'z', 'w']) assert.deepEqual(s.backlog[k], { openMin: 0, items: [], carry: 0 }, k);
+  assert.deepEqual(s.backlog.ok, { openMin: 60, items: [{ at: 30, n: 2 }], carry: 0.5 });
+});
+
+// v1.4 final fix M6: backlog items are validated one by one.
+test('deserialize drops malformed backlog items and resets non-finite openMin/carry; one step runs', async () => {
+  const { advance } = await import('../sim/game.js');
+  const raw = JSON.parse(serialize(newGame(2)));
+  raw.backlog = {
+    a: { openMin: 0, items: [null, { at: 'x', n: 1 }, { at: 5, n: 2 }], carry: 0 },
+    b: { openMin: 'x', items: [], carry: null },
+  };
+  const s = deserialize(JSON.stringify(raw));
+  assert.ok(s);
+  assert.deepEqual(s.backlog.a.items, [{ at: 5, n: 2 }]);
+  assert.deepEqual(s.backlog.b, { openMin: 0, items: [], carry: 0 });
+  assert.doesNotThrow(() => advance(s, 30));
+});

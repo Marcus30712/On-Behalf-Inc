@@ -70,8 +70,10 @@ function mixedView({ chat = {}, email = {}, emailClient = {} } = {}) {
   Object.assign(books, { backlog: 0, onTime: null, satisfaction: 70 }, emailClient);
   const agents = v.people.filter((p) => p.role === 'agent');
   agents[0].task = { kind: 'phone', clientId: 'saebyeol-bank' };
+  agents[0].answering = 'saebyeol-bank';
   agents[0].activity = 'phone';
   agents[1].task = { kind: 'phone', clientId: 'solbang-books' };
+  agents[1].answering = 'solbang-books';
   agents[1].activity = 'phone';
   return { v, chatAgent: agents[0], mailAgent: agents[1] };
 }
@@ -189,7 +191,7 @@ test('tasks and people: client choices carry the channel; chat and mail agents a
   r = makeRoot();
   selectPerson(mailAgent.id);
   renderPanel(r, v, 'people', () => ({ ok: true }));
-  assert.ok(r.textContent.includes('전화 응대 · 솔방울 서점 · ✉️ 이메일'), r.textContent);
+  assert.ok(r.textContent.includes('상담 응대 · 솔방울 서점 · ✉️ 이메일'), r.textContent);
 });
 
 test('map: chat and email agents at their desks show 💬 or ✉️ instead of the headset', () => {
@@ -232,4 +234,21 @@ test('desk build-done: the advisor does not name the featured person', () => {
   const helped = eventText({ id: 'build-done', day: 1,
     data: { researchId: 'rest-room', names: ['하나'], helped: [{ personId: 'p1', name: '하나' }] } });
   assert.equal(helped.advisor, '보세요, 하나 씨 얼굴이 달라졌죠? 이게 센터장님이 한 일이에요.');
+});
+
+test('the metrics list turns compact from the fifth active client, and only then', () => {
+  const game = createGame(7);
+  const ids = ['dalbit-mall', 'bandi-repair', 'baram-delivery', 'saebyeol-bank', 'solbang-books'];
+  const classes = [];
+  for (let n = 0; n <= ids.length; n++) {
+    if (n > 0) game.clients.push({ id: ids[n - 1], satisfaction: 70, active: true });
+    const r = makeRoot();
+    renderMetrics(r, view(game));
+    classes.push(r.querySelector('ul').className);
+  }
+  // 2, 3, 4 clients as before; 5 phone clients; then 6 and 7 with the channel clients.
+  assert.deepEqual(classes, [
+    'metrics-list', 'metrics-list', 'metrics-list', 'metrics-list compact',
+    'metrics-list channels compact', 'metrics-list channels compact',
+  ]);
 });

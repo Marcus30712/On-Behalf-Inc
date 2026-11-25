@@ -3,7 +3,7 @@
 import { HIRE_COST, SHIFTS } from '../sim/game.js';
 import { CLIENTS } from '../world/clients.js';
 import { UI_TEXT, fill } from './text.js';
-import { formatDate, formatTime, formatMoney, formatPct, formatSec, formatTarget, hasChannels, CHANNEL_TIPS } from './format.js';
+import { formatDate, formatTime, formatMoney, formatPct, formatSec, formatTarget, hasChannels, channelLabel } from './format.js';
 import { SPEEDS } from './clock.js';
 import { builder } from './dom.js';
 import { EVENTS } from '../world/events.js';
@@ -11,6 +11,7 @@ import { EVENTS } from '../world/events.js';
 const OPEN = 9 * 60;
 const CLOSE = 21 * 60;
 const SATURDAY = 5;
+const COMPACT_FROM = 4; // more active clients than this: compact chips
 
 // The closed note, or null while the center is open. With a weekend client
 // Saturday and Sunday open for the weekend shift's hours.
@@ -58,9 +59,6 @@ export function renderTopbar(root, v, clock) {
   );
 }
 
-// The client's channel (📞 전화, 💬 채팅, ✉️ 이메일), its tip on hover.
-const channelLabel = (h, c) => h('span', { class: 'channel', title: CHANNEL_TIPS[c.channel] }, UI_TEXT.channel[c.channel ?? 'phone']);
-
 // The chip's tooltip: the target and today's counts, or the nothing-yet note.
 // Mail counts can be fractional in the sim and are rounded.
 function chipTitle(c) {
@@ -90,6 +88,12 @@ export function renderMetrics(root, v) {
       return h('li', { class: 'metric weekend-only', 'data-client': c.id, title: M.weekendOnlyTip },
         h('strong', {}, c.name), label, h('span', {}, M.weekendOnly));
     }
+    // A client that does not open at all today (a weekday client at the weekend).
+    if (c.openToday === false) {
+      return h('li', { class: 'metric closed-today', 'data-client': c.id, title: M.closedTodayTip },
+        h('strong', {}, c.name), label, h('span', {}, M.closedToday),
+        c.channel === 'email' && h('span', {}, `${M.backlog} ${fill(M.backlogUnit, { n: Math.round(c.backlog ?? 0) })}`));
+    }
     const t = c.today;
     const email = c.channel === 'email';
     const share = email ? c.onTime ?? null : t.serviceLevel;
@@ -113,5 +117,8 @@ export function renderMetrics(root, v) {
     h('span', {}, `${M.satisfaction} ${Math.round(c.satisfaction)}`),
     below && h('span', { class: 'warn' }, M.belowTarget));
   });
-  root.replaceChildren(h('ul', { class: mixed ? 'metrics-list channels' : 'metrics-list' }, items));
+  // From five clients on the chips use the compact form (smaller type, tighter
+  // gaps) so the strip stays within two or three lines at 1280x720.
+  const cls = ['metrics-list', mixed && 'channels', items.length > COMPACT_FROM && 'compact'].filter(Boolean).join(' ');
+  root.replaceChildren(h('ul', { class: cls }, items));
 }

@@ -12,7 +12,7 @@ import { NATIONS } from '../world/nations.js';
 import { CLIENTS } from '../world/clients.js';
 import { PLANET } from '../world/planet.js';
 import { UI_TEXT, fill } from './text.js';
-import { formatDate, formatMoney, formatPct, formatSec, formatTarget, hasChannels, CHANNEL_TIPS } from './format.js';
+import { formatDate, formatMoney, formatPct, formatSec, formatTarget, hasChannels, channelLabel } from './format.js';
 import { builder } from './dom.js';
 
 export const TABS = ['people', 'roster', 'tasks', 'research', 'hiring', 'clients', 'calendar'];
@@ -73,7 +73,6 @@ const nationName = (id) => NATIONS.find((n) => n.id === id)?.name ?? '';
 const clientName = (v, id) => v.clients.find((c) => c.id === id)?.name ?? CLIENTS.find((c) => c.id === id)?.name ?? '';
 // v1.3: the channel of a client in the view ('phone' for older views).
 const channelOf = (v, id) => v.clients.find((c) => c.id === id)?.channel ?? 'phone';
-const channelLabel = (h, c) => h('span', { class: 'channel', title: CHANNEL_TIPS[c.channel] }, UI_TEXT.channel[c.channel ?? 'phone']);
 // A client's name in a list, with its channel once there is more than phone.
 const clientChoice = (v, c) => (hasChannels(v) ? `${c.name} · ${UI_TEXT.channel[c.channel ?? 'phone']}` : c.name);
 const roleText = (p) => [UI_TEXT.role[p.role] ?? p.role,
@@ -103,6 +102,10 @@ export function renderPanel(root, v, tab, onAct, { onClose } = {}) {
   root.replaceChildren(h('section', { class: `panel panel-${tab}`, 'data-tab': tab }, close, body, notice));
 }
 
+// A label after other text in a cell: a space, then the label (nothing without one).
+const withSpace = (label) => label && [' ', label];
+const withSep = (label) => label && [' · ', label];
+
 const title = (h, text, help) => [h('h2', {}, text), help && h('p', { class: 'help' }, help)];
 
 const bar = (h, key, value) => {
@@ -126,8 +129,9 @@ function activityText(v, p) {
   if (p.shiftToday === 'absent') return UI_TEXT.health.absent.name;
   if (p.health?.kind && p.health.kind !== 'well' && UI_TEXT.health[p.health.kind]) return UI_TEXT.health[p.health.kind].name;
   const shift = SHIFTS[p.shiftToday];
-  // An agent answering chat or email is not 전화 중: the channel says what they do.
-  const channel = p.activity === 'phone' && p.task?.kind === 'phone' ? channelOf(v, p.task.clientId) : 'phone';
+  // An agent answering chat or email is not 전화 중: the channel says what they
+  // do, by the client answered now (a covered client's, not their own).
+  const channel = p.activity === 'phone' && p.task?.kind === 'phone' ? channelOf(v, p.answering ?? p.task.clientId) : 'phone';
   if (channel !== 'phone') return UI_TEXT.channel[channel];
   if (p.activity === 'off' && shift && v.minute < shift.start) return UI_TEXT.shift[p.shiftToday].full;
   return UI_TEXT.activity[p.activity] ?? '';
@@ -139,6 +143,15 @@ function taskText(v, task) {
   if (task.kind !== 'phone') return name;
   const channel = channelOf(v, task.clientId);
   return [name, clientName(v, task.clientId), channel !== 'phone' && UI_TEXT.channel[channel]].filter(Boolean).join(' · ');
+}
+
+// "{client} 돕는 중" while the person, on the phone now, answers an open client
+// because their own (still active) client is closed; otherwise null.
+function coveringLabel(h, v, p) {
+  if (p.activity !== 'phone' || p.task?.kind !== 'phone' || !p.answering || p.answering === p.task.clientId) return null;
+  if (!v.clients.some((c) => c.id === p.task.clientId && c.active)) return null;
+  const client = clientName(v, p.answering);
+  return h('span', { class: 'covering', title: fill(UI_TEXT.tasks.coveringTip, { client }) }, fill(UI_TEXT.tasks.covering, { client }));
 }
 
 function personCard({ h, v, rerender }) {
@@ -161,7 +174,7 @@ function personCard({ h, v, rerender }) {
       h('dt', {}, C.nation), h('dd', {}, nationName(p.nation)),
       h('dt', {}, C.health), h('dd', {}, healthText(p)),
       h('dt', {}, C.shiftToday), h('dd', {}, shift),
-      h('dt', {}, C.task), h('dd', {}, taskText(v, p.task))),
+      h('dt', {}, C.task), h('dd', {}, taskText(v, p.task), withSep(coveringLabel(h, v, p)))),
     h('h4', {}, C.traits), h('ul', { class: 'traits' }, traits),
     h('h4', {}, C.skills), h('ul', { class: 'skills' }, skills),
     h('h4', {}, C.condition), bar(h, 'fatigue', p.fatigue), bar(h, 'stress', p.stress), bar(h, 'morale', p.morale),
@@ -199,8 +212,10 @@ function rosterPanel({ h, v, run }) {
   const today = v.date.weekday;
   const weekend = !!v.flags?.weekend;
   const days = weekend ? WEEK : WEEKDAYS;
+  const sixAny = v.people.some((p) => workedDays(v, p) >= SIX_DAYS);
   const head = h('tr', {}, h('th', {}, R.colName), PLANET.weekdays.slice(0, days).map((d, w) =>
-    h('th', { class: w === today ? 'today' : null, title: w === today ? R.todayMark : null }, d)));
+    h('th', { class: w === today ? 'today' : null, title: w === today ? R.todayMark : null }, d)),
+    sixAny && h('th', { class: 'warn' }, R.colSixDays));
   const rows = v.people.map((p) => {
     const worked = workedDays(v, p);
     const six = worked >= SIX_DAYS;
@@ -217,12 +232,13 @@ function rosterPanel({ h, v, run }) {
       h('th', { scope: 'row' }, p.name,
         six && h('small', { class: 'warn six-days-mark', title: R.sixDays }, ' ', fill(R.sixDaysShort, { n: worked }))),
       cells,
-      six && h('td', { class: 'warn six-days-note' }, R.sixDays));
+      sixAny && h('td', { class: six ? 'warn six-days-note' : null }, six ? R.sixDays : null));
   });
   const count = (w) => v.people.filter((p) => p.week?.[w] === 'weekend').length;
   const foot = weekend && h('tfoot', {}, h('tr', {}, h('th', {}),
     PLANET.weekdays.slice(0, WEEKDAYS).map(() => h('td', {})),
-    [WEEKDAYS, WEEKDAYS + 1].map((w) => h('td', { 'data-weekend-count': w }, fill(R.weekendCount, { n: count(w) })))));
+    [WEEKDAYS, WEEKDAYS + 1].map((w) => h('td', { 'data-weekend-count': w }, fill(R.weekendCount, { n: count(w) }))),
+    sixAny && h('td', {})));
   return [title(h, R.title, R.help),
     weekend && h('p', { class: 'help' }, R.weekendHelp),
     h('p', { class: 'help' }, R.hours),
@@ -236,7 +252,9 @@ function tasksPanel({ h, v, run, rerender }) {
   const onPhone = v.people.filter((p) => p.task?.kind === 'phone');
   // Seats are for agents (sim/hiring.js); a lead or QA on the phone uses their own desk.
   const seated = onPhone.filter((p) => p.role === 'agent').length;
-  const byClient = active.map((c) => fill(T.byClient, { client: c.name, n: onPhone.filter((p) => p.task.clientId === c.id).length }));
+  // Now: people on the phone count under the client they answer, the others
+  // under their assigned client (view.people[].answering).
+  const byClient = active.map((c) => fill(T.byClient, { client: c.name, n: onPhone.filter((p) => p.answering === c.id).length }));
   const rows = v.people.map((p) => {
     const phone = p.task?.kind === 'phone' || pendingPhone.has(p.id);
     const kind = pendingPhone.has(p.id) ? 'phone' : p.task?.kind ?? '';
@@ -266,7 +284,8 @@ function tasksPanel({ h, v, run, rerender }) {
       h('th', { scope: 'row' }, p.name),
       h('td', {}, roleText(p)),
       h('td', {}, taskSelect),
-      h('td', {}, clientSelect || '', ended && h('span', { class: 'warn' }, ` ${T.clientEnded}`)));
+      h('td', {}, clientSelect || '', ended && h('span', { class: 'warn' }, ` ${T.clientEnded}`),
+        !pendingPhone.has(p.id) && withSpace(coveringLabel(h, v, p))));
   });
   return [title(h, T.title, T.help),
     h('p', { class: 'seats' }, fill(T.seatsOf, { n: seated, seats: v.office.seats }), byClient.length > 0 && ` · ${byClient.join(' · ')}`),
@@ -355,8 +374,7 @@ function officeStage(ctx, level) {
 function officeSection(ctx) {
   const { h, v } = ctx;
   const O = UI_TEXT.office;
-  let rent = 0;
-  for (let i = 1; i <= v.office.level; i++) rent += OFFICE_LEVELS[i].rent;
+  const rent = v.office.rentThisMonth ?? 0;
   const stages = OFFICE_LEVELS.slice(1).map((_, i) => officeStage(ctx, i + 1));
   return h('section', { class: 'office' },
     h('h3', {}, O.title),

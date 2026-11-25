@@ -85,6 +85,8 @@ export const UI_TEXT = {
     "belowTarget": "목표 아래",
     "weekendOnly": "주말 운영",
     "weekendOnlyTip": "이 고객사는 토·일에만 전화를 받아요.",
+    "closedToday": "오늘 휴무",
+    "closedTodayTip": "이 고객사는 오늘 문을 열지 않아요.",
     "today": "오늘",
     "backlog": "밀린 메일",
     "backlogUnit": "{n}통",
@@ -245,12 +247,11 @@ export const UI_TEXT = {
     "title": "근무표",
     "help": "칸을 누를 때마다 이른 조 → 늦은 조 → 휴무 순서로 바뀌어요.",
     "colName": "이름",
-    "colDays": "월 · 화 · 수 · 목 · 금",
-    "colDaysWeekend": "월 · 화 · 수 · 목 · 금 · 토 · 일",
     "weekendHelp": "토·일 칸은 주말 조 → 휴무 순서로 바뀌어요. 주말 조는 09:00~18:00예요.",
     "weekendCount": "주말 조 {n}명",
     "sixDays": "주 6일 이상 일해요. 피로가 빨리 쌓여요.",
     "sixDaysShort": "주 {n}일",
+    "colSixDays": "주 6일",
     "count": "이른 조 {n}명 · 늦은 조 {n}명",
     "hours": "이른 조 09:00~18:00 · 늦은 조 12:00~21:00",
     "empty": "근무표에 올릴 사람이 없어요.",
@@ -276,7 +277,7 @@ export const UI_TEXT = {
   },
   "tasks": {
     "title": "업무 배치",
-    "help": "사람마다 맡을 일을 골라요. 전화 응대는 어느 고객사 전화를 받을지도 골라요.",
+    "help": "사람마다 맡을 일을 골라요. 상담 응대는 어느 고객사를 맡을지도 골라요.",
     "colName": "이름",
     "colRole": "역할",
     "colTask": "맡은 일",
@@ -286,11 +287,13 @@ export const UI_TEXT = {
     "seatsOf": "상담사 좌석 {n} / {seats}",
     "byClient": "{client} 응대 {n}명",
     "empty": "일을 맡길 사람이 없어요.",
-    "clientEnded": "계약 끝난 고객사예요. 다른 일을 맡겨 주세요."
+    "clientEnded": "계약 끝난 고객사예요. 다른 일을 맡겨 주세요.",
+    "covering": "{client} 돕는 중",
+    "coveringTip": "맡은 고객사가 문을 닫은 시간이라, 문을 연 {client}을 돕고 있어요."
   },
   "task": {
     "phone": {
-      "name": "전화 응대",
+      "name": "상담 응대",
       "tip": "고객사 전화를 받아요."
     },
     "coaching": {
@@ -387,7 +390,6 @@ export const UI_TEXT = {
     },
     "building": "이미 공사를 하고 있어요. 끝난 뒤에 다시 넓혀요.",
     "max-level": "더 넓힐 곳이 없어요.",
-    "need-previous": "창가 구역을 먼저 넓혀야 해요.",
     "bad-weekday": "근무표는 월~금만 정할 수 있어요.",
     "bad-shift": "이른 조, 늦은 조, 휴무 중에서 골라 주세요.",
     "bad-task": "맡길 수 없는 일이에요.",
@@ -397,7 +399,6 @@ export const UI_TEXT = {
   },
   "office": {
     "title": "사무실",
-    "tabTip": "사무실을 넓혀 좌석을 늘려요",
     "help": "넓히면 상담사 좌석이 늘어 더 많이 뽑을 수 있어요. 대신 다달이 임대료가 나가요.",
     "seatsNow": "지금 상담사 좌석 {seats}개",
     "cost": "공사 비용 💰 {cost}",
@@ -545,6 +546,9 @@ export function fill(template, values = {}) {
     .replace(/(\S)이\(가\)/gu, (_, ch, off, s) => ch + (jongseong(lastChar(s.slice(0, off + 1))) === 0 ? '가' : '이'));
 }
 
+// The names of the people a desk build helped, joined with a middle dot.
+const helpedNames = (helped) => helped.map((x) => x.name).join('·');
+
 // The values an event's templates can use, read from its data (see sim/*.js pushEvent calls).
 function valuesFor(event) {
   const d = event.data ?? {};
@@ -556,7 +560,7 @@ function valuesFor(event) {
   const values = {
     name: d.name,
     client: d.client ?? clientDef?.name,
-    stage: UI_TEXT.office.stages[d.level]?.name,
+    stage: UI_TEXT.office.stages[d.stage ?? d.level]?.name, // expansion-start: stage; expansion-done: level
     seats: d.seats,
     holiday: holiday?.name ?? d.holiday,
     nation: nation?.name ?? d.nation,
@@ -574,7 +578,7 @@ function valuesFor(event) {
     values.fee = fill(UI_TEXT.common.money, { cost: formatMoney(clientDef.monthlyFee) });
   }
   if (event.id === 'build-done') {
-    values.name = helped.map((h) => h.name).join('·') || d.featured?.name || undefined;
+    values.name = helpedNames(helped) || d.featured?.name || undefined;
     const left = [...new Set(helped.map((h) => h.daysLeft).filter((n) => n !== undefined))];
     values.days = left.length > 0 ? left.join('·') : undefined;
   }
@@ -624,7 +628,7 @@ export function eventText(event) {
   // A desk's featured person only stars in its done text: nobody's face
   // changed, so the advisor speaks as if nobody was helped.
   const advice = event.id === 'build-done'
-    ? { ...values, name: (event.data?.helped ?? []).map((x) => x.name).join('·') || undefined } : values;
+    ? { ...values, name: helpedNames(event.data?.helped ?? []) || undefined } : values;
   out.advisor = '';
   for (let i = 0; i < lines.length && !out.advisor; i++) {
     out.advisor = fill(lines[((event.day ?? 0) + i) % lines.length], advice);

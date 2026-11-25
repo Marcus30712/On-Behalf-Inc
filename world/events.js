@@ -15,7 +15,7 @@ export const EVENTS = {
   },
   'game-over-cash': { title: '센터 문을 닫아요', text: '돈이 바닥나 이번 달 급여를 줄 수 없어요. 센터는 여기서 문을 닫아요. 함께한 {days}일, 고마웠어요.' },
   'game-over-clients': { title: '마지막 고객사가 떠났어요', text: '남은 고객사가 하나도 없어요. 받을 전화가 없어 센터는 여기서 문을 닫아요. 함께한 {days}일, 고마웠어요.' },
-  'milestone-big-client': { title: '이정표: 고객사 세 곳', text: '이제 고객사 세 곳의 전화를 함께 받아요. 작은 센터가 여기까지 왔어요.' },
+  'milestone-big-client': { title: '이정표: 고객사 세 곳', text: '이제 고객사 세 곳의 상담을 함께 맡아요. 작은 센터가 여기까지 왔어요.' },
   'milestone-rank-s': { title: '이정표: 평판 S등급', text: '평판이 S등급에 올랐어요. 모두가 함께 만든 결과예요.' },
   'holiday-leave': {
     title: '{name} 씨의 휴가 신청',

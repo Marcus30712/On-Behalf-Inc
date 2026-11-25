@@ -3,7 +3,7 @@
 // storage is passed in (localStorage in the browser).
 import { newGame, serialize, deserialize } from './state.js';
 import { restoreRng } from './rng.js';
-import { dateOf, upcomingHolidays, holidaysOn, DAYS_PER_MONTH } from './calendar.js';
+import { dateOf, upcomingHolidays, holidaysOn, DAYS_PER_MONTH, isCompanyWorkday } from './calendar.js';
 import { stepInterval, breakGroups, answeringClient, channelOf } from './interval.js';
 import { endOfDay } from './day.js';
 import { backlogCount } from './backlog.js';
@@ -42,7 +42,8 @@ export function createGame(seed) {
 // add up. Returns the minutes actually simulated (a multiple of 30).
 // Each step: interval, research, build. At midnight: end of day; on a day the
 // center opened (Mon-Fri, and Sat-Sun with an active weekend client) then the
-// daily economy, hiring and expansion; on a month's last day the month end.
+// daily economy, and on Mon-Fri hiring and expansion (v1.4: company timers
+// skip the weekend); on a month's last day the month end.
 // Nothing moves once the game is over; a game that ends at midnight stays on
 // its last day (minute 1440).
 export function advance(state, minutes) {
@@ -62,9 +63,13 @@ export function advance(state, minutes) {
     const opened = isCenterOpen(state, state.day);
     endOfDay(state, rng);
     if (opened) {
-      dailyEconomy(state);
-      advanceHiring(state, rng);
-      advanceExpansion(state);
+      // v1.4: company timers (offer streak, hiring wait, build days) count Mon-Fri only.
+      const companyDay = isCompanyWorkday(state.day);
+      dailyEconomy(state, { companyDay });
+      if (companyDay) {
+        advanceHiring(state, rng);
+        advanceExpansion(state);
+      }
     }
     if (state.day % DAYS_PER_MONTH === DAYS_PER_MONTH - 1) monthEnd(state);
     if (state.gameOver) { done++; break; }
@@ -155,6 +160,7 @@ function freeze(value) {
 
 function clientView(state, c) {
   const def = CLIENTS.find((d) => d.id === c.id);
+  const weekday = dateOf(state.day).weekday;
   const t = state.today.clients[c.id];
   const intervals = t?.intervals ?? 0;
   const offered = t?.offered ?? 0;
@@ -176,6 +182,8 @@ function clientView(state, c) {
     satisfaction: c.satisfaction,
     slTarget: def.slTarget,
     channel,
+    // The client opens at some hour today (its own days; a weekday client is closed at the weekend).
+    openToday: def.hours.days.includes(weekday),
     ...email,
     // Workdays left before a warned client leaves; null without a warning.
     churnWorkdaysLeft: state.churn?.find((e) => e.clientId === c.id)?.workdaysLeft ?? null,
@@ -232,9 +240,19 @@ function holidaysAhead(state, p) {
   }));
 }
 
+// Only someone on the phone now answers another client; a person on a phone
+// assignment who is off, on break or away keeps their assigned client.
+function answeringNow(state, p, activityNow) {
+  const a = state.assignment[p.id];
+  if (a?.kind !== 'phone') return null;
+  if (activityNow !== 'phone') return a.clientId;
+  return answeringClient(state, a, state.day, state.minute) ?? a.clientId;
+}
+
 function personView(state, p, weekday, groups) {
   const rosterShift = state.roster[p.id]?.[weekday] ?? 'off';
   const breakGroup = groups.get(p.id) ?? 0;
+  const personActivity = activity(state, p, rosterShift, breakGroup);
   return {
     id: p.id,
     name: p.name,
@@ -251,9 +269,14 @@ function personView(state, p, weekday, groups) {
     // Monday to Sunday; days missing from the roster (old saves) are 'off'.
     week: Array.from({ length: WEEKDAYS }, (_, w) => state.roster[p.id]?.[w] ?? 'off'),
     shiftToday: shiftToday(state, p, rosterShift),
-    activity: activity(state, p, rosterShift, breakGroup),
+    activity: personActivity,
     breakGroup,
     task: state.assignment[p.id] ?? null,
+    // The client the person answers now: their own, or an open one they cover
+    // while theirs is closed (sim/interval.js), only while they are on the
+    // phone now; their assigned client when not on the phone now; null off
+    // phone assignments.
+    answering: answeringNow(state, p, personActivity),
     holidays: holidaysAhead(state, p),
   };
 }

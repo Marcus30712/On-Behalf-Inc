@@ -427,3 +427,27 @@ test('view gives the screen the week roster, churn countdown and 30-day holidays
   assert.deepEqual({ ...seed.date }, { year: 2, month: 3, date: 15, weekday: (360 + 74) % 7, weekdayLabel: '월화수목금토일'[(360 + 74) % 7] });
   assert.ok(v.calendar.every((h) => h.startDay + h.length > s.day && h.startDay < s.day + 30));
 });
+
+// v1.4 Task 3: who each person answers now, and which clients open today.
+test('view gives each person the client they answer and each client whether it opens today', () => {
+  const BARAM = 'baram-delivery'; // the weekend-only client (world/clients.js)
+  const s = createGame(3);
+  s.clients.push({ id: BARAM, satisfaction: 70, active: true });
+  const crew = s.people.filter((p) => p.role === 'agent').slice(0, 2);
+  for (const p of crew) s.roster[p.id] = { ...s.roster[p.id], 1: 'off', 2: 'off', 5: 'weekend', 6: 'weekend' };
+  const own = crew.map((p) => s.assignment[p.id].clientId);
+  const other = s.people.find((p) => s.assignment[p.id]?.kind !== 'phone');
+  assert.ok(other, 'someone is not on phones');
+  const open = (v) => Object.fromEntries(v.clients.map((c) => [c.id, c.openToday]));
+
+  advance(s, 5 * DAY + 600 - s.minute); // Saturday 10:00
+  const sat = view(s);
+  for (const p of crew) assert.equal(sat.people.find((x) => x.id === p.id).answering, BARAM, `${p.id} covers on Saturday`);
+  assert.equal(sat.people.find((x) => x.id === other.id).answering, null);
+  assert.deepEqual(open(sat), { 'gureum-travel': false, 'mulbit-telecom': false, [BARAM]: true });
+
+  advance(s, 2 * DAY); // Monday 10:00
+  const mon = view(s);
+  crew.forEach((p, i) => assert.equal(mon.people.find((x) => x.id === p.id).answering, own[i], `${p.id} on Monday`));
+  assert.deepEqual(open(mon), { 'gureum-travel': true, 'mulbit-telecom': true, [BARAM]: false });
+});

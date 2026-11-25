@@ -134,10 +134,15 @@ export function channelOf(def) {
   return def.channel ?? 'phone';
 }
 
-// The client's own days and hours (weekday clients Mon-Fri, weekend clients Sat-Sun).
+// True on the client's own days (weekday clients Mon-Fri, weekend clients Sat-Sun).
+export function isOpenDay(def, day) {
+  return def.hours.days.includes(dateOf(day).weekday);
+}
+
+// The client's own days and hours.
 export function isOpen(def, day, minute) {
   const h = def.hours;
-  return h.days.includes(dateOf(day).weekday) && minute >= h.open && minute < h.close;
+  return isOpenDay(def, day) && minute >= h.open && minute < h.close;
 }
 
 // Capacity factor from the person's nation holidays (e.g. a quiet month).

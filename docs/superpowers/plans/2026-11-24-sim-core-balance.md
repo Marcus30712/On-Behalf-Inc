@@ -629,3 +629,213 @@ PASS  sensible play that keeps service expands within 720 days on 10/10 seeds (>
 - 다시 받은 이메일 고객사는 예전 밀린 메일을 그대로 갖고 왔다(안 붙임 정책 밀림 최대 약 13,000). 최종 수정에서 고쳤다: 잃을 때 밀림을 지운다(`loseClient`).
 - 밀림 점검의 여유: 시드 10은 251/127(이틀 치 254)에 가깝다.
 - 자동 플레이가 약 90초에서 약 190초로 늘었다(720일 게임 30판 추가).
+
+
+## v1.4
+
+### Task 5 — 규칙 어긋남 수정으로 바뀐 숫자 (점검 19개는 그대로 통과, 수치 조정 없음)
+
+설계 목표 5의 세 규칙을 고친 뒤 `node tools/autoplay.js` 줄 일부가 바뀌었다. 모든 값은 가상 값이다.
+
+- 이탈 경고는 그 고객사가 문을 여는 날에만 발행된다(평일 고객사가 토요일에 기준선 아래로 내려가면 월요일에 경고).
+- 확장이 끝난 달의 임대료는 완공일(포함)부터 `남은 날 / 30` 비율로 낸다(`rentOf(state, monthStart, monthEnd)`, 정수로 반올림). 확장 2 완공일은 `office.level2Day`에 새로 저장한다. 완공일이 없는 v1.3 저장은 한 달 치를 낸다.
+- 회사 단위 타이머(제안 연속 일수, 채용 대기, 공사 일수)는 주말 고객사가 있어도 월–금만 센다(`isCompanyWorkday`).
+
+바뀐 것은 확장하거나 주말·채널 고객사가 있는 표와 줄뿐이다. 평일 전화만 하는 표(idle 360, sensible 360·720, 제안 받는 sensible 360)와 월요일·몰리는 날·월말 현금 줄, 그리고 PASS 줄 19개 중 18개는 글자까지 같다. 평일 골든 파일(`tests/fixtures/weekday-golden.json`)도 그대로다.
+
+주요 변화 (숫자는 아래 diff 블록 그대로다. 원인은 모두 짐작이며 시드별로 추적하지 않았다):
+- 확장 1 완공일은 열 시드 모두 그대로다(확장 1 공사 중에는 아직 주말 고객사가 없다).
+- greedy 확장 2 완공일은 9개 시드에서 늦어졌고(314 → 319 세 판, 344 → 350 여섯 판), 시드 8만 빨라졌다(344 → 319). 늦어진 것은 공사 일수가 토·일을 세지 않기 때문으로 짐작한다. 시드 8이 빨라진 원인은 짐작도 하지 못했다.
+- keep 확장 2는 시드 1만 380 → 350으로 빨라졌고 나머지 9개 시드는 그대로다. 그래서 시드 1의 360일째 현금은 79,600 → 38,833으로 줄었다. 확장 2 비용이 먼저 나갔기 때문으로 짐작한다.
+- 720일째 현금:
+  - keep 표는 10개 시드 모두 늘었다(+33 ~ +2,633). 완공한 달의 임대료를 비례로 내기 때문으로 짐작한다.
+  - greedy 표는 반반이다. 5개 시드는 늘었고(시드 1·3·4·5·10, +8,833 ~ +34,633), 5개 시드는 줄었다(시드 2 −8,233, 6 −17,567, 7 −6,367, 8 −5,433, 9 −2,233). 제안·채용·공사 시점이 함께 움직였기 때문으로 짐작한다.
+  - 채널 표 네 개는 대부분 늘었지만 시드에 따라 줄기도 했다(아래 diff 블록).
+  - 비례 임대료 때문에 현금에 33·67 같은 끝자리가 생긴다.
+- 채널 게임은 이메일 근무일·밀림·계약금 전액 숫자가 바뀌었다. 제안 연속 일수가 주말을 세지 않아 제안 시점이 움직였기 때문으로 짐작한다.
+- PASS 줄 중 바뀐 것은 v1.3 채널 점검 하나다. 2년 차 계약금 전액은 68.4% → 68.9%다. 평균 현금은 212,240 대 204,960 → 215,733 대 207,240이다. 시드별 가난하지 않음은 5/10 → 6/10이며 기록만 한다.
+
+바뀐 줄 전부(앞이 바꾸기 전, 뒤가 바꾼 뒤; 마지막 "19/19 checks pass" 줄의 걸린 시간은 뺐다):
+
+**표 "sensible expanding the office, greedy (every offer it can staff), 720 days" (출력 56~65행)**
+
+```diff
+- 1     720   -                    75.5%   56(156)     0        0     2       44      296800
+- 2     720   -                    78.2%   54(161)     0        0     2       50      319000
+- 3     720   -                    77.1%   63(181)     0        0     2       65      255200
+- 4     720   -                    75.6%   64(183)     0        0     2       62      276400
+- 5     720   -                    77.7%   64(187)     0        0     2       64      249000
+- 6     720   -                    78.9%   51(140)     0        0     2       65      264400
+- 7     720   -                    76.4%   72(208)     0        0     2       67      286800
+- 8     720   -                    78.2%   56(154)     0        0     2       61      291200
+- 9     720   -                    77.3%   68(193)     0        0     2       64      271000
+- 10    720   -                    75.8%   74(223)     0        0     2       68      259400
++ 1     720   -                    75.4%   56(156)     0        0     2       56      309967
++ 2     720   -                    79.1%   58(165)     0        0     2       65      310767
++ 3     720   -                    78.8%   60(170)     0        0     2       68      289833
++ 4     720   -                    77.8%   51(140)     0        0     2       67      285233
++ 5     720   -                    77.9%   60(175)     0        0     2       69      258633
++ 6     720   -                    76.8%   67(194)     0        0     2       63      246833
++ 7     720   -                    75.8%   79(218)     0        0     2       62      280433
++ 8     720   -                    77.4%   63(182)     0        0     2       61      285767
++ 9     720   -                    76.2%   72(196)     0        0     2       64      268767
++ 10    720   -                    77.9%   67(199)     0        0     2       68      280033
+```
+
+**표 "sensible expanding the office, keeping service (at most 3 weekday clients), 720 days" (출력 69~78행)**
+
+```diff
+- 1     720   -                    89.8%   46(131)     0        0     2       70      220600
+- 2     720   -                    91.0%   50(147)     0        0     2       70      224400
+- 3     720   -                    89.7%   62(178)     0        0     2       66      195600
+- 4     720   -                    89.0%   55(155)     0        0     2       68      213600
+- 5     720   -                    86.5%   55(164)     0        0     2       70      171200
+- 6     720   -                    88.4%   59(166)     0        0     2       70      195400
+- 7     720   -                    87.5%   63(181)     0        0     2       67      182600
+- 8     720   -                    90.2%   54(153)     0        0     2       68      219000
+- 9     720   -                    88.8%   60(171)     0        0     2       70      208200
+- 10    720   -                    89.2%   64(184)     0        0     2       69      219000
++ 1     720   -                    90.7%   53(154)     0        0     2       70      220633
++ 2     720   -                    91.0%   50(147)     0        0     2       70      227033
++ 3     720   -                    89.7%   62(178)     0        0     2       66      198033
++ 4     720   -                    89.0%   55(155)     0        0     2       68      216233
++ 5     720   -                    86.5%   55(164)     0        0     2       70      173700
++ 6     720   -                    88.4%   59(166)     0        0     2       70      198033
++ 7     720   -                    87.5%   63(181)     0        0     2       67      185033
++ 8     720   -                    90.2%   54(153)     0        0     2       68      221433
++ 9     720   -                    88.8%   60(171)     0        0     2       70      210833
++ 10    720   -                    89.2%   64(184)     0        0     2       69      221433
+```
+
+**표 "keeping service with the chat and email clients, 720 days (v1.3)" (출력 82~91행)**
+
+```diff
+- 1     720   -                    89.0%   57(163)     0        0     2       70      249800
+- 2     720   -                    88.1%   66(194)     0        0     2       70      215200
+- 3     720   -                    88.9%   63(195)     0        0     2       70      173600
+- 4     720   -                    87.7%   56(148)     0        0     2       70      236800
+- 5     720   -                    87.0%   61(182)     0        0     2       66      167600
+- 6     720   -                    87.5%   63(185)     0        0     2       70      205800
+- 7     720   -                    85.5%   77(225)     0        0     2       67      208200
+- 8     720   -                    88.4%   54(151)     0        0     2       68      217600
+- 9     720   -                    87.6%   58(166)     0        0     2       63      244400
+- 10    720   -                    89.3%   64(188)     0        0     2       69      203400
++ 1     720   -                    89.0%   57(163)     0        0     2       70      252433
++ 2     720   -                    88.1%   66(194)     0        0     2       70      217633
++ 3     720   -                    89.2%   58(169)     0        0     2       66      175900
++ 4     720   -                    87.7%   56(148)     0        0     2       70      239433
++ 5     720   -                    86.9%   61(185)     0        0     2       70      180100
++ 6     720   -                    87.5%   63(185)     0        0     2       70      208300
++ 7     720   -                    86.7%   67(190)     0        0     2       67      209833
++ 8     720   -                    88.4%   54(151)     0        0     2       68      220033
++ 9     720   -                    87.6%   58(166)     0        0     2       63      247033
++ 10    720   -                    89.5%   57(166)     0        0     2       69      206633
+```
+
+**표 "keeping service with the chat and email clients, nobody on the email, 720 days (v1.3)" (출력 95~104행)**
+
+```diff
+- 1     720   -                    87.0%   51(144)     0        0     2       0       211200
+- 2     720   -                    87.0%   65(189)     0        0     2       0       177400
+- 3     720   -                    87.6%   59(171)     0        0     2       0       175000
+- 4     720   -                    86.2%   51(132)     0        0     2       0       200800
+- 5     720   -                    84.5%   63(187)     0        0     2       0       143800
+- 6     720   -                    86.5%   50(140)     0        0     2       0       149800
+- 7     720   -                    84.7%   67(197)     0        0     2       0       178400
+- 8     720   -                    87.0%   54(145)     0        0     2       0       168200
+- 9     720   -                    85.7%   54(154)     0        0     2       0       188600
+- 10    720   -                    86.6%   54(157)     0        0     2       0       164400
++ 1     720   -                    87.8%   56(161)     0        0     2       0       213833
++ 2     720   -                    87.1%   61(180)     0        0     2       0       184033
++ 3     720   -                    87.7%   55(158)     0        0     2       0       175500
++ 4     720   -                    86.7%   54(139)     0        0     2       0       203433
++ 5     720   -                    85.7%   66(196)     0        0     2       0       144300
++ 6     720   -                    86.3%   51(142)     0        0     2       0       165900
++ 7     720   -                    85.7%   66(191)     0        0     2       0       168833
++ 8     720   -                    87.1%   54(149)     0        0     2       0       161033
++ 9     720   -                    86.4%   54(144)     0        0     2       0       182433
++ 10    720   -                    87.4%   63(182)     0        0     2       0       166833
+```
+
+**표 "keeping service with the chat and email clients, one email agent and no cover, 720 days (v1.3)" (출력 108~117행)**
+
+```diff
+- 1     720   -                    87.3%   49(138)     0        1     2       0       201300
+- 2     720   -                    86.9%   59(173)     0        1     2       0       172300
+- 3     720   -                    87.3%   59(167)     0        0     2       0       165400
+- 4     720   -                    85.6%   52(141)     0        1     2       0       183500
+- 5     720   -                    85.0%   62(188)     0        0     2       0       167000
+- 6     720   -                    85.9%   54(158)     0        0     2       0       165800
+- 7     720   -                    84.5%   62(179)     0        0     2       0       186200
+- 8     720   -                    86.4%   55(158)     0        0     2       0       176400
+- 9     720   -                    85.4%   66(190)     0        2     2       0       169000
+- 10    720   -                    86.6%   66(189)     0        0     2       0       167000
++ 1     720   -                    87.5%   61(172)     0        0     2       0       209633
++ 2     720   -                    87.1%   53(153)     0        0     2       0       179833
++ 3     720   -                    87.3%   57(167)     0        0     2       0       177300
++ 4     720   -                    86.8%   56(149)     0        1     2       0       174133
++ 5     720   -                    85.4%   68(205)     0        0     2       0       167700
++ 6     720   -                    85.9%   58(165)     0        0     2       0       170700
++ 7     720   -                    85.3%   75(213)     0        1     2       0       172533
++ 8     720   -                    86.5%   67(190)     0        0     2       0       182033
++ 9     720   -                    85.4%   56(164)     0        0     2       0       172633
++ 10    720   -                    86.4%   65(185)     0        0     2       0       165233
+```
+
+**표 "keeping service with the chat and email clients, two email agents assigned once, no cover, 720 days (v1.3)" (출력 121~130행)**
+
+```diff
+- 1     720   -                    90.3%   50(149)     0        0     2       70      265400
+- 2     720   -                    88.3%   66(190)     0        0     2       70      233000
+- 3     720   -                    89.7%   67(196)     0        0     2       70      188400
+- 4     720   -                    86.6%   60(166)     0        0     2       67      247400
+- 5     720   -                    86.9%   58(173)     0        1     2       70      171500
+- 6     720   -                    88.1%   62(187)     0        0     2       70      217200
+- 7     720   -                    85.6%   75(216)     0        0     2       24      210600
+- 8     720   -                    88.8%   52(141)     0        0     2       68      220200
+- 9     720   -                    87.8%   59(172)     0        0     2       63      244400
+- 10    720   -                    89.6%   65(192)     0        0     2       69      211400
++ 1     720   -                    90.3%   50(149)     0        0     2       70      268033
++ 2     720   -                    88.3%   66(190)     0        0     2       70      235433
++ 3     720   -                    90.2%   55(153)     0        0     2       70      201100
++ 4     720   -                    86.6%   60(166)     0        0     2       67      250033
++ 5     720   -                    87.6%   62(189)     0        0     2       70      187700
++ 6     720   -                    88.1%   62(187)     0        0     2       70      219700
++ 7     720   -                    86.9%   69(201)     0        0     2       59      215233
++ 8     720   -                    88.8%   52(141)     0        0     2       68      222633
++ 9     720   -                    87.8%   59(172)     0        0     2       63      247033
++ 10    720   -                    88.9%   61(181)     0        0     2       69      200633
+```
+
+**요약·점검 줄 (출력 137~140행)**
+
+```diff
+- expanding greedy: expansion 1 done on day 193 193 221 193 253 253 221 221 193 221 | expansion 2 314 314 344 344 344 344 344 344 314 344 | clients at the end gureum+mulbit+bandi+baram+dalbit gureum+mulbit+bandi+baram+dalbit gureum+mulbit+bandi+baram+dalbit gureum+mulbit+bandi+baram+dalbit gureum+mulbit+bandi+baram+dalbit gureum+mulbit+bandi+baram+dalbit gureum+mulbit+bandi+baram+dalbit gureum+mulbit+bandi+baram+dalbit gureum+mulbit+bandi+baram+dalbit gureum+mulbit+bandi+baram+dalbit
+- expanding greedy: fees in full year 1 52.9% year 2 31.0% | cash at day 360 53800 64000 34500 33600 34300 29100 32200 38200 38800 33300 | weekend days open 141 135 127 133 121 117 133 127 135 133 | person-days rostered 6+ days a week 0 0 0 0 0 0 0 0 0 0 | burnouts 0 resigned 0
+- expanding keep: expansion 1 done on day 193 193 221 193 253 253 221 221 193 221 | expansion 2 380 350 410 350 438 410 380 380 350 380 | clients at the end gureum+mulbit+dalbit+baram gureum+mulbit+dalbit+baram gureum+mulbit+dalbit+baram gureum+mulbit+dalbit+baram gureum+mulbit+dalbit+baram gureum+mulbit+dalbit+baram gureum+mulbit+dalbit+baram gureum+mulbit+dalbit+baram gureum+mulbit+dalbit+baram gureum+mulbit+dalbit+baram
+- expanding keep: fees in full year 1 77.4% year 2 89.3% | cash at day 360 79600 50200 58600 42200 33600 59600 69000 77400 36200 82600 | weekend days open 89 89 75 89 69 73 81 81 89 81 | person-days rostered 6+ days a week 0 0 0 0 0 0 0 0 0 0 | burnouts 0 resigned 0
++ expanding greedy: expansion 1 done on day 193 193 221 193 253 253 221 221 193 221 | expansion 2 319 319 350 350 350 350 350 319 319 350 | clients at the end gureum+mulbit+bandi+baram+dalbit gureum+mulbit+bandi+baram+dalbit gureum+mulbit+bandi+baram+dalbit gureum+mulbit+bandi+baram+dalbit gureum+mulbit+bandi+baram+dalbit gureum+mulbit+bandi+baram+dalbit gureum+mulbit+bandi+baram+dalbit gureum+mulbit+bandi+baram+dalbit gureum+mulbit+bandi+baram+dalbit gureum+mulbit+bandi+baram+dalbit
++ expanding greedy: fees in full year 1 53.4% year 2 34.2% | cash at day 360 64767 46967 40833 44033 40033 36233 42433 42167 46167 39633 | weekend days open 141 135 127 133 121 117 133 127 135 133 | person-days rostered 6+ days a week 0 0 0 0 0 0 0 0 0 0 | burnouts 0 resigned 0
++ expanding keep: expansion 1 done on day 193 193 221 193 253 253 221 221 193 221 | expansion 2 350 350 410 350 438 410 380 380 350 380 | clients at the end gureum+mulbit+dalbit+baram gureum+mulbit+dalbit+baram gureum+mulbit+dalbit+baram gureum+mulbit+dalbit+baram gureum+mulbit+dalbit+baram gureum+mulbit+dalbit+baram gureum+mulbit+dalbit+baram gureum+mulbit+dalbit+baram gureum+mulbit+dalbit+baram gureum+mulbit+dalbit+baram
++ expanding keep: fees in full year 1 77.4% year 2 89.3% | cash at day 360 38833 52833 59700 44833 34900 60900 70100 78500 38833 83700 | weekend days open 89 89 75 89 69 73 81 81 89 81 | person-days rostered 6+ days a week 0 0 0 0 0 0 0 0 0 0 | burnouts 0 resigned 0
+```
+
+**요약·점검 줄 (출력 142~145행)**
+
+```diff
+- channels: clients at the end gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+baram+solbang gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+baram+solbang gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+baram+solbang | email workdays 229 203 125 229 125 188 189 209 229 160 | times lost 0 0 0 0 0 0 0 0 0 0 | email met 100.0% 99.3% 100.0% 100.0% 100.0% 100.0% 100.0% 100.0% 100.0% 100.0% | largest email backlog / mails a day 55/101 102/101 18/101 43/101 37/101 37/100 44/100 47/101 57/101 59/100 | fees in full year 1 77.0% year 2 68.4%
+- channels, email unstaffed: clients at the end gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+baram gureum+mulbit+saebyeol+baram gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+baram gureum+mulbit+saebyeol+baram gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+solbang+baram | email workdays 98 75 75 98 68 75 75 81 84 90 | times lost 2 2 2 2 1 2 2 2 2 2 | email met 3.2% 2.8% 2.8% 3.2% 3.1% 2.8% 2.8% 3.9% 3.7% 3.5% | largest email backlog / mails a day 3898/97 3890/99 3859/99 3877/97 3819/97 3841/99 3800/98 3925/99 3886/98 3872/97 | fees in full year 1 77.0% year 2 82.3%
+- channels, one email agent: clients at the end gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+baram gureum+mulbit+saebyeol+baram gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+baram+solbang gureum+mulbit+saebyeol+baram gureum+mulbit+saebyeol+baram gureum+mulbit+saebyeol+baram gureum+mulbit+saebyeol+baram gureum+mulbit+saebyeol+baram | email workdays 97 85 81 98 61 86 81 78 83 84 | times lost 2 2 2 2 1 2 2 2 2 2 | email met 13.1% 11.4% 8.9% 10.5% 8.4% 11.2% 7.9% 7.2% 9.2% 7.5% | largest email backlog / mails a day 1565/97 1645/100 1529/100 1935/97 1848/95 1718/99 1864/98 1913/100 1752/100 1965/100 | fees in full year 1 77.0% year 2 82.7%
+- channels, two fixed email agents: clients at the end gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+baram+solbang gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+baram+solbang gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+baram+solbang | email workdays 229 203 125 229 125 188 189 209 229 160 | times lost 0 0 0 0 0 0 0 0 0 0 | email met 99.3% 92.4% 97.6% 80.7% 95.4% 98.7% 82.6% 95.6% 96.5% 97.9% | largest email backlog / mails a day 133/101 307/101 157/101 256/101 166/100 149/100 267/100 173/100 213/101 184/100 | fees in full year 1 77.0% year 2 72.7%
++ channels: clients at the end gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+baram+solbang gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+baram+solbang gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+baram+solbang | email workdays 229 203 114 229 119 188 209 209 229 154 | times lost 0 0 0 0 0 0 0 0 0 0 | email met 100.0% 99.3% 99.7% 100.0% 100.0% 100.0% 100.0% 100.0% 100.0% 100.0% | largest email backlog / mails a day 55/101 102/101 51/101 43/101 17/101 37/100 50/100 47/101 57/101 23/100 | fees in full year 1 77.0% year 2 68.9%
++ channels, email unstaffed: clients at the end gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+baram gureum+mulbit+saebyeol+baram gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+baram gureum+mulbit+saebyeol+baram gureum+mulbit+saebyeol+baram gureum+mulbit+saebyeol+baram gureum+mulbit+saebyeol+baram | email workdays 84 75 75 83 52 75 74 75 76 75 | times lost 2 2 2 2 1 2 2 2 2 2 | email met 3.7% 2.8% 2.8% 3.8% 4.0% 2.8% 2.8% 2.8% 2.7% 2.8% | largest email backlog / mails a day 3898/98 3890/100 3859/99 3877/97 3819/96 3797/98 3883/99 3925/100 3886/100 3872/99 | fees in full year 1 77.0% year 2 84.6%
++ channels, one email agent: clients at the end gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+baram gureum+mulbit+saebyeol+baram gureum+mulbit+saebyeol+baram gureum+mulbit+saebyeol+baram+solbang gureum+mulbit+saebyeol+baram gureum+mulbit+saebyeol+baram gureum+mulbit+saebyeol+baram gureum+mulbit+saebyeol+baram gureum+mulbit+saebyeol+baram | email workdays 86 87 84 84 55 82 83 78 87 82 | times lost 2 2 2 2 1 2 2 2 2 2 | email met 13.3% 11.9% 11.4% 9.2% 11.1% 7.6% 12.0% 7.5% 11.1% 8.7% | largest email backlog / mails a day 1881/99 1450/100 1508/99 1935/100 1726/95 1923/98 1892/100 1982/100 1752/100 1965/100 | fees in full year 1 77.0% year 2 84.7%
++ channels, two fixed email agents: clients at the end gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+baram+solbang gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+baram+solbang gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+baram+solbang | email workdays 229 203 114 229 119 188 209 209 229 154 | times lost 0 0 0 0 0 0 0 0 0 0 | email met 99.3% 92.4% 99.7% 80.7% 97.6% 98.7% 91.7% 95.6% 96.5% 92.9% | largest email backlog / mails a day 133/101 307/101 80/101 256/101 155/101 149/100 250/100 173/100 213/101 234/100 | fees in full year 1 77.0% year 2 73.2%
+```
+
+**요약·점검 줄 (출력 162~162행)**
+
+```diff
+- PASS  keeping service with the chat and email clients (v1.3): both active at day 720 on 10/10 (>= 8), email backlog within two days of mail on 10/10, fees in full year 1 77.0%, year 2 68.4% (each >= 65%), mean cash 212240 vs keeping service without 204960 (>=; not poorer on 5/10, not a bar)
++ PASS  keeping service with the chat and email clients (v1.3): both active at day 720 on 10/10 (>= 8), email backlog within two days of mail on 10/10, fees in full year 1 77.0%, year 2 68.9% (each >= 65%), mean cash 215733 vs keeping service without 207240 (>=; not poorer on 6/10, not a bar)
+```

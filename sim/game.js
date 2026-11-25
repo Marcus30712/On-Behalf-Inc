@@ -167,6 +167,8 @@ function clientView(state, c) {
     backlog: Math.round(backlogCount(state.backlog?.[c.id])),
     onTime: offered > 0 ? (t.inTarget ?? 0) / offered : null,
   } : {};
+  // Email: mail that came in today (today.offered counts answered or overdue mail).
+  const arrived = channel === 'email' ? { arrived: t?.arrived ?? 0 } : {};
   return {
     id: c.id,
     name: def.name,
@@ -181,6 +183,7 @@ function clientView(state, c) {
       offered,
       handled,
       abandoned: t?.abandoned ?? 0,
+      ...arrived,
       // Service level so far today: calls answered within the target over
       // calls offered. Null before the first call.
       serviceLevel: offered > 0 ? (t.inTarget ?? 0) / offered : null,

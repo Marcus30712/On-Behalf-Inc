@@ -250,6 +250,9 @@ export function stepInterval(state, rng) {
       cs.satisfaction = clamp(cs.satisfaction + satisfactionDelta(q, target, traits), 0, 100);
 
       const t = todayEntry(state, def.id);
+      // Email only (keeps phone-only today entries as before): mail that came
+      // in today; `offered` counts mail answered or gone overdue instead.
+      if (channel === 'email') t.arrived = (t.arrived ?? 0) + calls;
       t.offered += q.offered;
       t.handled += q.handled;
       t.abandoned += q.abandoned;

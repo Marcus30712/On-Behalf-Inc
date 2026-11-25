@@ -66,7 +66,7 @@ function mixedView({ chat = {}, email = {}, emailClient = {} } = {}) {
   const bank = v.clients.find((c) => c.id === 'saebyeol-bank');
   const books = v.clients.find((c) => c.id === 'solbang-books');
   Object.assign(bank.today, { offered: 0, handled: 0, abandoned: 0, serviceLevel: null, asaSec: null }, chat);
-  Object.assign(books.today, { offered: 0, handled: 0, abandoned: 0, serviceLevel: null, asaSec: null }, email);
+  Object.assign(books.today, { offered: 0, handled: 0, abandoned: 0, arrived: 0, serviceLevel: null, asaSec: null }, email);
   Object.assign(books, { backlog: 0, onTime: null, satisfaction: 70 }, emailClient);
   const agents = v.people.filter((p) => p.role === 'agent');
   agents[0].task = { kind: 'phone', clientId: 'saebyeol-bank' };
@@ -78,7 +78,7 @@ function mixedView({ chat = {}, email = {}, emailClient = {} } = {}) {
 
 const BUSY = {
   chat: { offered: 12.4, handled: 10.2, abandoned: 1, serviceLevel: 0.75, asaSec: 41 },
-  email: { offered: 25.4, handled: 23.6 },
+  email: { offered: 24.1, handled: 23.6, arrived: 25.4 },
   emailClient: { backlog: 37, onTime: 0.92 },
 };
 
@@ -140,6 +140,20 @@ test('email chip: below target warns; before the first mail it says so', () => {
   assert.ok(chip.textContent.includes('밀린 메일 0통'), chip.textContent);
   assert.ok(chip.textContent.includes('기한 안 답장 —'), chip.textContent);
   assert.equal(chip.className, 'metric');
+});
+
+test('email chip on an unstaffed first day: the tooltip counts the mail that came in', () => {
+  const s = createGame(2);
+  s.clients.push({ id: 'solbang-books', satisfaction: 70, active: true });
+  // Day 0, 15:00, nobody on the mail (the final review saw 56 here at 100 mails a day; 84 now).
+  advance(s, 15 * 60 - s.minute);
+  const r = makeRoot();
+  renderMetrics(r, view(s));
+  const chip = r.querySelector('[data-client="solbang-books"]');
+  assert.ok(chip.textContent.includes('밀린 메일 47통'), chip.textContent);
+  const title = chip.getAttribute('title');
+  assert.ok(!title.includes('오늘은 아직 메일이 없어요'), title);
+  assert.equal(title, '영업시간 12시간 안에 90% · 들어온 메일 47통 · 답장한 메일 0통');
 });
 
 test('chat chip: like the phone chip, with chat labels', () => {

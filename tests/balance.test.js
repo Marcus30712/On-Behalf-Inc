@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  runPolicy, wornDown, idleYearVerdict, fullFeeShare, expansionVerdict, channelsVerdict, emailLost, emailStruggles,
+  runPolicy, wornDown, idleYearVerdict, fullFeeShare, expansionVerdict, channelsVerdict, emailLost, emailStruggles, emailKept,
 } from '../tools/autoplay.js';
 
 const SEEDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
@@ -134,6 +134,7 @@ function channelRuns() {
     staff: SEEDS.map((seed) => runPolicy({ seed, days: 720, policy: 'sensible', expand: 'keep', channels: 'staff' })),
     nostaff: SEEDS.map((seed) => runPolicy({ seed, days: 720, policy: 'sensible', expand: 'keep', channels: 'nostaff' })),
     single: SEEDS.map((seed) => runPolicy({ seed, days: 720, policy: 'sensible', expand: 'keep', channels: 'single' })),
+    pair: SEEDS.map((seed) => runPolicy({ seed, days: 720, policy: 'sensible', expand: 'keep', channels: 'pair' })),
   };
   return channelGames;
 }
@@ -166,4 +167,14 @@ test('one email agent with no cover struggles', () => {
   const n = emailStruggles(single);
   const met = single.map((r) => (r.email.met === null ? '-' : r.email.met.toFixed(2)));
   assert.ok(n >= 8, `struggled on ${n}/10: met ${met.join(' ')}, lost ${single.map((r) => r.email.lost).join(' ')}`);
+});
+
+// Final review I5: two email agents, assigned once with no daily stand-in (what
+// the offer text suggests), keep the client: one absent day must not start a
+// backlog the pair can never drain.
+test('two email agents assigned once keep the email client', () => {
+  const { pair } = channelRuns();
+  const n = emailKept(pair);
+  const met = pair.map((r) => (r.email.met === null ? '-' : r.email.met.toFixed(2)));
+  assert.ok(n >= 8, `never lost on ${n}/10: lost ${pair.map((r) => r.email.lost).join(' ')}, met ${met.join(' ')}`);
 });

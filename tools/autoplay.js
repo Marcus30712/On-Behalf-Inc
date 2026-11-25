@@ -44,13 +44,14 @@
 //   helps on the email while more than half a day's mail waits. Moves by
 //   met-rate, headcount and QA look at the phone clients only. channels
 //   'nostaff' is the same with nobody on the email; 'single' keeps one fixed
-//   agent on the email with no stand-in and no help.
+//   agent on the email with no stand-in and no help; 'pair' keeps two fixed
+//   agents on it, assigned once, with no stand-in and no help.
 //
 // The checks also play sensible over 720 days (fees in years 1 and 2) and
 // sensible taking client offers (the S milestone after losing a client; also
 // the v1.2 brief's offers-S guard), both expanding policies over 720 days, and
-// keeping service with channels, staffed, unstaffed and with one uncovered
-// email agent, over 720 days (v1.3).
+// keeping service with channels, staffed, unstaffed, with one uncovered
+// email agent and with two email agents assigned once, over 720 days (v1.3).
 import { pathToFileURL } from 'node:url';
 import { createGame, advance, act, view, SHIFTS } from '../sim/game.js';
 import { CLIENTS } from '../world/clients.js';
@@ -96,10 +97,10 @@ const mean = (xs) => (xs.length === 0 ? 0 : xs.reduce((s, x) => s + x, 0) / xs.l
 // `acceptOffers` (sensible only): take every new-client offer instead of
 // declining it. `expand` (sensible only, v1.2): 'greedy' or 'keep', expand
 // the office and take the offers it can staff (see the policy notes above).
-// `channels` (with expand 'keep', v1.3): 'staff', 'nostaff' or 'single', also
-// research the chat and mail desks and take both channel clients; 'nostaff'
-// leaves the email client without anyone, 'single' gives it one uncovered
-// agent (see the policy notes above).
+// `channels` (with expand 'keep', v1.3): 'staff', 'nostaff', 'single' or
+// 'pair', also research the chat and mail desks and take both channel
+// clients; 'nostaff' leaves the email client without anyone, 'single' gives
+// it one uncovered agent, 'pair' two (see the policy notes above).
 export function runPolicy({ seed, days, policy, acceptOffers = false, expand = false, channels = false }) {
   const state = createGame(seed);
   const sensible = policy === 'sensible';
@@ -285,6 +286,9 @@ export function channelsVerdict(runs, keep) {
 // v1.3: seeds where the email client was lost at least once.
 export const emailLost = (runs) => runs.filter((r) => r.email.lost > 0).length;
 
+// v1.3 (final review I5): seeds where the email client was never lost.
+export const emailKept = (runs) => runs.filter((r) => r.email.lost === 0).length;
+
 // v1.3: seeds where the email client struggled: lost at least once, or its
 // workdays averaged under EMAIL_STRUGGLE_MET of intervals at target.
 const EMAIL_STRUGGLE_MET = 0.9;
@@ -378,10 +382,11 @@ const channelClients = (v) => v.clients.filter((c) => c.active && channelOfId(c.
 // Agents a channel client keeps ('nostaff': none on the email).
 function deskNeed(plan, id) {
   if (channelOfId(id) !== 'email') return CHANNEL_STAFF[channelOfId(id)];
-  return { nostaff: 0, single: 1 }[plan.channels] ?? CHANNEL_STAFF.email;
+  return { nostaff: 0, single: 1, pair: 2 }[plan.channels] ?? CHANNEL_STAFF.email;
 }
 // 'single': one agent fixed on the email, no stand-in and no help (the lesson: cover it).
-const fixedDesk = (plan, id) => plan.channels === 'single' && channelOfId(id) === 'email';
+// 'pair': two agents fixed on the email, assigned once, no stand-in and no help.
+const fixedDesk = (plan, id) => ['single', 'pair'].includes(plan.channels) && channelOfId(id) === 'email';
 
 function decide(state, v, plan, tally) {
   answerInbox(state, v, plan);
@@ -464,7 +469,7 @@ function agentsFor(weekday, crew) {
 // and early in turn, taken (least stressed) from the phone client with the
 // most agents; the email client gets its agents, and one more while more than
 // half a day's mail waits ('nostaff': nobody; 'single': one fixed agent, kept
-// on days off, no help). Anyone
+// on days off, no help; 'pair': two such agents). Anyone
 // else answering a channel client (a new hire, someone moved when a client
 // left, a desk agent who is out today) goes to the phone client with the
 // fewest agents. Desk agents stay out of the weekend crew.
@@ -754,6 +759,7 @@ function main() {
   const channels = SEEDS.map((seed) => runPolicy({ seed, days: 720, policy: 'sensible', expand: 'keep', channels: 'staff' }));
   const noStaff = SEEDS.map((seed) => runPolicy({ seed, days: 720, policy: 'sensible', expand: 'keep', channels: 'nostaff' }));
   const single = SEEDS.map((seed) => runPolicy({ seed, days: 720, policy: 'sensible', expand: 'keep', channels: 'single' }));
+  const pair = SEEDS.map((seed) => runPolicy({ seed, days: 720, policy: 'sensible', expand: 'keep', channels: 'pair' }));
   printRuns('idle, 360 days', idleYear);
   printRuns('sensible, 360 days', sensible);
   printRuns('sensible taking client offers, 360 days', offers);
@@ -763,6 +769,7 @@ function main() {
   printRuns('keeping service with the chat and email clients, 720 days (v1.3)', channels);
   printRuns('keeping service with the chat and email clients, nobody on the email, 720 days (v1.3)', noStaff);
   printRuns('keeping service with the chat and email clients, one email agent and no cover, 720 days (v1.3)', single);
+  printRuns('keeping service with the chat and email clients, two email agents assigned once, no cover, 720 days (v1.3)', pair);
 
   const target = 0.8;
   const worn = idle.filter((r) => wornDown(r, 180)).length;
@@ -786,6 +793,7 @@ function main() {
   const ch = channelsVerdict(channels, keep);
   const lostEmail = emailLost(noStaff);
   const strained = emailStruggles(single);
+  const kept = emailKept(pair);
   const dayList = (runs, key) => runs.map((r) => r[key] ?? '-').join(' ');
 
   console.log('\nfirst month, default roster (idle): met-share by weekday Mon..Fri',
@@ -805,7 +813,7 @@ function main() {
       '| burnouts', runs.reduce((s, r) => s + r.burnouts, 0), 'resigned', runs.reduce((s, r) => s + r.resigned, 0));
   }
   console.log('plain sensible 720: cash at day 360', twoYears.map((r) => Math.round(r.monthCash[11] ?? r.cash)).join(' '));
-  for (const [label, runs] of [['channels', channels], ['channels, email unstaffed', noStaff], ['channels, one email agent', single]]) {
+  for (const [label, runs] of [['channels', channels], ['channels, email unstaffed', noStaff], ['channels, one email agent', single], ['channels, two fixed email agents', pair]]) {
     console.log(`${label}: clients at the end`, runs.map((r) => r.clients.join('+') || '-').join(' '),
       '| email workdays', runs.map((r) => r.email.days).join(' '), '| times lost', runs.map((r) => r.email.lost).join(' '),
       '| email met', runs.map((r) => (r.email.met === null ? '-' : pct(r.email.met))).join(' '),
@@ -844,6 +852,7 @@ function main() {
       `keeping service with the chat and email clients (v1.3): both active at day 720 on ${ch.active}/10 (>= 8), email backlog within two days of mail on ${ch.backlogOk}/10, fees in full year 1 ${pct(ch.fees[0])}, year 2 ${pct(ch.fees[1])} (each >= 65%), mean cash ${Math.round(ch.meanCash)} vs keeping service without ${Math.round(ch.keepMeanCash)} (>=; not poorer on ${ch.notPoorer}/10, not a bar)`),
     check(lostEmail >= 8, `an email client nobody answers is lost (v1.3): ${lostEmail}/10 seeds (>= 8)`),
     check(strained >= 8, `one email agent with no cover struggles (lost, or email met under 90%) (v1.3): ${strained}/10 seeds (>= 8)`),
+    check(kept >= 8, `two email agents assigned once, no daily stand-in, keep the email client (never lost) (v1.3): ${kept}/10 seeds (>= 8)`),
   ];
   console.log(`\n${results.filter(Boolean).length}/${results.length} checks pass (${((Date.now() - t0) / 1000).toFixed(1)} s)`);
   if (!results.every(Boolean)) process.exitCode = 1;

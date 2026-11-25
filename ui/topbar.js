@@ -68,7 +68,9 @@ function chipTitle(c) {
   const t = c.today;
   const n = (x) => Math.round(x);
   if (c.channel === 'email') {
-    return t.offered > 0 ? [formatTarget(c), `${M.received} ${fill(M.backlogUnit, { n: n(t.offered) })}`,
+    // "들어온 메일" is today's arrivals, not the answered-or-overdue count.
+    const arrived = t.arrived ?? 0;
+    return arrived > 0 ? [formatTarget(c), `${M.received} ${fill(M.backlogUnit, { n: n(arrived) })}`,
       `${M.answered} ${fill(M.backlogUnit, { n: n(t.handled) })}`].join(' · ') : M.noneEmail;
   }
   if (c.channel === 'chat') {

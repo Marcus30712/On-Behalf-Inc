@@ -98,6 +98,57 @@ test('looks vary: skin tones, hair styles, glasses and distinct combinations', (
   }
 });
 
+// Starting staff are always p0..p9 and hires h1, h2, ...: the looks players
+// actually see must not clump.
+test('looks are balanced in the id windows players see', () => {
+  for (const window of [ids('p', 10).map((_, i) => `p${i}`), ids('h', 14)]) {
+    const looks = window.map((id) => personLook({ id }));
+    for (const [trait, key] of [['hair colour', (l) => l.palette.h], ['hair style', (l) => l.hair]]) {
+      const counts = new Map();
+      for (const l of looks) counts.set(key(l), (counts.get(key(l)) ?? 0) + 1);
+      const most = Math.max(...counts.values());
+      assert.ok(most / looks.length <= 0.4, `${window[0]}..: one ${trait} on ${most}/${looks.length}`);
+    }
+  }
+});
+
+test('glasses are two rings around the eyes, clear of the headset cups', () => {
+  for (const hair of HAIRS) {
+    const plain = personSprite('stand', { hair, glasses: false }).rows;
+    const specs = personSprite('stand', { hair, glasses: true }).rows;
+    for (let y = 0; y < 12; y++) {
+      for (let x = 0; x < 16; x++) {
+        if (plain[y][x] === 'e') assert.equal(specs[y][x], 'e', `${hair}: eye at ${x},${y} stays visible`);
+        if (specs[y][x] === 'g') assert.ok(x >= 4 && x <= 11, `${hair}: frame at x=${x} reaches the headset cups`);
+      }
+    }
+    for (const eyeX of [5, 10]) {
+      // a ring: frame above and below the eye, and on both sides of the lens
+      const col = (x) => specs.slice(0, 12).map((r) => r[x]).join('');
+      assert.match(col(eyeX), /g(e|s)+g/, `${hair}: lens ring at x=${eyeX}`);
+      const insideX = eyeX === 5 ? 6 : 9;
+      assert.match(col(insideX), /gs+g/, `${hair}: skin inside the lens at x=${insideX}`);
+    }
+  }
+  const deep = personLook({ id: 'x' }).palette; // any palette: the frame differs from eyes and outline
+  assert.notEqual(deep.g, deep.e);
+  assert.notEqual(deep.g, deep.O);
+});
+
+test('glasses frame stands out on every skin tone', () => {
+  const lum = (hex) => {
+    const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
+      .map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  const contrast = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((m, n) => n - m); return (x + 0.05) / (y + 0.05); };
+  const seen = new Map();
+  for (const id of ids('h', 400)) { const p = personLook({ id }).palette; seen.set(p.s, p); }
+  assert.ok(seen.size >= 7, `skin tones: ${seen.size}`);
+  assert.ok([...seen.keys()].includes('#6b4430'), 'deepest reference skin');
+  for (const [skin, p] of seen) assert.ok(contrast(p.g, skin) >= 1.8, `frame ${p.g} on skin ${skin}: ${contrast(p.g, skin).toFixed(2)}`);
+});
+
 test('palettes carry the reference colours', () => {
   const pal = ids('h', 400).map((id) => personLook({ id }).palette);
   const has = (key, colour) => pal.some((p) => p[key] === colour);

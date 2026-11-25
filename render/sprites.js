@@ -45,9 +45,12 @@ export const PALETTES = Object.freeze({ office: Object.freeze(OFFICE), miso: Obj
 // Person colours: chosen from the person's id only (never the nation), so the
 // same person always looks the same and different people look different.
 // Skin runs light to deep; hair and shirts follow the approved reference.
+// [skin, shade, glasses frame]: slate frames on lighter skin, pale steel on
+// deeper skin, so the lenses always show.
 const SKIN = [
-  ['#f7d7c4', '#e6b89c'], ['#f1c7a5', '#d9a47f'], ['#e0ac85', '#c48a63'],
-  ['#c68e64', '#a8714b'], ['#a26c48', '#83533a'], ['#7d4f35', '#623c28'],
+  ['#f7d7c4', '#e6b89c', '#5d6680'], ['#f1c7a5', '#d9a47f', '#5d6680'], ['#e0ac85', '#c48a63', '#5d6680'],
+  ['#c68e64', '#a8714b', '#4a4f63'], ['#a26c48', '#83533a', '#dfe3ea'], ['#7d4f35', '#623c28', '#dfe3ea'],
+  ['#6b4430', '#523222', '#dfe3ea'],
 ];
 const HAIR = [
   ['#2e2530', '#1a1419'], // black
@@ -82,8 +85,11 @@ function hashId(id) {
     h ^= ch.codePointAt(0);
     h = Math.imul(h, 0x01000193);
   }
+  // full fmix32 finalizer: sequential ids (p0.., h1..) spread evenly
   h ^= h >>> 16;
-  h = Math.imul(h, 0x45d9f3b);
+  h = Math.imul(h, 0x85ebca6b);
+  h ^= h >>> 13;
+  h = Math.imul(h, 0xc2b2ae35);
   h ^= h >>> 16;
   return h >>> 0;
 }
@@ -96,16 +102,18 @@ export function personLook(person) {
     n = Math.floor(n / list.length);
     return v;
   };
+  // Pick order keeps the fixed id windows players see (p0..p9, h1..h14)
+  // varied: no hair colour, style, skin or shirt on more than 5 of 14.
+  const [skin, skinShade, frame] = pick(SKIN);
+  const style = pick(HAIR_STYLES);
   const [shirt, shirtDark, collar] = pick(SHIRT);
   const [hair, hairDark] = pick(HAIR);
-  const [skin, skinShade] = pick(SKIN);
   const [pants, pantsDark] = pick(PANTS);
-  const style = pick(HAIR_STYLES);
   const glasses = pick([false, false, false, true]);
   return Object.freeze({
     palette: Object.freeze({
       O: '#3b2a2e', s: skin, S: skinShade, h: hair, H: hairDark,
-      e: '#2e2530', b: '#f2a6a0', m: '#b4584f', g: '#4a4f63',
+      e: '#2e2530', b: '#f2a6a0', m: '#b4584f', g: frame,
       c: shirt, C: shirtDark, w: collar, p: pants, P: pantsDark,
       t: '#5a3c2c', y: '#e8c46a', k: '#6a4a3a',
     }),
@@ -268,11 +276,14 @@ const HEADS = {
   },
 };
 
-// Thin frame across the eyes (front views).
+// Two small lens rings, each holding an eye and a skin pixel, joined by a
+// bridge; they stop short of the cheeks so they never meet the headset cups.
 const GLASSES = [
   ...Array(7).fill('................'),
-  '...gg.gggg.gg...',
-  '....g.g..g.g....',
+  '.....gg..gg.....',
+  '....g..gg..g....',
+  '....g......g....',
+  '.....gg..gg.....',
 ];
 
 // Shirt with a collar, belt, trousers, shoes.
@@ -396,9 +407,8 @@ const HEADSET = [
   '.Okg........gkO.',
   '.Okg........gkO.',
   '.Okk........kkO.',
-  '..Omm...........',
-  '....mmk.........',
-  ...Array(11).fill('................'),
+  '..Okkkkg........',
+  ...Array(12).fill('................'),
 ];
 const HEADSET_BACK = HEADSET.map((r, y) => (y >= 11 ? '................' : r));
 

@@ -1,4 +1,4 @@
-import { MAP, tileAt } from './map.js';
+import { MAP, tileAt, baseSeats } from './map.js';
 import { findPath, tilesByDistance } from './path.js';
 
 export const WALK_SPEED = 3; // tiles per second
@@ -12,13 +12,15 @@ function offSite(person) {
 
 // Where a person wants to be. `slotIndex` is the agent's seat index (order
 // among agents); `spotIndex` is the index among people sharing the break room
-// or task table. Returns null when that shared area has no spot left.
-export function targetFor(person, slotIndex = 0, spotIndex = 0, map = MAP) {
+// or task table; `seats` is how many agent seats are open (the office level's
+// seats, view.office.seats; seats of unbuilt areas are never handed out).
+// Returns null when the person has no seat or that shared area is full.
+export function targetFor(person, slotIndex = 0, spotIndex = 0, map = MAP, seats = baseSeats(map)) {
   const s = map.spots;
   if (offSite(person)) return s.door;
   const home = person.role === 'lead' ? s.leadDesk
     : person.role === 'qa' ? s.qaDesk
-    : s.seats[slotIndex] ?? null;
+    : slotIndex < seats ? s.seats[slotIndex] ?? null : null;
   if (person.activity === 'break') return s.breakRoom[spotIndex] ?? null;
   if (person.activity === 'task') {
     const kind = person.task?.kind;
@@ -29,8 +31,9 @@ export function targetFor(person, slotIndex = 0, spotIndex = 0, map = MAP) {
 }
 
 // Targets for everyone: Map id -> [x,y]. Shared spots go out in people order;
-// anyone left without a spot waits on the nearest free floor tile.
-export function planTargets(people, map = MAP) {
+// anyone left without a spot (or an agent beyond the open seats) waits on the
+// nearest free floor tile.
+export function planTargets(people, map = MAP, seats = baseSeats(map)) {
   const s = map.spots;
   const reserved = new Set([
     ...s.seats, s.leadDesk, s.qaDesk, ...s.breakRoom, ...s.taskTable, s.clinic, s.door,
@@ -48,7 +51,7 @@ export function planTargets(people, map = MAP) {
       if (p.activity === 'break') spot = breakIdx++;
       else if (p.activity === 'task' && TABLE_TASKS.has(p.task?.kind)) spot = tableIdx++;
     }
-    const t = targetFor(p, slot, spot, map);
+    const t = targetFor(p, slot, spot, map, seats);
     if (t) {
       targets.set(p.id, t);
       taken.add(key(t));
@@ -71,9 +74,10 @@ export function planTargets(people, map = MAP) {
 
 // Advance everyone by dtMs. Pure: inputs are not modified. Each actor is
 // { id, x, y, path, target, gone } where path holds the tiles still to walk.
-export function stepActors(actors, people, dtMs, map = MAP) {
+// `seats`: open agent seats (view.office.seats).
+export function stepActors(actors, people, dtMs, map = MAP, seats = baseSeats(map)) {
   const byId = new Map(actors.map((a) => [a.id, a]));
-  const targets = planTargets(people, map);
+  const targets = planTargets(people, map, seats);
   const door = map.spots.door;
   const next = [];
   for (const p of people) {

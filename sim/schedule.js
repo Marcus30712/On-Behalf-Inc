@@ -1,10 +1,45 @@
 // Shifts and weekly roster. Pure functions; minutes are since midnight (0-1439).
-import { isWorkday, dateOf } from './calendar.js';
+//
+// state.roster[personId] = { [weekday 0-6]: shiftId | 'off' }; a missing
+// weekday is 'off' (new games and pre-v1.2 saves hold only 0-4). A shift is
+// worked only on its own `days`.
+import { dateOf } from './calendar.js';
+import { CLIENTS } from '../world/clients.js';
+
+const WEEKDAYS = [0, 1, 2, 3, 4];
 
 export const SHIFTS = {
-  early: { start: 540, end: 1080 },
-  late: { start: 720, end: 1260 },
+  early: { start: 540, end: 1080, days: [...WEEKDAYS] },
+  late: { start: 720, end: 1260, days: [...WEEKDAYS] },
+  // v1.2: for weekend clients (Saturday, Sunday 09:00-18:00).
+  weekend: { start: 540, end: 1080, days: [5, 6] },
 };
+
+// The center opens on a weekday when any active client opens that weekday.
+// Monday to Friday always count, as before v1.2, so a game with only weekday
+// clients runs exactly as it did; Saturday and Sunday only with an active
+// weekend client.
+export function isCenterOpenWeekday(state, weekday) {
+  if (WEEKDAYS.includes(weekday)) return true;
+  return (state.clients ?? []).some((c) => c.active
+    && CLIENTS.find((d) => d.id === c.id)?.hours.days.includes(weekday));
+}
+
+export function isCenterOpen(state, day) {
+  return isCenterOpenWeekday(state, dateOf(day).weekday);
+}
+
+// True when the shift id is a shift that runs on the weekday.
+export const shiftRunsOn = (shiftId, weekday) => !!SHIFTS[shiftId]?.days.includes(weekday);
+
+// Days of the week the person is rostered on a shift that runs that day while
+// the center opens. Six or more tire them faster (sim/interval.js).
+export function rosteredDays(state, personId) {
+  const week = state.roster[personId] ?? {};
+  let n = 0;
+  for (let w = 0; w < 7; w++) if (shiftRunsOn(week[w], w) && isCenterOpenWeekday(state, w)) n++;
+  return n;
+}
 
 const INTERVAL = 30;
 // Automatic breaks as [offset from shift start, length], in minutes, per shift
@@ -20,6 +55,8 @@ const BREAKS = {
   early: [[[180, 15], [240, 60], [420, 15]], [[210, 15], [300, 60], [450, 15]]],
   late: [[[60, 15], [240, 60], [330, 15]], [[90, 15], [180, 60], [300, 15]]],
 };
+// The weekend shift has the early shift's hours, so the same breaks.
+BREAKS.weekend = BREAKS.early;
 
 const overlap = (a0, a1, b0, b1) => Math.max(0, Math.min(a1, b1) - Math.max(a0, b0));
 
@@ -60,11 +97,15 @@ export function onBreak(minute, shiftId, group = 0) {
   return workShare(minute, shiftId, group) < 1;
 }
 
+// On shift: the center opens that day, the person is well and not absent, and
+// their roster shift for the weekday runs on that weekday and covers `minute`.
 export function onShift(state, person, day, minute) {
-  if (!isWorkday(day)) return false;
+  const { weekday } = dateOf(day);
+  if (!isCenterOpenWeekday(state, weekday)) return false;
   if (person.health.kind !== 'well') return false;
   if (isAbsent(state, person.id, day)) return false;
-  const shiftId = state.roster[person.id]?.[dateOf(day).weekday];
+  const shiftId = state.roster[person.id]?.[weekday];
+  if (!shiftRunsOn(shiftId, weekday)) return false;
   const shift = SHIFTS[shiftId];
-  return !!shift && minute >= shift.start && minute < shift.end;
+  return minute >= shift.start && minute < shift.end;
 }

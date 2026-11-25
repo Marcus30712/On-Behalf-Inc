@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
-import { createGame, act, view, advance, HIRE_COST, SEATS } from '../sim/game.js';
+import { createGame, act, view, advance, HIRE_COST } from '../sim/game.js';
 import { UI_TEXT, fill } from '../ui/text.js';
 import { formatMoney } from '../ui/money.js';
 import { renderPanel, selectPerson, resetPanels, TABS } from '../ui/panels.js';
@@ -136,7 +136,7 @@ test('seat counter counts agents on the phone only', () => {
   const agentsOnPhone = state.people.filter((p) => p.role === 'agent' && state.assignment[p.id]?.kind === 'phone').length;
   const root = makeRoot();
   renderPanel(root, view(state), 'tasks', (a) => act(state, a));
-  assert.equal(root.querySelector('.seats').textContent.split(' · ')[0], fill(UI_TEXT.tasks.seats, { n: agentsOnPhone }));
+  assert.equal(root.querySelector('.seats').textContent.split(' · ')[0], fill(UI_TEXT.tasks.seatsOf, { n: agentsOnPhone, seats: view(state).office.seats }));
 });
 
 test('a refusal notice clears once time passes or an action succeeds', () => {
@@ -189,7 +189,7 @@ test('hiring with no free seat shows the no-seats state and no start button', ()
   const state = createGame(11);
   const root = makeRoot();
   const v = view(state);
-  assert.equal(v.people.filter((p) => p.role === 'agent').length >= SEATS, true, 'seats full at start');
+  assert.equal(v.people.filter((p) => p.role === 'agent').length >= v.office.seats, true, 'seats full at start');
   assert.equal(v.hiring ?? null, null);
   renderPanel(root, v, 'hiring', (a) => act(state, a));
   assert.equal(root.querySelector('.state').textContent, UI_TEXT.hiring.noSeats);

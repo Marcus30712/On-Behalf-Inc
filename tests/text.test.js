@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { UI_TEXT } from '../ui/text.js';
 import { fill, eventText, withParticle } from '../ui/text.js';
 import { formatTime, formatDate, formatMoney, formatPct, formatSec } from '../ui/format.js';
+import { refusalText } from '../ui/panels.js';
 import { EVENTS } from '../world/events.js';
 import { RESEARCH } from '../world/research.js';
 
@@ -27,6 +28,8 @@ const REPRESENTATIVE = {
   'resign-notice': { data: { name: '하나', days: 3, leaveDay: 9 } },
   candidate: { data: { cand1: '가을', cand2: '나무' } },
   'client-offer': { data: { client: '달빛몰' }, clientId: 'dalbit-mall' },
+  'expansion-start': { data: { level: 1, days: 10 } },
+  'expansion-done': { data: { level: 2, seats: 16 } },
 };
 
 test('every event id in EVENTS renders without leftover braces', () => {
@@ -208,4 +211,103 @@ test('real client names get grammatical particles in churn-warning and client-of
     assert.ok(offer.choices[0].result.startsWith(`${client}이 새 고객사가 돼요.`), offer.choices[0].result);
     assert.ok(offer.text.startsWith(`${client}에서`));
   }
+});
+
+const offer = (clientId, data) => eventText({ id: 'client-offer', day: 3, clientId, data });
+
+test('client-offer text: old text at level 0, textMore after expansion, textWeekend for the weekend client', () => {
+  assert.match(offer('dalbit-mall').text, /좌석이 8개뿐이라/);
+  assert.equal(offer('dalbit-mall').choices[0].result, '달빛몰이 새 고객사가 돼요. 상담사를 세 고객사에 나눠 배치하세요.');
+  const more = offer('dalbit-mall', { officeLevel: 1 });
+  assert.ok(!more.text.includes('8개뿐'));
+  assert.match(more.text, /받으면 지금 인원을 나눠야 해요\.$/);
+  assert.match(more.choices[0].result, /업무 배치에서 응대 인원을 정해 주세요\./);
+  const bandi = offer('bandi-repair');
+  assert.match(bandi.text, /^반딧불 가전에서 계약을 제안했어요\./);
+  assert.match(bandi.choices[0].result, /업무 배치/);
+  const weekend = offer('baram-delivery', { officeLevel: 1 });
+  assert.match(weekend.text, /^바람개비 배달에서 주말 계약을 제안했어요\. 토·일 09:00~18:00에 전화를 받아요\./);
+  assert.match(weekend.choices[0].result, /주말 조를 짜 주세요\./);
+  assert.match(weekend.advisor, /주말 일은 누가 쉬는지/);
+  assert.match(more.advisor, /큰 기회예요/);
+});
+
+test('a re-offer starts with the again sentence', () => {
+  const out = offer('bandi-repair', { officeLevel: 1, again: true });
+  assert.ok(out.text.startsWith('예전에 인연이 닿지 않았던 반딧불 가전에서 다시 연락이 왔어요. 반딧불 가전에서 계약을 제안했어요.'));
+  assert.ok(!offer('bandi-repair', { officeLevel: 1 }).text.includes('예전에'));
+});
+
+test('expansion events fill stage, days and seats', () => {
+  const done = eventText({ id: 'expansion-done', day: 1, data: { level: 1, seats: 12 } });
+  assert.equal(done.title, '창가 구역 완공');
+  assert.match(done.text, /^창가 구역이 문을 열었어요\. 이제 상담사 좌석이 12개예요\./);
+  assert.ok(done.advisor.length > 0);
+  const start = eventText({ id: 'expansion-start', day: 1, data: { level: 2, days: 15 } });
+  assert.equal(start.title, '안쪽 구역 공사 시작');
+  assert.match(start.text, /15근무일 뒤에 완공돼요/);
+});
+
+test('v1.2 UI_TEXT keys exist', () => {
+  for (const k of ['shift.weekend.short', 'shift.weekend.full', 'tasks.seatsOf', 'refuse.office.no-cash', 'refuse.building', 'refuse.max-level', 'refuse.need-previous', 'topbar.weekendOpen', 'metrics.weekendOnly', 'metrics.weekendOnlyTip', 'roster.colDaysWeekend', 'roster.weekendHelp', 'roster.weekendCount', 'roster.sixDays', 'roster.sixDaysShort', 'office.title', 'office.confirmText', 'office.stages.2.name']) {
+    assert.equal(typeof k.split('.').reduce((o, p) => o?.[p], UI_TEXT), 'string', k);
+  }
+  assert.equal(UI_TEXT.shift.weekend.full, '주말 조');
+});
+
+// Final review, Important 2 + 3: a number takes its particle and copula by how
+// it reads in Korean (its last read syllable), and {x}예요 settles like 이/가.
+test('a number settles 은/는 by its Korean reading', () => {
+  const cases = {
+    '30,000': '은', // 삼만
+    '36,000': '은', // 삼만육천
+    '9,000': '은', // 구천
+    '17,000': '은', // 만칠천
+    '1,500': '은', // 천오백
+    '2,000': '은', // 이천
+    10: '은', // 십
+    1: '은', // 일
+    2: '는', // 이
+    3: '은', // 삼
+    4: '는', // 사
+    5: '는', // 오
+    6: '은', // 육
+    7: '은', // 칠
+    8: '은', // 팔
+    9: '는', // 구
+    0: '은', // 영
+    '120,000,000': '은', // 일억이천만
+    '1.5': '는', // 일점오
+  };
+  for (const [n, particle] of Object.entries(cases)) {
+    assert.equal(fill('{n}은 나가요.', { n }), `${n}${particle} 나가요.`, n);
+  }
+  assert.equal(fill('{n}로 가요.', { n: '30,000' }), '30,000으로 가요.');
+  assert.equal(fill('{n}로 가요.', { n: '1' }), '1로 가요.');
+  assert.equal(fill('{n}가 남았어요.', { n: '9' }), '9가 남았어요.');
+  assert.equal(fill('{n}가 남았어요.', { n: '36' }), '36이 남았어요.');
+});
+
+test('{x}예요 settles to 이에요 after a 받침 and 예요 otherwise', () => {
+  assert.equal(fill('비용은 {c}예요.', { c: '💰 30,000' }), '비용은 💰 30,000이에요.');
+  assert.equal(fill('비용은 {c}예요.', { c: '💰 1,500' }), '비용은 💰 1,500이에요.');
+  assert.equal(fill('비용은 {c}예요.', { c: '9' }), '비용은 9예요.');
+  assert.equal(fill('오늘은 {h}예요.', { h: '씨앗날' }), '오늘은 씨앗날이에요.');
+  assert.equal(fill('오늘은 {h}예요.', { h: '해넘이 연휴' }), '오늘은 해넘이 연휴예요.');
+  assert.equal(fill('오늘은 {h}이에요.', { h: '해넘이 연휴' }), '오늘은 해넘이 연휴예요.');
+});
+
+test('rendered money lines read right: refusals, offers and the holiday line', () => {
+  assert.equal(refusalText('no-cash', { type: 'startHiring' }), '돈이 모자라요. 채용 비용은 💰 1,500이에요.');
+  assert.equal(refusalText('no-cash', { type: 'startExpansion' }, { office: { next: { cost: 30000 } } }),
+    '돈이 모자라요. 공사 비용은 💰 30,000이에요.');
+  assert.equal(refusalText('no-cash', { type: 'startExpansion' }, { office: { next: { cost: 36000 } } }),
+    '돈이 모자라요. 공사 비용은 💰 36,000이에요.');
+  assert.match(offer('bandi-repair').text, /월 계약금은 💰 17,000이에요\. /);
+  assert.match(offer('baram-delivery', { officeLevel: 1 }).text, /월 계약금은 💰 9,000이에요\.$/);
+  assert.match(offer('dalbit-mall').text, /월 계약금은 💰 24,000이에요\. /);
+  const seed = eventText({ id: 'holiday-leave', day: 1, data: { name: '하나', holidayId: 'seed-day', nationId: 'veltora' } });
+  assert.ok(seed.text.startsWith('내일부터 씨앗날이에요. 하나 씨가'), seed.text);
+  const year = eventText({ id: 'holiday-leave', day: 1, data: { name: '하나', holidayId: 'year-turn', nationId: 'veltora' } });
+  assert.ok(year.text.startsWith('내일부터 해넘이 연휴예요. '), year.text);
 });

@@ -4,9 +4,9 @@
 // Assignment = { [personId]: { kind: 'phone', clientId } | { kind: 'coaching'|'qa'|'research'|'training' } }
 // A person with no assignment does no work: on shift or not, they rest.
 import { intervalQueue } from './queue.js';
-import { dateOf, isWorkday, holidaysOn } from './calendar.js';
+import { dateOf, holidaysOn } from './calendar.js';
 import { ahtFor, applyWork, applyRest, traitMul, traitAdd } from './people.js';
-import { onShift, workShare } from './schedule.js';
+import { onShift, workShare, rosteredDays } from './schedule.js';
 import { CLIENTS } from '../world/clients.js';
 import { NATIONS } from '../world/nations.js';
 
@@ -28,19 +28,32 @@ export const CURVE = [
   65, 58, 38, 33, 30, 26, 21, 16, // 17:00-21:00
 ].map((w) => w / 1000);
 
-// Monday = weekday 0.
-const WEEKDAY_MUL = [1.15, 1.0, 1.0, 1.0, 0.9];
+// Monday = weekday 0. Saturday and Sunday (v1.2) only reach weekend clients.
+const WEEKDAY_MUL = [1.15, 1.0, 1.0, 1.0, 0.9, 1.0, 1.0];
+
+// v1.2: someone rostered six days or more in a week tires this much faster.
+export const SIX_DAY_FATIGUE_MUL = 1.5;
+const SIX_DAYS = 6;
 
 // v1.1: clients grow. Each 90-day quarter of the game adds `perQuarter` of the
 // starting volume, for the first `quarters` quarters (then it holds at about
 // +14%), so a roster that was enough in spring falls behind by autumn unless
-// it is run. Seats are fixed until office expansion (v1.2), which will
-// revisit how long calls keep growing.
+// it is run. Seats are fixed until office expansion (v1.2), which resumes
+// growth (below).
 export const CALL_GROWTH = { perQuarter: 0.07, quarters: 2 };
 const QUARTER_DAYS = 90;
 
-function growthMul(day) {
-  return 1 + CALL_GROWTH.perQuarter * Math.min(CALL_GROWTH.quarters, Math.floor(day / QUARTER_DAYS));
+// v1.2: when expansion 1 is finished (state.office.level1Day) growth resumes
+// for `RESUMED_GROWTH.quarters` more quarter(s), counted from that day, on top
+// of the first ones (at most x1.21). Without it, as in v1.1. One quarter, not
+// two, so an office that keeps service can still pay for its expansion
+// (balance record, v1.2 section).
+export const RESUMED_GROWTH = { quarters: 1 };
+function growthMul(day, level1Day) {
+  const quarters = (from, max) => Math.min(max, Math.max(0, Math.floor((day - from) / QUARTER_DAYS)));
+  const steps = quarters(0, CALL_GROWTH.quarters)
+    + (level1Day === undefined ? 0 : quarters(level1Day, RESUMED_GROWTH.quarters));
+  return 1 + CALL_GROWTH.perQuarter * steps;
 }
 
 const nationOf = (id) => NATIONS.find((n) => n.id === id);
@@ -64,13 +77,15 @@ function holidayMul(nation, day) {
 
 // Expected calls for one interval: callsPerDay x growth x curve x weekday x holiday x wobble.
 // Spikes (state.spikes) are not applied here; stepInterval multiplies them in.
-export function callsFor(client, day, minute, rng) {
+export function callsFor(client, day, minute, rng, state) {
   const slot = Math.floor((minute - CURVE_START) / INTERVAL);
-  const weekMul = WEEKDAY_MUL[dateOf(day).weekday] ?? 0;
+  const { weekday } = dateOf(day);
+  // No calls on a day the client does not open (a weekday client at the weekend).
+  const weekMul = client.hours.days.includes(weekday) ? WEEKDAY_MUL[weekday] ?? 0 : 0;
   const wobble = 0.85 + 0.3 * rng.next();
   const curve = CURVE[slot] ?? 0;
   const holiday = holidayMul(nationOf(client.nation), day);
-  return client.callsPerDay * growthMul(day) * curve * weekMul * holiday * wobble;
+  return client.callsPerDay * growthMul(day, state?.office?.level1Day) * curve * weekMul * holiday * wobble;
 }
 
 // Research points per full interval of work: 1 + average(coaching, evaluation) / 10.
@@ -105,9 +120,10 @@ function staffAverage(list, valueOf, none) {
   return weight > 0 ? list.reduce((s, x) => s + x.share * valueOf(x.person), 0) / weight : none;
 }
 
+// The client's own days and hours (weekday clients Mon-Fri, weekend clients Sat-Sun).
 export function isOpen(def, day, minute) {
   const h = def.hours;
-  return isWorkday(day) && h.days.includes(dateOf(day).weekday) && minute >= h.open && minute < h.close;
+  return h.days.includes(dateOf(day).weekday) && minute >= h.open && minute < h.close;
 }
 
 // Capacity factor from the person's nation holidays (e.g. a quiet month).
@@ -117,16 +133,33 @@ function staffAvail(person, day) {
   return Math.min(1, ...holidaysOn(day, nation).map(({ holiday }) => holiday.staffAvail ?? 1));
 }
 
+// The client a phone agent answers in the interval at (day, minute): their own
+// client while it is open; while it is closed (a weekday client at the
+// weekend) the first open active client in state.clients order, so a weekend
+// crew left on its weekday client answers the weekend client. Weekday clients
+// all keep the same hours, so on a weekday this is always the person's own
+// client. undefined when no client is open or the person is not on phones.
+export function answeringClient(state, assignment, day, minute) {
+  if (assignment?.kind !== 'phone') return undefined;
+  const openNow = (id) => {
+    const def = CLIENTS.find((d) => d.id === id);
+    return !!def && state.clients.some((c) => c.id === id && c.active) && isOpen(def, day, minute);
+  };
+  if (openNow(assignment.clientId)) return assignment.clientId;
+  return state.clients.find((c) => openNow(c.id))?.id;
+}
+
 // Break group (0 or 1) per person: phone agents of the same client and shift
 // alternate in state.people order, so a pair never breaks together. Everyone
-// else is group 0 (missing from the map). shiftOf(person) gives today's shift.
-export function breakGroups(state, shiftOf) {
+// else is group 0 (missing from the map). shiftOf(person) gives today's shift;
+// clientOf(person) the client answered now (default: the assigned client).
+export function breakGroups(state, shiftOf, clientOf) {
   const seen = new Map();
   const groups = new Map();
   for (const p of state.people) {
     const a = state.assignment[p.id];
     if (a?.kind !== 'phone') continue;
-    const key = `${a.clientId}/${shiftOf(p)}`;
+    const key = `${(clientOf && clientOf(p)) ?? a.clientId}/${shiftOf(p)}`;
     const n = seen.get(key) ?? 0;
     seen.set(key, n + 1);
     groups.set(p.id, n % 2);
@@ -156,16 +189,18 @@ export function stepInterval(state, rng) {
   if (open.length > 0) {
     const openIds = new Set(open.map((o) => o.def.id));
     const shiftOf = (p) => state.roster[p.id]?.[dateOf(day).weekday];
-    const groups = breakGroups(state, shiftOf);
+    // The client each phone agent answers now (their own, or a stand-in while theirs is closed).
+    const answering = new Map(state.people.map((p) => [p.id, answeringClient(state, state.assignment[p.id], day, minute)]));
+    const groups = breakGroups(state, shiftOf, (p) => answering.get(p.id));
     const shareOf = (p) => workShare(minute, shiftOf(p), groups.get(p.id) ?? 0);
 
     // Phone staff per open client.
     const staff = new Map(open.map((o) => [o.def.id, []]));
     for (const p of state.people) {
-      const a = state.assignment[p.id];
-      if (a?.kind !== 'phone' || !openIds.has(a.clientId) || !onShift(state, p, day, minute)) continue;
+      const clientId = answering.get(p.id);
+      if (!openIds.has(clientId) || !onShift(state, p, day, minute)) continue;
       const share = shareOf(p);
-      if (share > 0) staff.get(a.clientId).push({ person: p, share });
+      if (share > 0) staff.get(clientId).push({ person: p, share });
     }
 
     // Queues, in state.clients order (one rng draw each).
@@ -174,7 +209,7 @@ export function stepInterval(state, rng) {
       const list = staff.get(def.id);
       const agents = list.reduce((s, x) => s + x.share * staffAvail(x.person, day), 0);
       const ahtMin = staffAverage(list, (p) => ahtFor(p, def), def.ahtMin);
-      let calls = callsFor(def, day, minute, rng);
+      let calls = callsFor(def, day, minute, rng, state);
       if ((state.spikes ?? []).some((s) => s.clientId === def.id && s.day === day)) calls *= SPIKE_MUL;
       const q = intervalQueue({
         calls, ahtMin, agents, targetSec: def.slTarget.sec, patienceSec: def.patienceSec,
@@ -214,7 +249,8 @@ export function stepInterval(state, rng) {
       if (a && onShift(state, p, day, minute)) share = shareOf(p);
       let occupancy = NON_PHONE_OCCUPANCY;
       if (a?.kind === 'phone') {
-        if (openIds.has(a.clientId)) occupancy = results.get(a.clientId).occupancy;
+        const clientId = answering.get(p.id);
+        if (openIds.has(clientId)) occupancy = results.get(clientId).occupancy;
         else share = 0;
       } else if (a && PROGRESS_KINDS.includes(a.kind) && share > 0) {
         let gain = share;
@@ -223,7 +259,9 @@ export function stepInterval(state, rng) {
         state.progress[a.kind] = (state.progress[a.kind] ?? 0) + gain;
       }
       const worked = INTERVAL * share;
-      if (worked > 0) applyWork(p, { minutes: worked, occupancy, mods });
+      const tired = worked > 0 && rosteredDays(state, p.id) >= SIX_DAYS
+        ? { ...mods, fatigueGainMul: (mods.fatigueGainMul ?? 1) * SIX_DAY_FATIGUE_MUL } : mods;
+      if (worked > 0) applyWork(p, { minutes: worked, occupancy, mods: tired });
       if (INTERVAL - worked > 0) applyRest(p, { minutes: INTERVAL - worked, mods });
     }
   }

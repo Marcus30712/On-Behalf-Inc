@@ -3,14 +3,17 @@
 // storage is passed in (localStorage in the browser).
 import { newGame, serialize, deserialize } from './state.js';
 import { restoreRng } from './rng.js';
-import { dateOf, isWorkday, upcomingHolidays, holidaysOn, DAYS_PER_MONTH } from './calendar.js';
-import { stepInterval, breakGroups, isOpen } from './interval.js';
+import { dateOf, upcomingHolidays, holidaysOn, DAYS_PER_MONTH } from './calendar.js';
+import { stepInterval, breakGroups, answeringClient } from './interval.js';
 import { endOfDay } from './day.js';
 import { advanceResearch, advanceBuild, startResearch } from './research.js';
 import { dailyEconomy, monthEnd, reputation } from './economy.js';
 import { advanceHiring, startHiring } from './hiring.js';
+import { advanceExpansion, startExpansion, officeView } from './office.js';
 import { resolveEvent } from './events.js';
-import { SHIFTS, isAbsent, onShift, onBreak } from './schedule.js';
+import {
+  SHIFTS, isAbsent, onShift, onBreak, isCenterOpen, isCenterOpenWeekday, shiftRunsOn,
+} from './schedule.js';
 import { EVENTS } from '../world/events.js';
 import { CLIENTS } from '../world/clients.js';
 import { RESEARCH } from '../world/research.js';
@@ -21,10 +24,11 @@ export const SAVE_KEY = 'on-behalf-inc:save:v1';
 // Agent seats and the hiring cost, for the screen.
 export { SEATS, HIRE_COST } from './hiring.js';
 export { SHIFTS } from './schedule.js';
+export { seatsOf, OFFICE_LEVELS } from './office.js';
 
 const INTERVAL = 30;
 const DAY_MINUTES = 1440;
-const WEEKDAYS = 5;
+const WEEKDAYS = 7; // roster days, Monday (0) to Sunday (6)
 const ROSTER_SHIFTS = [...Object.keys(SHIFTS), 'off'];
 const TASKS = ['phone', 'coaching', 'qa', 'research', 'training'];
 
@@ -35,8 +39,9 @@ export function createGame(seed) {
 // Moves the clock on by `minutes` in 30-minute steps; a remainder under 30 is
 // kept in state.pendingMinutes and added to the next call, so many small calls
 // add up. Returns the minutes actually simulated (a multiple of 30).
-// Each step: interval, research, build. At midnight: end of day; on a workday
-// then the daily economy and hiring; on a month's last day the month end.
+// Each step: interval, research, build. At midnight: end of day; on a day the
+// center opened (Mon-Fri, and Sat-Sun with an active weekend client) then the
+// daily economy, hiring and expansion; on a month's last day the month end.
 // Nothing moves once the game is over; a game that ends at midnight stays on
 // its last day (minute 1440).
 export function advance(state, minutes) {
@@ -53,10 +58,12 @@ export function advance(state, minutes) {
     advanceResearch(state);
     advanceBuild(state, INTERVAL);
     if (state.minute < DAY_MINUTES) continue;
+    const opened = isCenterOpen(state, state.day);
     endOfDay(state, rng);
-    if (isWorkday(state.day)) {
+    if (opened) {
       dailyEconomy(state);
       advanceHiring(state, rng);
+      advanceExpansion(state);
     }
     if (state.day % DAYS_PER_MONTH === DAYS_PER_MONTH - 1) monthEnd(state);
     if (state.gameOver) { done++; break; }
@@ -76,6 +83,8 @@ const ACTIONS = {
     if (!state.people.some((p) => p.id === personId)) return refuse('unknown-person');
     if (!Number.isInteger(weekday) || weekday < 0 || weekday >= WEEKDAYS) return refuse('bad-weekday');
     if (!ROSTER_SHIFTS.includes(shift)) return refuse('bad-shift');
+    // A shift only on its own days: early and late Mon-Fri, weekend Sat-Sun.
+    if (shift !== 'off' && !shiftRunsOn(shift, weekday)) return refuse('bad-shift');
     state.roster[personId] = { ...state.roster[personId], [weekday]: shift };
     return OK();
   },
@@ -96,6 +105,9 @@ const ACTIONS = {
   },
   startHiring(state) {
     return startHiring(state);
+  },
+  startExpansion(state) {
+    return startExpansion(state);
   },
   resolve(state, { index, choiceId }) {
     if (!Number.isInteger(index) || !state.inbox[index]) return refuse('unknown-event');
@@ -191,9 +203,8 @@ function activity(state, p, rosterShift, group) {
   if (onBreak(state.minute, rosterShift, group)) return 'break';
   const a = state.assignment[p.id];
   if (a?.kind === 'phone') {
-    const def = CLIENTS.find((d) => d.id === a.clientId);
-    const active = state.clients.some((c) => c.id === a.clientId && c.active);
-    return active && def && isOpen(def, state.day, state.minute) ? 'phone' : 'idle';
+    // Their own client, or an open one while theirs is closed (sim/interval.js).
+    return answeringClient(state, a, state.day, state.minute) ? 'phone' : 'idle';
   }
   return PROGRESS_TASKS.has(a?.kind) ? 'task' : 'idle';
 }
@@ -223,6 +234,7 @@ function personView(state, p, weekday, groups) {
     health: p.health,
     probationDays: p.probationDays,
     rosterShift,
+    // Monday to Sunday; days missing from the roster (old saves) are 'off'.
     week: Array.from({ length: WEEKDAYS }, (_, w) => state.roster[p.id]?.[w] ?? 'off'),
     shiftToday: shiftToday(state, p, rosterShift),
     activity: activity(state, p, rosterShift, breakGroup),
@@ -264,7 +276,8 @@ export function view(state) {
   const inbox = state.inbox
     .map((e, index) => ({ ...e, index }))
     .sort((a, b) => inboxRank(a) - inboxRank(b) || b.index - a.index);
-  const groups = breakGroups(state, (p) => state.roster[p.id]?.[date.weekday]);
+  const groups = breakGroups(state, (p) => state.roster[p.id]?.[date.weekday],
+    (p) => answeringClient(state, state.assignment[p.id], state.day, state.minute));
   return freeze(structuredClone({
     day: state.day,
     minute: state.minute,
@@ -282,6 +295,9 @@ export function view(state) {
       build: state.research.build,
     },
     hiring: state.hiring,
+    office: officeView(state),
+    // weekend: an active client opens on Saturday or Sunday (roster shows those days).
+    flags: { weekend: isCenterOpenWeekday(state, 5) || isCenterOpenWeekday(state, 6) },
     calendar: calendarAhead(state),
     gameOver: state.gameOver,
     milestones: state.milestones,

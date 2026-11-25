@@ -5,7 +5,7 @@ import { createGame, act, save, load, view, SAVE_KEY } from '../sim/game.js';
 import { createClock } from './clock.js';
 import { UI_TEXT, eventText, fill } from './text.js';
 import { renderTopbar, renderMetrics } from './topbar.js';
-import { TABS, renderPanel, resetPanels, selectPerson } from './panels.js';
+import { TABS, renderPanel, resetPanels, selectPerson, closePanel } from './panels.js';
 import { renderInbox, renderAdvisor, firstRunIntro, resetInbox } from './inbox.js';
 import { builder } from './dom.js';
 import { EVENTS } from '../world/events.js';
@@ -275,6 +275,7 @@ export function start({ document, storage, now, requestFrame, seedSource: pickSe
   document.addEventListener('pointerdown', () => { keyboardFocus = false; }, true);
 
   function openTab(name) {
+    if (name !== tab) closePanel();
     tab = name;
     for (const b of roots.tabs.querySelectorAll('[data-tab]')) {
       b.setAttribute('aria-selected', String(b.dataset.tab === tab));
@@ -306,7 +307,7 @@ export function start({ document, storage, now, requestFrame, seedSource: pickSe
 
   function draw(v, t) {
     if (!ctx) return;
-    drawer.drawOffice(ctx, undefined, v.research);
+    drawer.drawOffice(ctx, undefined, v.research, v.office);
     drawer.drawActors(ctx, actors, v.people, t);
     drawer.drawBubbles(ctx, actors, v.people, { sparkles, timeMs: t });
   }
@@ -370,7 +371,7 @@ export function start({ document, storage, now, requestFrame, seedSource: pickSe
       }
       collectSparkles(v, r.newEvents, t);
       if (r.newEvents.length > 0) showNewAdvice(v, r.newEvents);
-      actors = stepActors(actors, v.people, dt);
+      actors = stepActors(actors, v.people, dt, undefined, v.office?.seats);
       draw(v, t);
       refresh(v, t);
     }

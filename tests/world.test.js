@@ -60,13 +60,19 @@ test('research has the four ids from the spec', () => {
   }
 });
 
-test('two starting clients and one offer, hours Mon-Fri 09:00-21:00', () => {
+test('two starting clients and three offers; weekday hours Mon-Fri 09:00-21:00 except the weekend client', () => {
   assert.equal(CLIENTS.filter((c) => c.start).length, 2);
-  assert.equal(CLIENTS.filter((c) => !c.start).length, 1);
-  for (const c of CLIENTS) {
+  assert.equal(CLIENTS.filter((c) => !c.start).length, 3);
+  const weekend = CLIENTS.filter((c) => c.hours.days.includes(5));
+  assert.deepEqual(weekend.map((c) => c.id), ['baram-delivery']);
+  assert.deepEqual(weekend[0].hours, { days: [5, 6], open: 540, close: 1080 });
+  for (const id of ['bandi-repair', 'baram-delivery']) assert.equal(CLIENTS.find((c) => c.id === id).requiresOfficeLevel, 1, id);
+  for (const c of CLIENTS.filter((x) => !x.hours.days.includes(5))) {
     assert.deepEqual(c.hours.days, [0, 1, 2, 3, 4]);
     assert.equal(c.hours.open, 540);
     assert.equal(c.hours.close, 1260);
+  }
+  for (const c of CLIENTS) {
     assert.ok(NATIONS.some((n) => n.id === c.nation), c.id);
     assert.ok(c.callsPerDay >= 60 && c.callsPerDay <= 150, c.id);
     assert.ok(c.ahtMin >= 4 && c.ahtMin <= 6, c.id);
@@ -74,10 +80,12 @@ test('two starting clients and one offer, hours Mon-Fri 09:00-21:00', () => {
   }
 });
 
-const USED_EVENTS = ['sick', 'burnout', 'no-show', 'argument', 'resign-notice', 'holiday-leave', 'friday-off', 'call-spike', 'client-offer', 'churn-warning', 'research-done', 'build-done', 'candidate', 'game-over-cash', 'game-over-clients', 'milestone-big-client', 'milestone-rank-s'];
+const USED_EVENTS = ['sick', 'burnout', 'no-show', 'argument', 'resign-notice', 'holiday-leave', 'friday-off', 'call-spike', 'client-offer', 'churn-warning', 'research-done', 'build-done', 'candidate', 'game-over-cash', 'game-over-clients', 'milestone-big-client', 'milestone-rank-s', 'expansion-done'];
+// Ids the sim pushes whose copy is not approved yet (none: v1.2 copy is in).
+const PENDING_COPY = [];
 
 test('every event used by the sim has text, and advice', () => {
-  for (const id of USED_EVENTS) {
+  for (const id of USED_EVENTS.filter((e) => !PENDING_COPY.includes(e))) {
     assert.ok(EVENTS[id]?.title && EVENTS[id]?.text, id);
     assert.ok(Array.isArray(ADVISOR[id]) && ADVISOR[id].length >= 1, id);
   }

@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { MAP } from '../render/map.js';
-import { targetFor, stepActors } from '../render/actors.js';
+import { tileAt } from '../render/map.js';
+import { targetFor, stepActors, planTargets } from '../render/actors.js';
 
 const s = MAP.spots;
 let n = 0;
@@ -62,7 +63,8 @@ test('actors reach their target and stop', () => {
 test('movement is 3 tiles per second and smooth', () => {
   const p = person({ activity: 'phone' });
   const [a] = stepActors([], [p], 500);
-  assert.ok(Math.abs(Math.hypot(a.x - s.door[0], a.y - s.door[1]) - 1.5) < 1e-9);
+  // distance walked along the 4-direction path (it may turn a corner)
+  assert.ok(Math.abs(Math.abs(a.x - s.door[0]) + Math.abs(a.y - s.door[1]) - 1.5) < 1e-9, `${a.x},${a.y}`);
 });
 
 test('a person who left is marked gone at the door, and returns when back on shift', () => {
@@ -107,4 +109,44 @@ test('agent seats follow order among agents; lead and QA use their desks', () =>
   assert.ok(at(actors[1], s.seats[0]));
   assert.ok(at(actors[2], s.qaDesk));
   assert.ok(at(actors[3], s.seats[1]));
+});
+
+const agents = (count) => Array.from({ length: count }, () => person({ activity: 'phone', task: { kind: 'phone', clientId: 'x' } }));
+const expansionSeats = (from) => new Set(s.seats.slice(from).map((t) => t.join(',')));
+
+test('only the first `seats` seats are handed out; unbuilt seats stay empty', () => {
+  const people = agents(16);
+  for (const [seats, used] of [[undefined, 8], [8, 8], [12, 12], [16, 16]]) {
+    const targets = planTargets(people, MAP, seats);
+    const unbuilt = expansionSeats(used);
+    people.forEach((p, i) => {
+      const t = targets.get(p.id);
+      if (i < used) assert.deepEqual(t, s.seats[i], `seats=${seats} agent ${i}`);
+      else {
+        assert.ok(!unbuilt.has(t.join(',')), `seats=${seats} agent ${i} on an unbuilt seat ${t}`);
+        assert.equal(tileAt(MAP, t[0], t[1]), '.', `seats=${seats} agent ${i} waits on floor`);
+      }
+    });
+    const keys = [...targets.values()].map((t) => t.join(','));
+    assert.equal(new Set(keys).size, keys.length, 'no two people share a tile');
+  }
+});
+
+test('more agents than seats at level 2: the extras wait on free floor', () => {
+  const people = agents(18);
+  const targets = planTargets(people, MAP, 16);
+  for (const p of people.slice(16)) {
+    const t = targets.get(p.id);
+    assert.equal(tileAt(MAP, t[0], t[1]), '.');
+  }
+});
+
+test('stepActors walks a 12th agent to its expansion seat when 12 seats are open', () => {
+  const people = agents(12);
+  let actors = [];
+  for (let t = 0; t < 20000; t += 100) actors = stepActors(actors, people, 100, MAP, 12);
+  assert.ok(at(actors[11], s.seats[11]), `${actors[11].x},${actors[11].y}`);
+  let closed = [];
+  for (let t = 0; t < 20000; t += 100) closed = stepActors(closed, people, 100);
+  assert.ok(!at(closed[11], s.seats[11]));
 });

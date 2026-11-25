@@ -333,3 +333,31 @@ test('a ?seed= query fixes the new-game seed', () => {
   b.click('.start-new');
   assert.equal(JSON.stringify(a.game.state.people), JSON.stringify(b.game.state.people));
 });
+
+test('closing the hiring tab forgets an open expansion question', () => {
+  const page = boot();
+  page.click('.start-new');
+  page.$('.intro-skip')?.click();
+  page.click('[data-tab="hiring"]');
+  page.click('button[data-action="startExpansion"]');
+  assert.ok(page.$('[role="alertdialog"]'));
+  page.click('[data-tab="hiring"]'); // close
+  page.click('[data-tab="hiring"]'); // open again
+  assert.equal(page.$('[role="alertdialog"]'), null);
+});
+
+test('from the keyboard, focus stays on the stage card after an expansion starts', async () => {
+  const page = boot();
+  page.click('.start-new');
+  page.$('.intro-skip')?.click();
+  page.game.state.cash = 100000; // enough for expansion 1
+  page.key('Tab'); // the last input was a key
+  page.click('[data-tab="hiring"]');
+  page.click('button[data-action="startExpansion"]');
+  assert.equal(page.document.activeElement, page.$('button[data-action="confirmExpansion"]'));
+  page.click('button[data-action="confirmExpansion"]');
+  await new Promise((r) => setTimeout(r, 0)); // the queued refresh rebuilds the panel
+  assert.ok(page.game.state.office?.build, 'expansion started');
+  assert.ok(page.$('.office [data-stage="1"]').textContent.includes(UI_TEXT.office.building.split(' · ')[0]), 'redrawn from a fresh view');
+  assert.equal(page.document.activeElement, page.$('.office [data-stage="1"]'));
+});

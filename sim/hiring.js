@@ -7,8 +7,9 @@ import { createPerson } from './people.js';
 import { pushEvent } from './events.js';
 import { neediestClient } from './economy.js';
 import { NATIONS } from '../world/nations.js';
+import { seatsOf } from './office.js';
 
-export const SEATS = 8; // agent seats; lead and QA have their own desks
+export const SEATS = 8; // level-0 seats, kept for compatibility; use seatsOf(state)
 export const HIRE_COST = 1500;
 
 const WAIT_WORKDAYS = [3, 5];
@@ -21,7 +22,7 @@ const agentCount = (state) => state.people.filter((p) => p.role === 'agent').len
 
 export function startHiring(state) {
   if (state.hiring) return { ok: false, reason: 'already' };
-  if (agentCount(state) >= SEATS) return { ok: false, reason: 'no-seat' };
+  if (agentCount(state) >= seatsOf(state)) return { ok: false, reason: 'no-seat' };
   if ((state.cash ?? 0) < HIRE_COST) return { ok: false, reason: 'no-cash' };
   state.cash -= HIRE_COST;
   state.hiring = { workdays: 0 };
@@ -70,7 +71,7 @@ function quieterShift(state) {
 export function hireCandidate(state, index) {
   const candidate = state.hiring?.candidates?.[index];
   state.hiring = null;
-  if (!candidate || agentCount(state) >= SEATS) return;
+  if (!candidate || agentCount(state) >= seatsOf(state)) return;
   candidate.probationDays = PROBATION_DAYS;
   state.people.push(candidate);
   const shift = quieterShift(state);

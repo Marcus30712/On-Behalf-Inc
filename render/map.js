@@ -21,21 +21,36 @@ const ROWS = [
   '#..C.C.C.C...C..C..#',
   '#..DDDDDDDD..D..D..#',
   '#..DDDDDDDD........#',
-  '#..C.C.C.C.........#',
-  '#..................#',
-  '#................P.#',
-  '#..TTT.............#',
-  '#..................#',
-  '#B............SSS.K#',
+  '#..C.C.C.C...C.C...#',
+  '#............DDDD..#',
+  '#......C.C...DDDDP.#',
+  '#..TTT.DDDD..C.C...#',
+  '#......DDDD........#',
+  '#B.....C.C....SSS.K#',
   '##########E#########',
 ];
+
+// Expansion areas, opened by office level (sim/office.js): level 1 adds the
+// window bank (seats 8-11), level 2 the inner bank (seats 12-15). `tiles` is
+// the area's rectangle. Before its level is built an area draws as plain
+// floor, but its desks still block walking, so routes are the same at every
+// level (people walk around the empty rug until it is furnished).
+const area = (x0, y0, w, h) => {
+  const tiles = [];
+  for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) tiles.push(Object.freeze([x, y]));
+  return Object.freeze(tiles);
+};
 
 export const MAP = Object.freeze({
   width: 20,
   height: 12,
   tiles: Object.freeze(ROWS),
   spots: Object.freeze({
-    seats: Object.freeze([[3, 2], [5, 2], [7, 2], [9, 2], [3, 5], [5, 5], [7, 5], [9, 5]]),
+    seats: Object.freeze([
+      [3, 2], [5, 2], [7, 2], [9, 2], [3, 5], [5, 5], [7, 5], [9, 5],
+      [13, 5], [15, 5], [13, 8], [15, 8], // expansion 1 (window bank)
+      [7, 7], [9, 7], [7, 10], [9, 10], // expansion 2 (inner bank)
+    ].map((t) => Object.freeze(t))),
     leadDesk: Object.freeze([13, 2]),
     qaDesk: Object.freeze([16, 2]),
     breakRoom: Object.freeze([[14, 9], [15, 9], [16, 9], [17, 10]]),
@@ -43,7 +58,17 @@ export const MAP = Object.freeze({
     clinic: Object.freeze([2, 10]),
     door: Object.freeze([10, 11]),
   }),
+  expansions: Object.freeze([
+    Object.freeze({ level: 1, seats: Object.freeze([8, 9, 10, 11]), tiles: area(13, 5, 4, 4) }),
+    Object.freeze({ level: 2, seats: Object.freeze([12, 13, 14, 15]), tiles: area(7, 7, 4, 4) }),
+  ]),
 });
+
+// Seats open at level 0: every seat outside the expansion areas.
+export function baseSeats(map) {
+  const extra = (map.expansions ?? []).reduce((n, e) => n + e.seats.length, 0);
+  return map.spots.seats.length - extra;
+}
 
 export function tileAt(map, x, y) {
   if (x < 0 || y < 0 || x >= map.width || y >= map.height) return '#';

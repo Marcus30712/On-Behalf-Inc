@@ -3,7 +3,8 @@
 //
 // Every sprite is { w, h, palette, rows }. `palette` names the colour set the
 // rows use: 'office' (furniture, tiles, icons), 'person' (any staff member,
-// coloured by personPalette) or 'miso' (Kim Miso, the mentor).
+// coloured by personLook) or 'miso' (Kim Miso, the mentor). SPRITES.person
+// groups the five poses of the default look; PERSON_SPRITES has every look.
 
 const mirror = (rows) => rows.map((r) => [...r].reverse().join(''));
 const flip = (rows) => [...rows].reverse();
@@ -43,20 +44,40 @@ export const PALETTES = Object.freeze({ office: Object.freeze(OFFICE), miso: Obj
 
 // Person colours: chosen from the person's id only (never the nation), so the
 // same person always looks the same and different people look different.
+// Skin runs light to deep; hair and shirts follow the approved reference.
+// [skin, shade, glasses frame]: slate frames on lighter skin, pale steel on
+// deeper skin, so the lenses always show.
 const SKIN = [
-  ['#f7d7c4', '#e6b89c'], ['#f1c7a5', '#d9a47f'], ['#e0ac85', '#c48a63'],
-  ['#c68e64', '#a8714b'], ['#a26c48', '#83533a'], ['#7d4f35', '#623c28'],
+  ['#f7d7c4', '#e6b89c', '#5d6680'], ['#f1c7a5', '#d9a47f', '#5d6680'], ['#e0ac85', '#c48a63', '#5d6680'],
+  ['#c68e64', '#a8714b', '#4a4f63'], ['#a26c48', '#83533a', '#dfe3ea'], ['#7d4f35', '#623c28', '#dfe3ea'],
+  ['#6b4430', '#523222', '#dfe3ea'],
 ];
 const HAIR = [
-  ['#2e2530', '#1e1820'], ['#5a3a2a', '#3f2719'], ['#e8c46a', '#c9a24a'], ['#9c4a2e', '#7a3620'],
-  ['#b9b4b0', '#918b86'], ['#4f8f8f', '#3a6c6c'], ['#7a4a7e', '#5a3460'], ['#2f3a55', '#222a40'],
+  ['#2e2530', '#1a1419'], // black
+  ['#5a3a2a', '#3f2719'], // dark brown
+  ['#8a4b2a', '#6a361d'], // chestnut
+  ['#c8642e', '#9e4820'], // ginger
+  ['#e2b85e', '#bf9440'], // blonde
+  ['#b9b4b0', '#8f8984'], // grey
 ];
+// [shirt, shade, collar]
 const SHIRT = [
-  ['#7fb2e5', '#5b8fc4'], ['#f19a86', '#cf7663'], ['#8fd1b0', '#68ab8b'], ['#b6a3e0', '#8f7cc0'],
-  ['#f2c76a', '#d1a243'], ['#ec9bb6', '#c87592'], ['#a8c290', '#86a06f'], ['#4f6295', '#3a4a75'],
-  ['#eeeae2', '#c9c3b7'], ['#d0794b', '#a95b33'],
+  ['#6f9fd8', '#4f7db6', '#f4f1ea'], // blue
+  ['#7cbf8e', '#5a9a6b', '#f4f1ea'], // green
+  ['#a58bd0', '#8167ad', '#f4f1ea'], // purple
+  ['#f4f1ea', '#cdc5b6', '#ffffff'], // white
+  ['#f19a86', '#cf7663', '#f4f1ea'], // coral
+  ['#f2c76a', '#d1a243', '#f4f1ea'], // mustard
+  ['#ec9bb6', '#c87592', '#f4f1ea'], // pink
+  ['#4f6295', '#3a4a75', '#dfe4ee'], // navy
+  ['#d0794b', '#a95b33', '#f4f1ea'], // rust
 ];
-const PANTS = ['#4a4f63', '#6b5a4a', '#3a4a6b', '#8a7d6b', '#2f2f3a'];
+// [pants, shade]
+const PANTS = [
+  ['#4a4f63', '#363a4a'], ['#3a4a6b', '#2a3650'], ['#a8936f', '#857254'],
+  ['#2f2f3a', '#1f1f28'], ['#6b5a4a', '#524436'],
+];
+const HAIR_STYLES = ['short', 'long', 'curly', 'tied'];
 
 function hashId(id) {
   let h = 0x811c9dc5;
@@ -64,88 +85,282 @@ function hashId(id) {
     h ^= ch.codePointAt(0);
     h = Math.imul(h, 0x01000193);
   }
+  // full fmix32 finalizer: sequential ids (p0.., h1..) spread evenly
   h ^= h >>> 16;
-  h = Math.imul(h, 0x45d9f3b);
+  h = Math.imul(h, 0x85ebca6b);
+  h ^= h >>> 13;
+  h = Math.imul(h, 0xc2b2ae35);
   h ^= h >>> 16;
   return h >>> 0;
 }
 
-export function personPalette(person) {
+// A person's look: palette for the 'person' sprites, hair style and glasses.
+export function personLook(person) {
   let n = hashId(person.id);
   const pick = (list) => {
     const v = list[n % list.length];
     n = Math.floor(n / list.length);
     return v;
   };
-  const [shirt, shirtDark] = pick(SHIRT);
+  // Pick order keeps the fixed id windows players see (p0..p9, h1..h14)
+  // varied: no hair colour, style, skin or shirt on more than 5 of 14.
+  const [skin, skinShade, frame] = pick(SKIN);
+  const style = pick(HAIR_STYLES);
+  const [shirt, shirtDark, collar] = pick(SHIRT);
   const [hair, hairDark] = pick(HAIR);
-  const [skin, skinShade] = pick(SKIN);
-  const pants = pick(PANTS);
+  const [pants, pantsDark] = pick(PANTS);
+  const glasses = pick([false, false, false, true]);
   return Object.freeze({
-    O: '#3b2a2e', s: skin, S: skinShade, h: hair, H: hairDark,
-    c: shirt, C: shirtDark, p: pants, k: '#3b2a26', e: '#2e2530', b: '#f2a6a0',
+    palette: Object.freeze({
+      O: '#3b2a2e', s: skin, S: skinShade, h: hair, H: hairDark,
+      e: '#2e2530', b: '#f2a6a0', m: '#b4584f', g: frame,
+      c: shirt, C: shirtDark, w: collar, p: pants, P: pantsDark,
+      t: '#5a3c2c', y: '#e8c46a', k: '#6a4a3a',
+    }),
+    hair: style,
+    glasses,
   });
 }
 
 // Same per-person value for purely visual offsets (walk phase).
 export const personPhase = (id) => hashId(id) % 1000;
 
-// ---- People (16x16, front view unless noted) -------------------------------
+// ---- People (16x24) ----------------------------------------------------------
+// Rows 0-11 are the head (one per hair style, front and back), rows 12-23 the
+// body (one per pose). Long hair drapes over the shoulders; glasses sit on
+// the eyes of front views. Every pose shares the same head rows, so walking
+// frames never flicker the hair.
 
-const HEAD = [
-  '................',
-  '.....OOOOOO.....',
-  '...OOhhhhhhOO...',
-  '..OhhhhhhhhhhO..',
-  '..OhhHhhhhHhhO..',
-  '..OhssssssssHO..',
-  '..OhsessssesHO..',
-  '..OhsbssssbshO..',
+// Paints `top` over `base` from row `at`; '.' in `top` keeps the base pixel.
+const overlay = (base, top, at = 0) => base.map((row, y) => {
+  const t = top[y - at];
+  if (!t) return row;
+  return [...row].map((ch, x) => (t[x] !== '.' ? t[x] : ch)).join('');
+});
+
+// Lower face shared by every front head: eyes, blush, mouth, chin. `side` is
+// what frames the cheeks (hair or skin).
+const face = (side) => [
+  `..O${side}ssssssss${side}O..`,
+  '..OssessssessO..',
+  '..OssessssessO..',
+  '..OsbssmmssbsO..',
   '...OSssssssSO...',
-  '....OOssssOO....',
 ];
-const BODY = [
-  '...OcccsscccO...',
-  '..OCccccccccCO..',
-  '..OsCccccccCsO..',
+
+const HEADS = {
+  short: {
+    front: [
+      '................',
+      '.....OOOOOO.....',
+      '...OOhhhhhhOO...',
+      '..OhhhhhhhhhhO..',
+      '..OhhhhhhhhhHO..',
+      '..OhhhhhhhHhhO..',
+      '..OhhssssHhhhO..',
+      ...face('h'),
+    ],
+    back: [
+      '................',
+      '.....OOOOOO.....',
+      '...OOhhhhhhOO...',
+      '..OhhhhhhhhhhO..',
+      '..OhhhhhhhhhhO..',
+      '..OhhHhhhhHhhO..',
+      '..OhhhhhhhhhhO..',
+      '..OhhhhhhhhhhO..',
+      '..OHhhhhhhhhHO..',
+      '..OsHhhhhhhHsO..',
+      '..OssHHHHHHssO..',
+      '...OSssssssSO...',
+    ],
+  },
+  long: {
+    front: [
+      '................',
+      '.....OOOOOO.....',
+      '...OOhhhhhhOO...',
+      '..OhhhhhhhhhhO..',
+      '..OhhhhhHhhhhO..',
+      '..OhhhhHhHhhhO..',
+      '..OhhhssssHhhO..',
+      '..OhhssssssshO..',
+      '..OhsessssesHO..',
+      '..OhsessssesHO..',
+      '..OhbssmmssbHO..',
+      '..OhhSssssShHO..',
+    ],
+    back: [
+      '................',
+      '.....OOOOOO.....',
+      '...OOhhhhhhOO...',
+      '..OhhhhhHhhhhO..',
+      '..OhhhhHHhhhhO..',
+      '..OhhhHhhHhhhO..',
+      '..OhhHhhhhHhhO..',
+      '..OhhhhhhhhhhO..',
+      '..OhHhhhhhhHhO..',
+      '..OhhhhhhhhhhO..',
+      '..OhhHhhhhHhhO..',
+      '..OhhhhhhhhhhO..',
+    ],
+    drapeFront: [
+      '..OhhO....OhHO..',
+      '..OhHO....OHhO..',
+      '...OO......OO...',
+    ],
+    drapeBack: [
+      '..OHhhhhhhhhHO..',
+      '...OhHhhhhHhO...',
+      '....OOOOOOOO....',
+    ],
+  },
+  curly: {
+    front: [
+      '....OOO..OOO....',
+      '...OhhhOOhhhO...',
+      '..OhhHhhhhHhhO..',
+      '.OhhhhhHhhhhhhO.',
+      '.OhHhhhhhhhhHhO.',
+      '.OhhhhHhhHhhhhO.',
+      '.OhHhsssssshHhO.',
+      '.OhhssssssssHhO.',
+      '.OhssessssessHO.',
+      '.OhssessssesshO.',
+      '.OhsbssmmssbshO.',
+      '.OhOSssssssSOhO.',
+    ],
+    back: [
+      '....OOO..OOO....',
+      '...OhhhOOhhhO...',
+      '..OhhHhhhhHhhO..',
+      '.OhhhhhHhhhhhhO.',
+      '.OhHhhhhhhhhHhO.',
+      '.OhhhhHhhHhhhhO.',
+      '.OhHhhhhhhhhHhO.',
+      '.OhhhHhhhhHhhhO.',
+      '.OhHhhhhHhhhHhO.',
+      '.OhhhhhhhhhhhhO.',
+      '.OhhHhhhhhhHhhO.',
+      '..OOhhHhhHhhOO..',
+    ],
+  },
+  tied: {
+    front: [
+      '......OOOO......',
+      '.....OhHhhO.....',
+      '....OOOccOOO....',
+      '...OhhhHHhhhO...',
+      '..OhhhHhhHhhhO..',
+      '..OhhHhhhhHhhO..',
+      '..OhHssssssHhO..',
+      ...face('h'),
+    ],
+    back: [
+      '......OOOO......',
+      '.....OhHhhO.....',
+      '....OOOccOOO....',
+      '...OhhhHHhhhO...',
+      '..OhhhHhhHhhhO..',
+      '..OhhHhhhhHhhO..',
+      '..OhHhhhhhhHhO..',
+      '..OhhhhhhhhhhO..',
+      '..OhhhhhhhhhhO..',
+      '..OsHhhhhhhHsO..',
+      '..OssHHHHHHssO..',
+      '...OSssssssSO...',
+    ],
+  },
+};
+
+// Two small lens rings, each holding an eye and a skin pixel, joined by a
+// bridge; they stop short of the cheeks so they never meet the headset cups.
+const GLASSES = [
+  ...Array(7).fill('................'),
+  '.....gg..gg.....',
+  '....g..gg..g....',
+  '....g......g....',
+  '.....gg..gg.....',
 ];
-const HEAD_BACK = [
-  '................',
-  '.....OOOOOO.....',
-  '...OOhhhhhhOO...',
-  '..OhhhhhhhhhhO..',
-  '..OhhhhhhhhhhO..',
-  '..OhhHhhhhHhhO..',
-  '..OhhhhhhhhhhO..',
-  '..OHhhhhhhhhHO..',
-  '...OHhhhhhhHO...',
-  '....OOssssOO....',
+
+// Shirt with a collar, belt, trousers, shoes.
+const TORSO = [
+  '......OssO......',
+  '....OwwsswwO....',
+  '...OcccwwcccO...',
+  '..OcCccccccCcO..',
+  '..OcCccccccCcO..',
+  '..OcCccccccCcO..',
+  '..OsOccccccOsO..',
+  '...OtttyytttO...',
 ];
-const BODY_BACK = [
+const TORSO_BACK = [
+  '......OssO......',
+  '....OwwwwwwO....',
   '...OccccccccO...',
-  '..OCccccccccCO..',
-  '..OsCccccccCsO..',
+  '..OcCccccccCcO..',
+  '..OcCccccccCcO..',
+  '..OcCccccccCcO..',
+  '..OsOccccccOsO..',
+  '...OttttttttO...',
 ];
-const STAND = [...HEAD, ...BODY,
+const LEGS_STAND = [
   '...OppppppppO...',
-  '....OppOOppO....',
-  '....OkkO.OkkO...',
+  '...OpppOOpppO...',
+  '...OppPOOPppO...',
+  '..OkkkkOOkkkkO..',
 ];
-const WALK = [...HEAD, ...BODY,
+const LEGS_WALK = [
   '...OppppppppO...',
-  '...OppO..OppO...',
-  '..OkkO.....OkO..',
+  '...OpppOOpppO...',
+  '..OppPO..OPpO...',
+  '..OkkkO...OkkO..',
 ];
-const SIT = [...HEAD, ...BODY,
-  '...OppppppppO...',
-  '...OkkO..OkkO...',
+const LEGS_SIT = [
+  '..OppppppppppO..',
+  '..OpPppOOppPpO..',
+  '..OkkkO..OkkkO..',
   '................',
 ];
-const SIT_BACK = [...HEAD_BACK, ...BODY_BACK,
-  '...OppppppppO...',
-  '...OkkO..OkkO...',
+const LEGS_SIT_BACK = [
+  '..OppppppppppO..',
+  '..OOOOOOOOOOOO..',
+  '................',
   '................',
 ];
+
+// Walking frames mirror only the legs; the back view is for sitting at a desk
+// that faces away from the viewer.
+const BODIES = {
+  stand: [...TORSO, ...LEGS_STAND],
+  walkA: [...TORSO, ...LEGS_WALK],
+  walkB: [...TORSO, ...mirror(LEGS_WALK)],
+  sit: [...TORSO, ...LEGS_SIT],
+  sitBack: [...TORSO_BACK, ...LEGS_SIT_BACK],
+};
+
+function personRows(pose, hair, glasses) {
+  const head = HEADS[hair];
+  const back = pose === 'sitBack';
+  let rows = [...(back ? head.back : head.front), ...BODIES[pose]];
+  const drape = back ? head.drapeBack : head.drapeFront;
+  if (drape) rows = overlay(rows, drape, 12);
+  if (glasses && !back) rows = overlay(rows, GLASSES);
+  return rows;
+}
+
+const POSES = ['stand', 'walkA', 'walkB', 'sit', 'sitBack'];
+
+// `${hair}` or `${hair}+glasses` -> { stand, walkA, walkB, sit, sitBack }.
+export const PERSON_SPRITES = Object.freeze(Object.fromEntries(
+  HAIR_STYLES.flatMap((hair) => [false, true].map((glasses) => [
+    `${hair}${glasses ? '+glasses' : ''}`,
+    Object.freeze(Object.fromEntries(POSES.map((pose) => [pose, sprite('person', personRows(pose, hair, glasses))]))),
+  ])),
+));
+
+// The sprite for a pose in a person's look (from personLook).
+export const personSprite = (pose, look) => PERSON_SPRITES[`${look.hair}${look.glasses ? '+glasses' : ''}`][pose];
 
 // Kim Miso: chestnut bob with straight bangs, round glasses, mustard
 // cardigan over a cream blouse, green skirt.
@@ -155,39 +370,56 @@ const MISO_STAND = [
   '...OOhhhhhhOO...',
   '..OhhhhhhhhhhO..',
   '..OhhhhhhhhhhO..',
+  '..OhhhhhhhhhhO..',
   '..OhHHHHHHHHhO..',
-  '..OhqeqqqqeqhO..',
+  '..OhsqqssqqshO..',
+  '..OhqesqqseqhO..',
   '..OhbqqssqqbhO..',
   '..OhSssmmssShO..',
-  '..OHHOssssOHHO..',
-  '...OcccyycccO...',
-  '..OccCcyycCccO..',
-  '..OscCcyycCcsO..',
+  '..OHhSssssShHO..',
+  '..OHHOOssOOHHO..',
+  '...OOyyyyyyOO...',
+  '..OcccyyyycccO..',
+  '..OcCccyyccCcO..',
+  '..OcCccyyccCcO..',
+  '..OsOccyyccOsO..',
   '...OppppppppO...',
+  '..OppppppppppO..',
   '..OPppppppppPO..',
-  '....OkO..OkO....',
+  '....OsO..OsO....',
+  '....OsO..OsO....',
+  '...OkkO..OkkO...',
 ];
 
-// Headset overlays, aligned with the head rows of the person sprites.
+// Headset (agents on the phone): band over the head, ear cups, a mic boom.
 const HEADSET = [
   '................',
-  '....kkkkkkkk....',
-  '...k........k...',
-  '..k..........k..',
-  '.k............k.',
-  '.gk..........kg.',
-  '.gk..........kg.',
-  '.gk..........kg.',
-  '..k.......mmmk..',
-  '................',
-  '................',
-  '................',
-  '................',
-  '................',
-  '................',
-  '................',
+  '.....mmmmmm.....',
+  '...mm......mm...',
+  '..m..........m..',
+  '..m..........m..',
+  '..m..........m..',
+  '..m..........m..',
+  '.Okk........kkO.',
+  '.Okg........gkO.',
+  '.Okg........gkO.',
+  '.Okk........kkO.',
+  '..Okkkkg........',
+  ...Array(12).fill('................'),
 ];
-const HEADSET_BACK = HEADSET.map((r, y) => (y === 8 ? '................' : r));
+const HEADSET_BACK = HEADSET.map((r, y) => (y >= 11 ? '................' : r));
+
+// Lanyard and badge (QA).
+const LANYARD = [
+  ...Array(13).fill('................'),
+  '.....j....j.....',
+  '......j..j......',
+  '.......jj.......',
+  '......OiiO......',
+  '......OBBO......',
+  '......OOOO......',
+  ...Array(5).fill('................'),
+];
 
 // ---- Office tiles and furniture (16x16) -------------------------------------
 
@@ -591,6 +823,200 @@ const PLANT = [
   '................',
 ];
 
+// ---- Office props (v1.5) ----------------------------------------------------
+// Placed by MAP.props (render/map.js): each stands on the bottom edge of its
+// cell. Wall-row props (back wall, row 0) hang on the wall face or stand on
+// the floor line against it; floor props sit on furniture cells nobody walks
+// on, and the taller ones reach up over a wall or desk cell.
+
+// Wall clock: white face, hands at three o'clock.
+const CLOCK = [
+  '................',
+  '................',
+  '................',
+  '................',
+  '.....OOOOO......',
+  '....OiigiiO.....',
+  '...OiiikiisO....',
+  '...OiiikiisO....',
+  '...OgiikkkgO....',
+  '...OiiiiiisO....',
+  '...OiiiiissO....',
+  '....OsigssO.....',
+  '.....OOOOO......',
+  '......xxxx......',
+  '................',
+  '................',
+];
+// Whiteboard: marker notes, a small bar chart, a sticky note and a pen tray.
+const WALL_BOARD = [
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '..OOOOOOOOOOOOOOOOOOOOOOOOOOOO..',
+  '..OGGGGGGGGGGGGGGGGGGGGGGGGGGO..',
+  '..OGiNNNNiiiRRRiiiiiiiiiiYYiGO..',
+  '..OGiiiiiiiiiiiiiiiiiLiiiYYiGO..',
+  '..OGiNNNiiNNNNiiiiiLiLiiiiiiGO..',
+  '..OGiiiiiiiiiiiiiNiLiLiiRRRiGO..',
+  '..OGiRRiiNNNNNiiiNiLiLiiiiiiGO..',
+  '..OGssssssssssssssssssssssssGO..',
+  '..OOOOOOOOOOOOOOOOOOOOOOOOOOOO..',
+  '....OgRgNgLgggggggggggggggggO...',
+  '.....OOOOOOOOOOOOOOOOOOOOOOO....',
+  '................................',
+];
+// Cork board: pinned notes in four colours.
+const CORKBOARD = [
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '...OOOOOOOOOOOOOOOOOOOOOOOOOO...',
+  '...OeeeeeeeeeeeeeeeeeeeeeeeeO...',
+  '...OerrdriRrrrrdrrYRYrrrrdreO...',
+  '...OeriiiirruuRrrrYYYrrBBrreO...',
+  '...OeriNiirruuurdrYYYrrBBrreO...',
+  '...OeriiiirrrrrrrrrrrdrrrrreO...',
+  '...OedrrrrriiiRirrrrrruuurreO...',
+  '...OerrBRrriNiiirrdrrruuurreO...',
+  '...OeeeeeeeeeeeeeeeeeeeeeeeeO...',
+  '...OOOOOOOOOOOOOOOOOOOOOOOOOO...',
+  '................................',
+  '................................',
+];
+// Pantry counter against the back wall: microwave, coffee maker, two mugs.
+const PANTRY_COUNTER = [
+  '................................',
+  '................................',
+  '................................',
+  '..OOOOOOOOOOOO....OOOOOOO.......',
+  '..OGGGGGGGGGGO....OmmmmmO.......',
+  '..OGmmmmmmOggO....OmRmmmO.......',
+  '..OGmNmmmmOgYO....OOOOOOO.......',
+  '..OGmmNmmmOggO.....OzzzO..OO.OO.',
+  '..OGmmmmmmOgRO....OmOzzzOmOiOOuO',
+  'OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO',
+  'OssssssssssssssssssssssssssssssO',
+  'OGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGO',
+  'OdddddddOdddddddOdddddddOddddddO',
+  'OddGGdddOdddGGddOddGGdddOdddGGdO',
+  'OeeeeeeeOeeeeeeeOeeeeeeeOeeeeeeO',
+  'OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO',
+];
+// Water cooler (16x32): blue bottle on a white cabinet, red and blue taps.
+const COOLER = [
+  ...Array(10).fill('................'),
+  '......OOOO......',
+  '.....OnnnnO.....',
+  '....OnniinnO....',
+  '....OnNinnNO....',
+  '....OnNnnnNO....',
+  '....ONNNNNNO....',
+  '.....OOOOOO.....',
+  '...OOOOOOOOOO...',
+  '...OiiiiiiisO...',
+  '...OiOOOOOOsO...',
+  '...OiORmmjOsO...',
+  '...OiOmmmmOsO...',
+  '...OiOggggOsO...',
+  '...OiOOOOOOsO...',
+  '...OiiiiiiisO...',
+  '...OsOOOOOOGO...',
+  '...OsOssssOGO...',
+  '...OsOssssOGO...',
+  '...OsOOOOOOGO...',
+  '...OGGGGGGGGO...',
+  '...OOOOOOOOOO...',
+  '................',
+];
+// Cubicle divider over a desk pair: a fabric panel along the line between
+// the facing desks, with a post at each end.
+const DIVIDER = [
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  'OO............................OO',
+  'GOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOG',
+  'GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG',
+  'OTtTtTtTtTtTtTtTtTtTtTtTtTtTtTtO',
+  'OTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTO',
+  'OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO',
+];
+// Bin against the wall, a crumpled sheet on top.
+const BIN = [
+  ...Array(7).fill('................'),
+  '.......OO.......',
+  '.....OOiiOO.....',
+  '....OmmmmmmO....',
+  '....OGGgGGgO....',
+  '....OGGgGGgO....',
+  '....OGGgGGgO....',
+  '....OGGgGGgO....',
+  '.....OOOOOO.....',
+  '................',
+];
+// Tall plant (16x32): broad leaves on a slim stem, in a terracotta pot.
+const PLANT_TALL = [
+  ...Array(3).fill('................'),
+  '.......OO.......',
+  '......OLLO......',
+  '.....OLlLLO.OO..',
+  '.OO..OLlLLOOLLO.',
+  'OLLO.OLLlLOLLlO.',
+  'OLlLOOLLlOLLlLO.',
+  '.OLlLOOLlOLlLO..',
+  '..OLLlOOlOlLO...',
+  '...OOLlOlOOO.OO.',
+  '..OO.OOlOO..OLLO',
+  '.OLLO..lO..OLLlO',
+  'OLlLLO.l..OLLlO.',
+  'OLLlLLOl.OLLlO..',
+  '.OLLlLOlOLLlO...',
+  '..OOLLllLLOO....',
+  '....OOOlOO......',
+  '...OLLOlO.......',
+  '..OLlLLlO.......',
+  '...OOLLlO.......',
+  '.....OOlO.......',
+  '....OOOOOOO.....',
+  '....OpppppO.....',
+  '....OpppPpO.....',
+  '....OppppPO.....',
+  '.....OpppO......',
+  '.....OppPO......',
+  '.....OPPPO......',
+  '.....OOOOO......',
+  '................',
+];
+// Bushy plant: a round leafy bush with small blossoms in a woven basket.
+const PLANT_BUSH = [
+  '.....OOOOOO.....',
+  '...OOLLLLlLOO...',
+  '..OLLuLLLLLLlO..',
+  '.OLLLLlLLLuLLLO.',
+  '.OLlLLLLlLLLlLO.',
+  'OLLLuLLLLLLLLLLO',
+  'OLlLLLlLLLuLlLLO',
+  'OlLLLLLLlLLLLLlO',
+  '.OlLLlLLLLLlLlO.',
+  '..OllLLlLLLllO..',
+  '..OOllllllllOO..',
+  '...OdedededeO...',
+  '...OededededO...',
+  '...OdedededeO...',
+  '....OeeeeeeO....',
+  '.....OOOOOO.....',
+];
+
 // ---- Status icons (9x9, drawn inside a speech bubble) ----------------------
 
 const ICON_SICK = [
@@ -639,15 +1065,12 @@ const SPARKLE = [
 ];
 
 export const SPRITES = Object.freeze({
-  // people
-  stand: sprite('person', STAND),
-  walkA: sprite('person', WALK),
-  walkB: sprite('person', mirror(WALK)),
-  sit: sprite('person', SIT),
-  sitBack: sprite('person', SIT_BACK),
+  // people (16x24): the default look; every look is in PERSON_SPRITES
+  person: PERSON_SPRITES.short,
   miso: sprite('miso', MISO_STAND),
   headset: sprite('office', HEADSET),
   headsetBack: sprite('office', HEADSET_BACK),
+  lanyard: sprite('office', LANYARD),
   // tiles and furniture
   floor: sprite('office', FLOOR),
   wall: sprite('office', WALL),
@@ -660,6 +1083,8 @@ export const SPRITES = Object.freeze({
   papers: sprite('office', PAPERS),
   chair: sprite('office', CHAIR),
   chairBack: sprite('office', flip(CHAIR)),
+  // the backrest alone, drawn over a person sitting with their back to the viewer
+  chairRest: sprite('office', flip(CHAIR).map((r, y) => (y < 10 ? '................' : r))),
   sofa: sprite('office', SOFA_M),
   sofaL: sprite('office', SOFA_L),
   sofaR: sprite('office', mirror(SOFA_L)),
@@ -669,11 +1094,21 @@ export const SPRITES = Object.freeze({
   coffee: sprite('office', COFFEE),
   coffeePlus: sprite('office', COFFEE_PLUS),
   table: sprite('office', TABLE),
-  whiteboard: sprite('office', WHITEBOARD),
+  tableBoard: sprite('office', WHITEBOARD),
   bed: sprite('office', BED),
   placeholder: sprite('office', PLACEHOLDER),
   construction: sprite('office', CONSTRUCTION),
   plant: sprite('office', PLANT),
+  // props (MAP.props)
+  clock: sprite('office', CLOCK),
+  whiteboard: sprite('office', WALL_BOARD),
+  corkboard: sprite('office', CORKBOARD),
+  pantryCounter: sprite('office', PANTRY_COUNTER),
+  cooler: sprite('office', COOLER),
+  divider: sprite('office', DIVIDER),
+  bin: sprite('office', BIN),
+  plantTall: sprite('office', PLANT_TALL),
+  plantBush: sprite('office', PLANT_BUSH),
   // icons
   iconSick: sprite('office', ICON_SICK),
   iconStress: sprite('office', ICON_STRESS),

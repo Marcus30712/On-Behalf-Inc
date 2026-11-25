@@ -9,7 +9,7 @@ no console or page errors, no raw template text, no sideways scroll, a click
 at 1x, a choice answered, continue after reload, a game-over save, a long
 inbox, every open panel fully on screen, an office expansion started from the
 hiring tab and a weekend client's roster, metrics and Saturday hours, and both channel clients accepted and
-staffed (v1.3). Screenshots go to tools/out/. Prints only failures; the last line is
+staffed (v1.3), and the art preview page (v1.5). Screenshots go to tools/out/. Prints only failures; the last line is
 ALL CHECKS PASSED when there are none.
 """
 import functools
@@ -505,6 +505,23 @@ def check_metrics_fit(browser):
         page.context.close()
 
 
+def shoot_preview(browser):
+    """The art preview page (render/preview.html): office level 0, expansion 1
+    building and level 2 with every seat taken, and Kim Miso, one picture each."""
+    tag = 'preview'
+    page = browser.new_context(viewport={'width': 1000, 'height': 800}).new_page()
+    page.errors = []
+    page.on('console', lambda m: m.type == 'error' and page.errors.append(f'console: {m.text}'))
+    page.on('pageerror', lambda e: page.errors.append(f'pageerror: {e}'))
+    page.goto(base_url.split('index.html')[0] + 'render/preview.html')
+    page.wait_for_timeout(500)
+    for cid, name in [('before', 'office-level0'), ('after', 'office-building-level1'),
+                      ('full', 'office-level2'), ('miso', 'miso')]:
+        page.locator(f'#{cid}').screenshot(path=str(OUT / f'{name}.png'))
+    check_errors(page, tag)
+    page.context.close()
+
+
 def main():
     global base_url
     OUT.mkdir(parents=True, exist_ok=True)
@@ -521,6 +538,7 @@ def main():
                 check_expansion_weekend(browser)
                 check_channels(browser)
                 check_metrics_fit(browser)
+                shoot_preview(browser)
             finally:
                 browser.close()
     except Exception as e:  # a broken step is a failure, not a crash

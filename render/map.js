@@ -41,6 +41,23 @@ const area = (x0, y0, w, h) => {
   return Object.freeze(tiles);
 };
 
+// Office props (v1.5), drawn with the office: { id, x, y } names a sprite and
+// the left cell of the row it stands on (render/sprites.js). Props never
+// change walking: wall pieces sit on the back wall row, floor pieces only on
+// cells nobody walks on (plant corners, desk tops), never on a spot, the door,
+// a facility or an expansion area. A prop taller than its cell reaches up over
+// a wall or desk cell, so no person stands behind it.
+const prop = (id, x, y) => Object.freeze({ id, x, y });
+const PROPS = Object.freeze([
+  // back wall, left to right
+  prop('bin', 3, 0), prop('whiteboard', 4, 0), prop('clock', 8, 0), prop('corkboard', 9, 0),
+  prop('bin', 14, 0), prop('pantryCounter', 15, 0),
+  // plant corners and the corner by the pantry
+  prop('plantTall', 1, 1), prop('cooler', 18, 1), prop('plantBush', 17, 7),
+  // cubicle dividers between the facing desks of the original bank
+  prop('divider', 3, 3), prop('divider', 5, 3), prop('divider', 7, 3), prop('divider', 9, 3),
+]);
+
 export const MAP = Object.freeze({
   width: 20,
   height: 12,
@@ -62,6 +79,7 @@ export const MAP = Object.freeze({
     Object.freeze({ level: 1, seats: Object.freeze([8, 9, 10, 11]), tiles: area(13, 5, 4, 4) }),
     Object.freeze({ level: 2, seats: Object.freeze([12, 13, 14, 15]), tiles: area(7, 7, 4, 4) }),
   ]),
+  props: PROPS,
 });
 
 // Seats open at level 0: every seat outside the expansion areas.

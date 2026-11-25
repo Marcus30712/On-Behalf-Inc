@@ -10,12 +10,11 @@ import { renderInbox, renderAdvisor, firstRunIntro, resetInbox } from './inbox.j
 import { builder } from './dom.js';
 import { EVENTS } from '../world/events.js';
 import { stepActors } from '../render/actors.js';
-import { createDrawer, TILE_PX, SCALE } from '../render/draw.js';
+import { createDrawer, personAt } from '../render/draw.js';
 
 const REFRESH_MS = 250; // top bar, metrics and the open panel: at most 4 times a second
 const SPARKLE_MS = 3000; // render/draw.js twinkles a sparkle this long
 const MAX_WALK_MS = 1000; // a frame after a long stall moves people at most this far
-const SPRITE_LIFT = 3 * SCALE; // render/draw.js draws a person 3 sprite pixels above the tile
 const FORM_TAGS = new Set(['INPUT', 'SELECT', 'TEXTAREA']);
 
 // Storage that never throws (blocked or full localStorage just means no save).
@@ -318,12 +317,10 @@ export function start({ document, storage, now, requestFrame, seedSource: pickSe
     const sx = rect.width ? roots.canvas.width / rect.width : 1;
     const sy = rect.height ? roots.canvas.height / rect.height : 1;
     const x = (e.clientX - rect.left) * sx;
-    const y = (e.clientY - rect.top) * sy + SPRITE_LIFT;
-    const hit = actors
-      .filter((a) => !a.gone && x >= a.x * TILE_PX && x < (a.x + 1) * TILE_PX && y >= a.y * TILE_PX && y < (a.y + 1) * TILE_PX)
-      .sort((l, r) => r.y - l.y)[0]; // the one drawn on top
+    const y = (e.clientY - rect.top) * sy;
+    const hit = personAt(actors, x, y);
     if (!hit) return;
-    selectPerson(hit.id);
+    selectPerson(hit);
     if (tab === 'people') drawPanel(view(game));
     else openTab('people');
   });

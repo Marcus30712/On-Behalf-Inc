@@ -121,7 +121,7 @@ test('map: an email agent covering a phone client wears the headset, not ✉️'
   const texts = ctx.ops.filter((o) => o[0] === 'fillText').map((o) => o[1]);
   assert.deepEqual(texts, []);
   const px = Math.round(at.x * 48);
-  const py = Math.round(at.y * 48) - 9;
+  const py = Math.round(at.y * 48) - 24; // the 16x24 sprite reaches 8 sprite pixels above its tile
   assert.ok(ctx.ops.some((o) => o[0] === 'drawImage' && headset.includes(o[1]) && o[2] === px && o[3] === py), 'headset');
 
   // The people list says what they do now: on the phone, not 이메일.

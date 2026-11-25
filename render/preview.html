@@ -3,10 +3,11 @@
 <head>
 <meta charset="utf-8">
 <title>On Behalf Inc — office preview</title>
+<link rel="icon" href="data:,">
 <style>
   body { margin: 16px; background: #2b2430; color: #f1e6d6; font: 14px sans-serif; }
   canvas { display: block; margin: 6px 0 18px; image-rendering: pixelated; }
-  .miso { width: 144px; height: 144px; background: #f6e9d4; }
+  .miso { width: 144px; height: 216px; background: #f6e9d4; }
 </style>
 </head>
 <body>
@@ -19,7 +20,7 @@
 <div>3) Office level 2: both expansion areas open, 16 agents seated and 2 waiting</div>
 <canvas id="full" width="960" height="576"></canvas>
 <div>4) Kim Miso</div>
-<canvas id="miso" class="miso" width="144" height="144"></canvas>
+<canvas id="miso" class="miso" width="144" height="216"></canvas>
 <script type="module">
 import { MAP } from './map.js';
 import { planTargets } from './actors.js';
@@ -57,7 +58,7 @@ function scene(id, research, extra, office, cast = people, castActors = actors) 
   const ctx = document.getElementById(id).getContext('2d');
   drawer.drawOffice(ctx, MAP, research, office);
   drawer.drawActors(ctx, castActors, cast, 0);
-  ctx.drawImage(drawer.spriteCanvas('miso'), 18 * 48, 5 * 48 - 9, 48, 48);
+  ctx.drawImage(drawer.spriteCanvas('miso'), 18 * 48, 5 * 48 - 24, 48, 72); // 16x24, like the people
   drawer.drawBubbles(ctx, castActors, cast, extra);
 }
 
@@ -82,7 +83,7 @@ scene('full', { done: ['rest-room', 'stress-training', 'clinic'], build: null },
 
 const m = document.getElementById('miso').getContext('2d');
 m.imageSmoothingEnabled = false;
-m.drawImage(drawer.spriteCanvas('miso'), 0, 0, 144, 144);
+m.drawImage(drawer.spriteCanvas('miso'), 0, 0, 144, 216);
 </script>
 </body>
 </html>

@@ -11,6 +11,10 @@ export const ADVISOR = {
   'client-offer': ['큰 기회예요. 다만 지금 인원으로 버틸 수 있는지 먼저 따져 봐요.'],
   // v1.2: used instead of the line above when the offered client works weekends.
   'client-offer-weekend': ['주말 일은 누가 쉬는지까지 같이 짜야 해요. 한 사람이 일주일 내내 일하지 않게요.'],
+  // v1.3: used instead of 'client-offer' for chat and email clients; backlog-growing is the advice for backlog-warning.
+  'client-offer-chat': ['채팅은 동시에 받으니 사람이 적어 보여도 돼요. 다만 한 건이 길어지는 건 각오해야 해요.'],
+  'client-offer-email': ['메일은 조용히 쌓여요. 한가한 사람이 생기면 메일부터 맡겨 봐요.'],
+  'backlog-growing': ['{client} 메일이 {n}통 밀렸어요. 오늘 안에 다 못 보면 내일 아침이 더 무거워요.'],
   'expansion-start': ['공사하는 동안에도 전화는 와요. 배치는 평소처럼 챙겨 주세요.', '넓히는 건 좋지만, 자리를 채울 사람과 돈도 같이 생각해 봐요.'],
   'expansion-done': ['새 책상 냄새가 좋네요! 서두르지 말고 한 명씩 잘 뽑아요.', '자리가 늘었다고 바로 다 채울 필요는 없어요. 임대료도 잊지 마세요.'],
   'churn-warning': ['아직 늦지 않았어요. 그 고객사에 사람을 더 붙이고 서비스 레벨부터 올려요.'],

@@ -140,3 +140,20 @@ test('missing research state is treated as empty', () => {
   advanceBuild(s, 60);
   assert.equal(startResearch(s, 'clinic'), true);
 });
+
+test('a desk build that helps nobody still names the first agent in its done event', () => {
+  for (const id of ['chat-desk', 'mail-desk']) {
+    const s = makeState();
+    s.research.build = { researchId: id, minutesLeft: 30 };
+    advanceBuild(s, 30);
+    const e = s.inbox.at(-1);
+    assert.equal(e.id, 'build-done');
+    assert.deepEqual(e.data.helped, []);
+    assert.deepEqual(e.data.featured, { personId: 'a1', name: person(s, 'a1').name }, id);
+  }
+  // Research that names its helped people (or whose text has no {name}) gets no featured person.
+  const s = makeState();
+  s.research.build = { researchId: 'rest-room', minutesLeft: 30 };
+  advanceBuild(s, 30);
+  assert.equal(s.inbox.at(-1).data.featured, undefined);
+});

@@ -8,6 +8,7 @@ import { RESEARCH } from '../world/research.js';
 import { NATIONS } from '../world/nations.js';
 import { CLIENTS } from '../world/clients.js';
 import { formatMoney } from './money.js';
+import { channelOf } from '../sim/interval.js';
 
 export const UI_TEXT = {
   "topbar": {
@@ -84,7 +85,24 @@ export const UI_TEXT = {
     "belowTarget": "목표 아래",
     "weekendOnly": "주말 운영",
     "weekendOnlyTip": "이 고객사는 토·일에만 전화를 받아요.",
-    "today": "오늘"
+    "today": "오늘",
+    "backlog": "밀린 메일",
+    "backlogUnit": "{n}통",
+    "onTime": "기한 안 답장",
+    "targetEmail": "영업시간 {hours}시간 안에 {pct}%",
+    "answered": "답장한 메일",
+    "received": "들어온 메일",
+    "chats": "들어온 채팅",
+    "chatsHandled": "받은 채팅",
+    "noneEmail": "오늘은 아직 메일이 없어요.",
+    "noneChat": "오늘은 아직 채팅이 없어요."
+  },
+  "channel": {
+    "phone": "📞 전화",
+    "chat": "💬 채팅",
+    "email": "✉️ 이메일",
+    "chatTip": "한 사람이 채팅 두 건을 함께 받아요. 고객은 전화보다 조금 더 기다려 줘요.",
+    "emailTip": "바로 받지 않아도 되지만, 미루면 밀린 메일이 쌓여요. 문을 닫은 시간에는 기한이 흐르지 않아요."
   },
   "tabs": {
     "people": {
@@ -547,13 +565,16 @@ function valuesFor(event) {
     hours: research?.buildHours,
     cand1: d.cand1,
     cand2: d.cand2,
+    n: d.n,
   };
   if (clientDef) {
-    values.sl = fill(UI_TEXT.metrics.targetFull, { sec: clientDef.slTarget.sec, pct: clientDef.slTarget.pct });
+    values.sl = channelOf(clientDef) === 'email'
+      ? fill(UI_TEXT.metrics.targetEmail, { hours: clientDef.slTarget.openMinutes / 60, pct: clientDef.slTarget.pct })
+      : fill(UI_TEXT.metrics.targetFull, { sec: clientDef.slTarget.sec, pct: clientDef.slTarget.pct });
     values.fee = fill(UI_TEXT.common.money, { cost: formatMoney(clientDef.monthlyFee) });
   }
   if (event.id === 'build-done') {
-    values.name = helped.map((h) => h.name).join('·') || undefined;
+    values.name = helped.map((h) => h.name).join('·') || d.featured?.name || undefined;
     const left = [...new Set(helped.map((h) => h.daysLeft).filter((n) => n !== undefined))];
     values.days = left.length > 0 ? left.join('·') : undefined;
   }
@@ -567,16 +588,18 @@ export function eventText(event) {
   const def = EVENTS[event.id];
   if (!def) return { title: '', text: '', advisor: '' };
   const values = valuesFor(event);
+  const channel = clientDef(event) ? channelOf(clientDef(event)) : 'phone';
   let text;
   if (event.id === 'build-done') {
     const helped = event.data?.helped ?? [];
     const research = RESEARCH.find((r) => r.id === event.data?.researchId);
-    const done = helped.length > 0 && research ? fill(research.doneText, values) : '';
+    const done = (helped.length > 0 || event.data?.featured) && research ? fill(research.doneText, values) : '';
     text = done || fill(def.textNobody, values);
   } else if (event.id === 'client-offer') {
     const weekend = clientDef(event)?.hours.days.some((x) => x >= 5);
     const more = (event.data?.officeLevel ?? 0) >= 1 || (clientDef(event)?.requiresOfficeLevel ?? 0) >= 1;
-    const body = fill(weekend ? def.textWeekend : more ? def.textMore : def.text, values);
+    const body = fill(channel === 'chat' ? def.textChat : channel === 'email' ? def.textEmail
+      : weekend ? def.textWeekend : more ? def.textMore : def.text, values);
     text = [event.data?.again ? fill(def.again, values) : '', body].filter(Boolean).join(' ');
   } else {
     text = fill(def.text, values);
@@ -584,7 +607,8 @@ export function eventText(event) {
   const out = { title: fill(def.title, values), text };
   if (def.choices) {
     const acceptResult = event.id === 'client-offer'
-      ? (clientDef(event)?.hours.days.some((x) => x >= 5) ? def.acceptWeekend
+      ? (channel === 'chat' ? def.acceptChat : channel === 'email' ? def.acceptEmail
+        : clientDef(event)?.hours.days.some((x) => x >= 5) ? def.acceptWeekend
         : ((event.data?.officeLevel ?? 0) >= 1 || (clientDef(event)?.requiresOfficeLevel ?? 0) >= 1) ? def.acceptMore : undefined)
       : undefined;
     out.choices = def.choices.map((c) => ({
@@ -594,7 +618,9 @@ export function eventText(event) {
     if (chosen?.label) out.text = [out.text, fill(UI_TEXT.inbox.auto, { choice: chosen.label })].filter(Boolean).join(' ');
   }
   const weekendOffer = event.id === 'client-offer' && clientDef(event)?.hours.days.some((x) => x >= 5);
-  const lines = ADVISOR[weekendOffer ? 'client-offer-weekend' : event.id] ?? [];
+  const adviceKey = event.id === 'client-offer' && channel !== 'phone' ? `client-offer-${channel}`
+    : weekendOffer ? 'client-offer-weekend' : event.id === 'backlog-warning' ? 'backlog-growing' : event.id;
+  const lines = ADVISOR[adviceKey] ?? [];
   out.advisor = '';
   for (let i = 0; i < lines.length && !out.advisor; i++) {
     out.advisor = fill(lines[((event.day ?? 0) + i) % lines.length], values);

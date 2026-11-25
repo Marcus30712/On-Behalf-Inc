@@ -82,13 +82,16 @@ test('two starting clients and three offers; weekday hours Mon-Fri 09:00-21:00 e
 });
 
 const USED_EVENTS = ['sick', 'burnout', 'no-show', 'argument', 'resign-notice', 'holiday-leave', 'friday-off', 'call-spike', 'client-offer', 'churn-warning', 'research-done', 'build-done', 'candidate', 'game-over-cash', 'game-over-clients', 'milestone-big-client', 'milestone-rank-s', 'expansion-done', 'backlog-warning'];
-// Ids the sim pushes whose copy is not in world/ yet (v1.3 Task 4 adds it).
-const PENDING_COPY = ['backlog-warning'];
+// Ids the sim pushes whose copy is not in world/ yet.
+const PENDING_COPY = [];
+// Advisor key where it differs from the event id.
+const ADVISOR_KEY = { 'backlog-warning': 'backlog-growing' };
 
 test('every event used by the sim has text, and advice', () => {
   for (const id of USED_EVENTS.filter((e) => !PENDING_COPY.includes(e))) {
     assert.ok(EVENTS[id]?.title && EVENTS[id]?.text, id);
-    assert.ok(Array.isArray(ADVISOR[id]) && ADVISOR[id].length >= 1, id);
+    const key = ADVISOR_KEY[id] ?? id;
+    assert.ok(Array.isArray(ADVISOR[key]) && ADVISOR[key].length >= 1, id);
   }
   assert.ok(EVENTS['build-done'].textNobody);
   for (const id of ['holiday-leave', 'friday-off', 'resign-notice', 'candidate', 'client-offer']) {
@@ -144,4 +147,17 @@ test('the two desk researches carry the approved copy and an empty effect', () =
   assert.equal(mail.blurb, '메일함을 고객사별로 나누고 답장 서식을 만들어요. 이메일 상담 계약을 받을 수 있어요.');
   assert.equal(mail.doneText, '메일 창구가 열렸어요. {name} 씨가 답장 서식을 벽에 붙여 두었어요.');
   for (const r of [chat, mail]) { assert.deepEqual(r.effect, {}); assert.equal(r.cost, 90); assert.equal(r.buildHours, 20); }
+});
+
+test('PENDING_COPY is empty and the v1.3 event copy is verbatim', () => {
+  assert.deepEqual(PENDING_COPY, []);
+  assert.deepEqual(EVENTS['backlog-warning'], { title: '{client} 메일이 밀려요', text: '답장을 기다리는 메일이 {n}통이에요. 기한을 넘긴 메일이 늘면 {client}의 만족도가 떨어져요.' });
+  const o = EVENTS['client-offer'];
+  assert.equal(o.textChat, '{client}에서 채팅 상담 계약을 제안했어요. 한 사람이 채팅 두 건을 함께 받아요. 목표는 {sl}, 월 계약금은 {fee}예요.');
+  assert.equal(o.textEmail, '{client}에서 이메일 상담 계약을 제안했어요. 메일은 쌓아 두었다가 답해도 되지만 기한이 있어요. 목표는 {sl}, 월 계약금은 {fee}예요.');
+  assert.equal(o.acceptChat, '{client}가 새 고객사가 돼요. 업무 배치에서 채팅을 맡을 사람을 정해 주세요.');
+  assert.equal(o.acceptEmail, '{client}가 새 고객사가 돼요. 업무 배치에서 메일을 맡을 사람을 정해 주세요. 아무도 없으면 메일이 계속 쌓여요.');
+  assert.deepEqual(ADVISOR['client-offer-chat'], ['채팅은 동시에 받으니 사람이 적어 보여도 돼요. 다만 한 건이 길어지는 건 각오해야 해요.']);
+  assert.deepEqual(ADVISOR['client-offer-email'], ['메일은 조용히 쌓여요. 한가한 사람이 생기면 메일부터 맡겨 봐요.']);
+  assert.deepEqual(ADVISOR['backlog-growing'], ['{client} 메일이 {n}통 밀렸어요. 오늘 안에 다 못 보면 내일 아침이 더 무거워요.']);
 });

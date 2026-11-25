@@ -80,6 +80,27 @@ test('answered within 720 open minutes is on time', () => {
   assert.equal(second.offered, 0);
 });
 
+test('a late mail counts once: when it goes overdue, not again when answered', () => {
+  // The day's on-time share, summed as the view reads it (inTarget / offered).
+  let inTarget = 0;
+  let offered = 0;
+  const step = (entry, opts) => {
+    const r = stepBacklog(entry, { targetMin: 720, ahtMin: 6, ...opts });
+    inTarget += r.serviceLevel * r.offered;
+    offered += r.offered;
+    return r;
+  };
+  const entry = { openMin: 690, items: [{ at: 0, n: 10 }], carry: 0 };
+  step(entry, { arrivals: 0, agents: 0 }); // age 720: still on time, nobody answers
+  assert.equal(step(entry, { arrivals: 0, agents: 0 }).overdue, 10); // age 750: overdue, counted
+  // Next interval: the 10 late mails and 10 new ones are all answered.
+  const r = step(entry, { arrivals: 10, agents: 4 });
+  assert.equal(r.handled, 20);
+  assert.equal(r.offered, 10);
+  assert.equal(r.serviceLevel, 1);
+  assert.equal(inTarget / offered, 0.5);
+});
+
 // Runs stepInterval from (day, minute) for `n` intervals, rolling over midnight.
 function run(s, n) {
   const reports = [];

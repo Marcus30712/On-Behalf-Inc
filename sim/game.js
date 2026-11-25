@@ -161,7 +161,8 @@ function clientView(state, c) {
   const handled = t?.handled ?? 0;
   const channel = channelOf(def);
   // Email (v1.3): mails waiting now, and today's share answered on time
-  // (on time over answered + newly overdue); null before the first.
+  // (on time over mails counted, each mail once: answered, or gone overdue);
+  // null before the first.
   const email = channel === 'email' ? {
     backlog: Math.round(backlogCount(state.backlog?.[c.id])),
     onTime: offered > 0 ? (t.inTarget ?? 0) / offered : null,

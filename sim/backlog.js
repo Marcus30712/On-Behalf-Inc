@@ -7,8 +7,11 @@
 //   carry    the fraction of a mail's work left over from the last interval;
 //   warnedAt openMin of the last backlog-warning (missing: never warned).
 // Mail is answered oldest first. A mail is on time when answered within the
-// client's slTarget.openMinutes of open time; an unanswered mail counts as
-// missed once, in the interval its age passes that.
+// client's slTarget.openMinutes of open time. Each mail counts once in
+// `offered`: when answered, or, if still waiting, in the interval its age
+// passes the target (then answering it later adds to `handled` only).
+// offered = answered - answered that was already overdue + newly overdue;
+// serviceLevel = on time / offered (1 when nothing counts).
 import { pushEvent } from './events.js';
 import { dateOf } from './calendar.js';
 import { CLIENTS } from '../world/clients.js';
@@ -43,11 +46,14 @@ export function stepBacklog(entry, {
   let left = whole;
   let processed = 0;
   let onTime = 0;
+  let lateBefore = 0; // answered now, but already counted when it went overdue
   while (left > EPS && entry.items.length > 0) {
     const item = entry.items[0];
     const take = Math.min(item.n, left);
     processed += take;
-    if (entry.openMin - item.at <= targetMin) onTime += take;
+    const age = entry.openMin - item.at;
+    if (age <= targetMin) onTime += take;
+    else if (age - INTERVAL > targetMin) lateBefore += take;
     item.n -= take;
     left -= take;
     if (item.n <= EPS) entry.items.shift();
@@ -60,7 +66,7 @@ export function stepBacklog(entry, {
     if (age > targetMin && age - INTERVAL <= targetMin) overdue += item.n;
   }
 
-  const offered = processed + overdue;
+  const offered = processed - lateBefore + overdue;
   return {
     offered,
     handled: processed,

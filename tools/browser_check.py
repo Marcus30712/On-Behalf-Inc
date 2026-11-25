@@ -473,6 +473,38 @@ def check_channels(browser):
     page.context.close()
 
 
+def check_metrics_fit(browser):
+    """v1.4: with 5 and with 7 active clients the page still fits 1280x720
+    (no vertical scroll) and the whole tab bar is on screen."""
+    size = VIEWPORTS[0]
+    phone = ['dalbit-mall', 'bandi-repair', 'baram-delivery']
+    cases = [('clients-5', phone), ('clients-7', phone + ['saebyeol-bank', 'solbang-books'])]
+    for name, ids in cases:
+        tag = f'metrics fit {name}'
+        push = ''.join(f"game.clients.push({{ id: '{i}', satisfaction: 70, active: true }});" for i in ids)
+        text = node_save(push + "advance(game, Math.max(0, 660 - game.minute));"
+                         "if (game.gameOver) throw new Error('game ended');")
+        page = open_page(browser, size, text)
+        page.click('.start-continue')
+        page.wait_for_selector('.overlay', state='hidden')
+        page.keyboard.press(' ')
+        page.wait_for_timeout(200)
+        chips = page.locator('.metrics .metric').count()
+        if chips != len(ids) + 2:
+            fail(f'{tag}: {chips} metric chips, want {len(ids) + 2}')
+        sh = page.evaluate('document.documentElement.scrollHeight')
+        if sh > size[1]:
+            fail(f'{tag}: page is {sh - size[1]} px taller than the viewport (scrollHeight {sh})')
+        box = page.locator('.tabs').bounding_box()
+        if not box or box['y'] < 0 or box['y'] + box['height'] > size[1]:
+            fail(f'{tag}: tab bar not fully inside the viewport: {box}')
+        page.screenshot(path=str(OUT / f'{name}.png'))
+        check_text(page, tag)
+        check_no_sideways(page, tag)
+        check_errors(page, tag)
+        page.context.close()
+
+
 def main():
     global base_url
     OUT.mkdir(parents=True, exist_ok=True)
@@ -488,6 +520,7 @@ def main():
                 check_long_inbox(browser)
                 check_expansion_weekend(browser)
                 check_channels(browser)
+                check_metrics_fit(browser)
             finally:
                 browser.close()
     except Exception as e:  # a broken step is a failure, not a crash

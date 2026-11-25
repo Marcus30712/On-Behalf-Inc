@@ -235,3 +235,20 @@ test('desk build-done: the advisor does not name the featured person', () => {
     data: { researchId: 'rest-room', names: ['하나'], helped: [{ personId: 'p1', name: '하나' }] } });
   assert.equal(helped.advisor, '보세요, 하나 씨 얼굴이 달라졌죠? 이게 센터장님이 한 일이에요.');
 });
+
+test('the metrics list turns compact from the fifth active client, and only then', () => {
+  const game = createGame(7);
+  const ids = ['dalbit-mall', 'bandi-repair', 'baram-delivery', 'saebyeol-bank', 'solbang-books'];
+  const classes = [];
+  for (let n = 0; n <= ids.length; n++) {
+    if (n > 0) game.clients.push({ id: ids[n - 1], satisfaction: 70, active: true });
+    const r = makeRoot();
+    renderMetrics(r, view(game));
+    classes.push(r.querySelector('ul').className);
+  }
+  // 2, 3, 4 clients as before; 5 phone clients; then 6 and 7 with the channel clients.
+  assert.deepEqual(classes, [
+    'metrics-list', 'metrics-list', 'metrics-list', 'metrics-list compact',
+    'metrics-list channels compact', 'metrics-list channels compact',
+  ]);
+});

@@ -11,6 +11,7 @@ import { EVENTS } from '../world/events.js';
 const OPEN = 9 * 60;
 const CLOSE = 21 * 60;
 const SATURDAY = 5;
+const COMPACT_FROM = 4; // more active clients than this: compact chips
 
 // The closed note, or null while the center is open. With a weekend client
 // Saturday and Sunday open for the weekend shift's hours.
@@ -118,5 +119,8 @@ export function renderMetrics(root, v) {
     h('span', {}, `${M.satisfaction} ${Math.round(c.satisfaction)}`),
     below && h('span', { class: 'warn' }, M.belowTarget));
   });
-  root.replaceChildren(h('ul', { class: mixed ? 'metrics-list channels' : 'metrics-list' }, items));
+  // From five clients on the chips use the compact form (smaller type, tighter
+  // gaps) so the strip stays within two or three lines at 1280x720.
+  const cls = ['metrics-list', mixed && 'channels', items.length > COMPACT_FROM && 'compact'].filter(Boolean).join(' ');
+  root.replaceChildren(h('ul', { class: cls }, items));
 }

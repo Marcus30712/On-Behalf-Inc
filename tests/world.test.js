@@ -161,3 +161,8 @@ test('PENDING_COPY is empty and the v1.3 event copy is verbatim', () => {
   assert.deepEqual(ADVISOR['client-offer-email'], ['메일은 조용히 쌓여요. 한가한 사람이 생기면 메일부터 맡겨 봐요.']);
   assert.deepEqual(ADVISOR['backlog-growing'], ['{client} 메일이 {n}통 밀렸어요. 오늘 안에 다 못 보면 내일 아침이 더 무거워요.']);
 });
+
+test('v1.4 copy: big-client milestone and churn advice use channel-neutral wording', () => {
+  assert.equal(EVENTS['milestone-big-client'].text, '이제 고객사 세 곳의 상담을 함께 맡아요. 작은 센터가 여기까지 왔어요.');
+  assert.deepEqual(ADVISOR['churn-warning'], ['아직 늦지 않았어요. 그 고객사에 사람을 더 붙이고 목표부터 맞춰요.']);
+});

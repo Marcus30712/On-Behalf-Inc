@@ -199,8 +199,10 @@ function rosterPanel({ h, v, run }) {
   const today = v.date.weekday;
   const weekend = !!v.flags?.weekend;
   const days = weekend ? WEEK : WEEKDAYS;
+  const sixAny = v.people.some((p) => workedDays(v, p) >= SIX_DAYS);
   const head = h('tr', {}, h('th', {}, R.colName), PLANET.weekdays.slice(0, days).map((d, w) =>
-    h('th', { class: w === today ? 'today' : null, title: w === today ? R.todayMark : null }, d)));
+    h('th', { class: w === today ? 'today' : null, title: w === today ? R.todayMark : null }, d)),
+    sixAny && h('th', { class: 'warn' }, R.colSixDays));
   const rows = v.people.map((p) => {
     const worked = workedDays(v, p);
     const six = worked >= SIX_DAYS;
@@ -217,7 +219,7 @@ function rosterPanel({ h, v, run }) {
       h('th', { scope: 'row' }, p.name,
         six && h('small', { class: 'warn six-days-mark', title: R.sixDays }, ' ', fill(R.sixDaysShort, { n: worked }))),
       cells,
-      six && h('td', { class: 'warn six-days-note' }, R.sixDays));
+      sixAny && h('td', { class: six ? 'warn six-days-note' : null }, six ? R.sixDays : null));
   });
   const count = (w) => v.people.filter((p) => p.week?.[w] === 'weekend').length;
   const foot = weekend && h('tfoot', {}, h('tr', {}, h('th', {}),
@@ -226,7 +228,7 @@ function rosterPanel({ h, v, run }) {
   return [title(h, R.title, R.help),
     weekend && h('p', { class: 'help' }, R.weekendHelp),
     h('p', { class: 'help' }, R.hours),
-    h('table', { class: 'roster' }, h('thead', {}, head), h('tbody', {}, rows), foot)];
+    h('table', { class: 'roster', 'aria-label': weekend ? R.colDaysWeekend : R.colDays }, h('thead', {}, head), h('tbody', {}, rows), foot)];
 }
 
 function tasksPanel({ h, v, run, rerender }) {

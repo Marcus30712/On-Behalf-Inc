@@ -250,7 +250,7 @@ test('expansion events fill stage, days and seats', () => {
 });
 
 test('v1.2 UI_TEXT keys exist', () => {
-  for (const k of ['shift.weekend.short', 'shift.weekend.full', 'tasks.seatsOf', 'refuse.office.no-cash', 'refuse.building', 'refuse.max-level', 'refuse.need-previous', 'topbar.weekendOpen', 'metrics.weekendOnly', 'metrics.weekendOnlyTip', 'roster.colDaysWeekend', 'roster.weekendHelp', 'roster.weekendCount', 'roster.sixDays', 'roster.sixDaysShort', 'office.title', 'office.confirmText', 'office.stages.2.name']) {
+  for (const k of ['shift.weekend.short', 'shift.weekend.full', 'tasks.seatsOf', 'refuse.office.no-cash', 'refuse.building', 'refuse.max-level', 'topbar.weekendOpen', 'metrics.weekendOnly', 'metrics.weekendOnlyTip', 'roster.colDaysWeekend', 'roster.weekendHelp', 'roster.weekendCount', 'roster.sixDays', 'roster.sixDaysShort', 'office.title', 'office.confirmText', 'office.stages.2.name']) {
     assert.equal(typeof k.split('.').reduce((o, p) => o?.[p], UI_TEXT), 'string', k);
   }
   assert.equal(UI_TEXT.shift.weekend.full, '주말 조');
@@ -375,4 +375,20 @@ test('no leftover braces in any new v1.3 event or variant', () => {
   }
   const w = eventText({ id: 'backlog-warning', day: 1, clientId: 'solbang-books', data: { n: 120 } });
   for (const s of [w.title, w.text, w.advisor]) assert.ok(!/[{}]/.test(s), s);
+});
+
+// v1.4 Task 2: approved copy (docs/superpowers/specs/2026-11-25-v1.4-copy.md §1, §2).
+test('v1.4 changed lines read as approved', () => {
+  assert.equal(UI_TEXT.task.phone.name, '상담 응대');
+  assert.equal(UI_TEXT.tasks.help, '사람마다 맡을 일을 골라요. 상담 응대는 어느 고객사를 맡을지도 골라요.');
+});
+
+test('v1.4 new UI_TEXT keys have the exact approved text; dropped keys are gone', () => {
+  assert.equal(UI_TEXT.tasks.covering, '{client} 돕는 중');
+  assert.equal(UI_TEXT.tasks.coveringTip, '맡은 고객사가 문을 닫은 시간이라, 문을 연 {client}을 돕고 있어요.');
+  assert.equal(UI_TEXT.metrics.closedToday, '오늘 휴무');
+  assert.equal(UI_TEXT.metrics.closedTodayTip, '이 고객사는 오늘 문을 열지 않아요.');
+  assert.equal(UI_TEXT.roster.colSixDays, '주 6일');
+  assert.equal(UI_TEXT.office.tabTip, undefined);
+  assert.equal(UI_TEXT.refuse['need-previous'], undefined);
 });

@@ -189,7 +189,7 @@ test('tasks and people: client choices carry the channel; chat and mail agents a
   r = makeRoot();
   selectPerson(mailAgent.id);
   renderPanel(r, v, 'people', () => ({ ok: true }));
-  assert.ok(r.textContent.includes('전화 응대 · 솔방울 서점 · ✉️ 이메일'), r.textContent);
+  assert.ok(r.textContent.includes('상담 응대 · 솔방울 서점 · ✉️ 이메일'), r.textContent);
 });
 
 test('map: chat and email agents at their desks show 💬 or ✉️ instead of the headset', () => {

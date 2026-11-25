@@ -4,7 +4,7 @@
 import { newGame, serialize, deserialize } from './state.js';
 import { restoreRng } from './rng.js';
 import { dateOf, upcomingHolidays, holidaysOn, DAYS_PER_MONTH } from './calendar.js';
-import { stepInterval, breakGroups, isOpen } from './interval.js';
+import { stepInterval, breakGroups, answeringClient } from './interval.js';
 import { endOfDay } from './day.js';
 import { advanceResearch, advanceBuild, startResearch } from './research.js';
 import { dailyEconomy, monthEnd, reputation } from './economy.js';
@@ -203,9 +203,8 @@ function activity(state, p, rosterShift, group) {
   if (onBreak(state.minute, rosterShift, group)) return 'break';
   const a = state.assignment[p.id];
   if (a?.kind === 'phone') {
-    const def = CLIENTS.find((d) => d.id === a.clientId);
-    const active = state.clients.some((c) => c.id === a.clientId && c.active);
-    return active && def && isOpen(def, state.day, state.minute) ? 'phone' : 'idle';
+    // Their own client, or an open one while theirs is closed (sim/interval.js).
+    return answeringClient(state, a, state.day, state.minute) ? 'phone' : 'idle';
   }
   return PROGRESS_TASKS.has(a?.kind) ? 'task' : 'idle';
 }
@@ -277,7 +276,8 @@ export function view(state) {
   const inbox = state.inbox
     .map((e, index) => ({ ...e, index }))
     .sort((a, b) => inboxRank(a) - inboxRank(b) || b.index - a.index);
-  const groups = breakGroups(state, (p) => state.roster[p.id]?.[date.weekday]);
+  const groups = breakGroups(state, (p) => state.roster[p.id]?.[date.weekday],
+    (p) => answeringClient(state, state.assignment[p.id], state.day, state.minute));
   return freeze(structuredClone({
     day: state.day,
     minute: state.minute,

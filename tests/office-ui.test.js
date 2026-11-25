@@ -65,7 +65,7 @@ test('starting an expansion asks first; yes starts it, no changes nothing', () =
   click(root.querySelector('button[data-action="startExpansion"]'));
   assert.equal(calls.length, 0, 'nothing happens before the answer');
   assert.ok(root.textContent.includes(fill(O.confirmTitle, { stage: O.stages[1].name })), root.textContent);
-  assert.ok(root.textContent.includes(fill(O.confirmText, { cost: formatMoney(30000) })));
+  assert.ok(root.textContent.includes('공사 비용 💰 30,000은 지금 바로 나가요. 완공 뒤부터는 임대료도 다달이 나가요.'), root.textContent);
 
   click(root.querySelector('button[data-action="cancelExpansion"]'));
   assert.equal(calls.length, 0);

@@ -133,16 +133,33 @@ function staffAvail(person, day) {
   return Math.min(1, ...holidaysOn(day, nation).map(({ holiday }) => holiday.staffAvail ?? 1));
 }
 
+// The client a phone agent answers in the interval at (day, minute): their own
+// client while it is open; while it is closed (a weekday client at the
+// weekend) the first open active client in state.clients order, so a weekend
+// crew left on its weekday client answers the weekend client. Weekday clients
+// all keep the same hours, so on a weekday this is always the person's own
+// client. undefined when no client is open or the person is not on phones.
+export function answeringClient(state, assignment, day, minute) {
+  if (assignment?.kind !== 'phone') return undefined;
+  const openNow = (id) => {
+    const def = CLIENTS.find((d) => d.id === id);
+    return !!def && state.clients.some((c) => c.id === id && c.active) && isOpen(def, day, minute);
+  };
+  if (openNow(assignment.clientId)) return assignment.clientId;
+  return state.clients.find((c) => openNow(c.id))?.id;
+}
+
 // Break group (0 or 1) per person: phone agents of the same client and shift
 // alternate in state.people order, so a pair never breaks together. Everyone
-// else is group 0 (missing from the map). shiftOf(person) gives today's shift.
-export function breakGroups(state, shiftOf) {
+// else is group 0 (missing from the map). shiftOf(person) gives today's shift;
+// clientOf(person) the client answered now (default: the assigned client).
+export function breakGroups(state, shiftOf, clientOf) {
   const seen = new Map();
   const groups = new Map();
   for (const p of state.people) {
     const a = state.assignment[p.id];
     if (a?.kind !== 'phone') continue;
-    const key = `${a.clientId}/${shiftOf(p)}`;
+    const key = `${(clientOf && clientOf(p)) ?? a.clientId}/${shiftOf(p)}`;
     const n = seen.get(key) ?? 0;
     seen.set(key, n + 1);
     groups.set(p.id, n % 2);
@@ -172,16 +189,18 @@ export function stepInterval(state, rng) {
   if (open.length > 0) {
     const openIds = new Set(open.map((o) => o.def.id));
     const shiftOf = (p) => state.roster[p.id]?.[dateOf(day).weekday];
-    const groups = breakGroups(state, shiftOf);
+    // The client each phone agent answers now (their own, or a stand-in while theirs is closed).
+    const answering = new Map(state.people.map((p) => [p.id, answeringClient(state, state.assignment[p.id], day, minute)]));
+    const groups = breakGroups(state, shiftOf, (p) => answering.get(p.id));
     const shareOf = (p) => workShare(minute, shiftOf(p), groups.get(p.id) ?? 0);
 
     // Phone staff per open client.
     const staff = new Map(open.map((o) => [o.def.id, []]));
     for (const p of state.people) {
-      const a = state.assignment[p.id];
-      if (a?.kind !== 'phone' || !openIds.has(a.clientId) || !onShift(state, p, day, minute)) continue;
+      const clientId = answering.get(p.id);
+      if (!openIds.has(clientId) || !onShift(state, p, day, minute)) continue;
       const share = shareOf(p);
-      if (share > 0) staff.get(a.clientId).push({ person: p, share });
+      if (share > 0) staff.get(clientId).push({ person: p, share });
     }
 
     // Queues, in state.clients order (one rng draw each).
@@ -230,7 +249,8 @@ export function stepInterval(state, rng) {
       if (a && onShift(state, p, day, minute)) share = shareOf(p);
       let occupancy = NON_PHONE_OCCUPANCY;
       if (a?.kind === 'phone') {
-        if (openIds.has(a.clientId)) occupancy = results.get(a.clientId).occupancy;
+        const clientId = answering.get(p.id);
+        if (openIds.has(clientId)) occupancy = results.get(clientId).occupancy;
         else share = 0;
       } else if (a && PROGRESS_KINDS.includes(a.kind) && share > 0) {
         let gain = share;

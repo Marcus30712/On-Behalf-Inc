@@ -238,3 +238,80 @@ test('only people working the weekend are asked for leave over a Sat-Sun holiday
   const asked = s.inbox.filter((e) => e.id === 'holiday-leave').map((e) => e.personId);
   assert.deepEqual(asked, [b.id]);
 });
+
+// Final review, Critical 1: the reviewer's run. The player rosters a weekend
+// crew as the accept text says (Sat/Sun on 주말, Tue/Wed off) but leaves them on
+// their weekday client. On Saturday that client is closed, so they answer the
+// open weekend client; on Monday they are back on their own client.
+test('a weekend crew still assigned to a weekday client answers the weekend client on Saturday', () => {
+  const BARAM = 'baram-delivery';
+  const s = createGame(3);
+  s.clients.push({ id: BARAM, satisfaction: 70, active: true });
+  const crew = s.people.filter((p) => p.role === 'agent').slice(0, 3);
+  for (const p of crew) {
+    s.roster[p.id] = { ...s.roster[p.id], 1: 'off', 2: 'off', 5: 'weekend', 6: 'weekend' };
+    assert.notEqual(s.assignment[p.id].clientId, BARAM);
+  }
+  const own = crew.map((p) => s.assignment[p.id].clientId);
+  advance(s, SAT * 1440 + 600 - s.minute); // Saturday 10:00 (a new game starts at 09:00)
+  assert.deepEqual([s.day, s.minute], [SAT, 600]);
+  const v = view(s);
+  for (const p of crew) {
+    const pv = v.people.find((x) => x.id === p.id);
+    assert.equal(pv.activity, 'phone', `${p.id} is on the phone on Saturday`);
+    assert.deepEqual(pv.task, { kind: 'phone', clientId: own[crew.indexOf(p)] }, 'the assignment itself is unchanged');
+  }
+  advance(s, 2 * 1440); // Monday 10:00
+  const sat = s.history.find((h) => h.day === SAT).clients[BARAM];
+  assert.ok(sat.handled > 0, `weekend client handled calls on Saturday: ${JSON.stringify(sat)}`);
+  assert.ok(sat.intervalsMet > 0);
+  assert.ok(s.history.find((h) => h.day === SUN).clients[BARAM].handled > 0);
+  // Monday: back on the weekday client, which the view shows as phone work.
+  const vm = view(s);
+  for (const p of crew) {
+    const pv = vm.people.find((x) => x.id === p.id);
+    assert.equal(pv.activity, pv.rosterShift === 'early' ? 'phone' : 'off', `${p.id} on Monday (${pv.rosterShift})`);
+  }
+  const mon = stepInterval(s, createRng(1)).clients;
+  assert.equal(mon[BARAM], undefined, 'the weekend client is closed on Monday');
+  for (const id of new Set(own)) assert.ok(mon[id].agents > 0);
+});
+
+// Final review, Important 4: a client's churn countdown counts only the days
+// that client opens, so a weekend client's 20 workdays are 20 of its own days.
+test('a weekend client\'s churn countdown runs on its own days only', () => {
+  const BARAM = 'baram-delivery';
+  const s = createGame(3);
+  s.clients.push({ id: BARAM, satisfaction: 19, active: true });
+  const left = () => s.churn.find((e) => e.clientId === BARAM)?.workdaysLeft;
+  advance(s, 1440 - s.minute); // Monday ends: the warning is given
+  assert.equal(left(), 20);
+  advance(s, 4 * 1440); // Tuesday-Friday: baram is closed, nothing counts
+  assert.equal(left(), 20);
+  advance(s, 2 * 1440); // Saturday and Sunday count
+  assert.equal(left(), 18);
+  advance(s, 5 * 1440);
+  assert.equal(left(), 18);
+});
+
+test('a weekend client in a churn warning that is well staffed can recover', () => {
+  const BARAM = 'baram-delivery';
+  const s = createGame(3);
+  s.clients.push({ id: BARAM, satisfaction: 19, active: true });
+  // A weekend-only crew of four on baram (the other four agents keep the weekdays).
+  const crew = s.people.filter((p) => p.role === 'agent').slice(0, 4);
+  for (const p of crew) {
+    s.roster[p.id] = { 0: 'off', 1: 'off', 2: 'off', 3: 'off', 4: 'off', 5: 'weekend', 6: 'weekend' };
+    s.assignment[p.id] = { kind: 'phone', clientId: BARAM };
+  }
+  let warned = false;
+  for (let w = 0; w < 12; w++) {
+    advance(s, 7 * 1440);
+    warned ||= s.churn.some((e) => e.clientId === BARAM);
+  }
+  const baram = s.clients.find((c) => c.id === BARAM);
+  assert.ok(warned, 'the warning was given');
+  assert.equal(baram.active, true, `baram kept (satisfaction ${baram.satisfaction.toFixed(1)})`);
+  assert.ok(baram.satisfaction > 40, String(baram.satisfaction));
+  assert.ok(!s.churn.some((e) => e.clientId === BARAM), 'the warning is over');
+});

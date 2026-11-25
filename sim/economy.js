@@ -5,7 +5,7 @@
 // state.rankSStreak (workdays in a row at S; missing in v1.0 saves, read as 0).
 // The game calls dailyEconomy after endOfDay on workdays, and monthEnd after
 // endOfDay on the last day of each 30-day month.
-import { DAYS_PER_MONTH } from './calendar.js';
+import { DAYS_PER_MONTH, dateOf } from './calendar.js';
 import { pushEvent } from './events.js';
 import { CLIENTS } from '../world/clients.js';
 import { rentOf, officeLevel } from './office.js';
@@ -147,6 +147,13 @@ function runChurn(state) {
   for (const entry of state.churn) {
     const client = state.clients.find((c) => c.id === entry.clientId);
     if (!client?.active || client.satisfaction > CHURN_RECOVER_ABOVE) continue;
+    // Only the client's own open days count (a weekend client's Sat/Sun); weekday
+    // clients open every weekday, so for them nothing changes.
+    const def = CLIENTS.find((d) => d.id === client.id);
+    if (def && !def.hours.days.includes(dateOf(state.day).weekday)) {
+      kept.push(entry);
+      continue;
+    }
     entry.workdaysLeft -= 1;
     if (entry.workdaysLeft <= 0) loseClient(state, client);
     else kept.push(entry);

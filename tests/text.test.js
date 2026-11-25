@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { UI_TEXT } from '../ui/text.js';
 import { fill, eventText, withParticle } from '../ui/text.js';
 import { formatTime, formatDate, formatMoney, formatPct, formatSec } from '../ui/format.js';
+import { refusalText } from '../ui/panels.js';
 import { EVENTS } from '../world/events.js';
 import { RESEARCH } from '../world/research.js';
 
@@ -252,4 +253,61 @@ test('v1.2 UI_TEXT keys exist', () => {
     assert.equal(typeof k.split('.').reduce((o, p) => o?.[p], UI_TEXT), 'string', k);
   }
   assert.equal(UI_TEXT.shift.weekend.full, '주말 조');
+});
+
+// Final review, Important 2 + 3: a number takes its particle and copula by how
+// it reads in Korean (its last read syllable), and {x}예요 settles like 이/가.
+test('a number settles 은/는 by its Korean reading', () => {
+  const cases = {
+    '30,000': '은', // 삼만
+    '36,000': '은', // 삼만육천
+    '9,000': '은', // 구천
+    '17,000': '은', // 만칠천
+    '1,500': '은', // 천오백
+    '2,000': '은', // 이천
+    10: '은', // 십
+    1: '은', // 일
+    2: '는', // 이
+    3: '은', // 삼
+    4: '는', // 사
+    5: '는', // 오
+    6: '은', // 육
+    7: '은', // 칠
+    8: '은', // 팔
+    9: '는', // 구
+    0: '은', // 영
+    '120,000,000': '은', // 일억이천만
+    '1.5': '는', // 일점오
+  };
+  for (const [n, particle] of Object.entries(cases)) {
+    assert.equal(fill('{n}은 나가요.', { n }), `${n}${particle} 나가요.`, n);
+  }
+  assert.equal(fill('{n}로 가요.', { n: '30,000' }), '30,000으로 가요.');
+  assert.equal(fill('{n}로 가요.', { n: '1' }), '1로 가요.');
+  assert.equal(fill('{n}가 남았어요.', { n: '9' }), '9가 남았어요.');
+  assert.equal(fill('{n}가 남았어요.', { n: '36' }), '36이 남았어요.');
+});
+
+test('{x}예요 settles to 이에요 after a 받침 and 예요 otherwise', () => {
+  assert.equal(fill('비용은 {c}예요.', { c: '💰 30,000' }), '비용은 💰 30,000이에요.');
+  assert.equal(fill('비용은 {c}예요.', { c: '💰 1,500' }), '비용은 💰 1,500이에요.');
+  assert.equal(fill('비용은 {c}예요.', { c: '9' }), '비용은 9예요.');
+  assert.equal(fill('오늘은 {h}예요.', { h: '씨앗날' }), '오늘은 씨앗날이에요.');
+  assert.equal(fill('오늘은 {h}예요.', { h: '해넘이 연휴' }), '오늘은 해넘이 연휴예요.');
+  assert.equal(fill('오늘은 {h}이에요.', { h: '해넘이 연휴' }), '오늘은 해넘이 연휴예요.');
+});
+
+test('rendered money lines read right: refusals, offers and the holiday line', () => {
+  assert.equal(refusalText('no-cash', { type: 'startHiring' }), '돈이 모자라요. 채용 비용은 💰 1,500이에요.');
+  assert.equal(refusalText('no-cash', { type: 'startExpansion' }, { office: { next: { cost: 30000 } } }),
+    '돈이 모자라요. 공사 비용은 💰 30,000이에요.');
+  assert.equal(refusalText('no-cash', { type: 'startExpansion' }, { office: { next: { cost: 36000 } } }),
+    '돈이 모자라요. 공사 비용은 💰 36,000이에요.');
+  assert.match(offer('bandi-repair').text, /월 계약금은 💰 17,000이에요\. /);
+  assert.match(offer('baram-delivery', { officeLevel: 1 }).text, /월 계약금은 💰 9,000이에요\.$/);
+  assert.match(offer('dalbit-mall').text, /월 계약금은 💰 24,000이에요\. /);
+  const seed = eventText({ id: 'holiday-leave', day: 1, data: { name: '하나', holidayId: 'seed-day', nationId: 'veltora' } });
+  assert.ok(seed.text.startsWith('내일부터 씨앗날이에요. 하나 씨가'), seed.text);
+  const year = eventText({ id: 'holiday-leave', day: 1, data: { name: '하나', holidayId: 'year-turn', nationId: 'veltora' } });
+  assert.ok(year.text.startsWith('내일부터 해넘이 연휴예요. '), year.text);
 });

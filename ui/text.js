@@ -463,12 +463,30 @@ export const UI_TEXT = {
   }
 };
 
-// Korean particles: 받침 check on the last Hangul syllable.
+// Korean particles: 받침 check on the last Hangul syllable (see lastChar).
 const jongseong = (ch) => {
   const code = ch.charCodeAt(0) - 0xac00;
   return code >= 0 && code <= 11171 ? code % 28 : 0; // 0 = no 받침, 8 = ㄹ
 };
-const lastChar = (word) => word.replace(/[\s'"’”)\]]+$/u, '').slice(-1);
+// How a number ends when read aloud in Korean: the units digit, else the
+// place of its last non-zero digit (30,000 삼만, 1,500 천오백, 9,000 구천);
+// after a decimal point digit by digit (1.5 일점오). Zero reads 영.
+const DIGIT_READ = ['영', '일', '이', '삼', '사', '오', '육', '칠', '팔', '구'];
+const PLACE_READ = ['', '십', '백', '천', '만', '만', '만', '만', '억', '억', '억', '억', '조', '조', '조', '조'];
+function numberEnd(text) {
+  const m = text.match(/(\d[\d,]*)(?:\.(\d+))?$/);
+  if (!m) return null;
+  if (m[2]) return DIGIT_READ[Number(m[2].slice(-1))];
+  const digits = m[1].replace(/,/g, '').replace(/^0+(?=\d)/, '');
+  const zeros = digits.length - digits.replace(/0+$/, '').length;
+  if (zeros === digits.length) return DIGIT_READ[0];
+  return zeros === 0 ? DIGIT_READ[Number(digits.slice(-1))] : PLACE_READ[zeros] ?? '조';
+}
+// The last syllable the word ends on, as read (a number by its Korean reading).
+const lastChar = (word) => {
+  const text = word.replace(/[\s'"’”)\]]+$/u, '');
+  return numberEnd(text) ?? text.slice(-1);
+};
 const eroFor = (word) => {
   const j = jongseong(lastChar(word));
   return j === 0 || j === 8 ? '로' : '으로';
@@ -479,8 +497,9 @@ export const withParticle = (word) => word + eroFor(word);
 
 // A particle written right after a placeholder ({client}가) is re-chosen by the
 // 받침 of the filled value. Only whole particles count: the next char is not Hangul.
-const PARTICLE_PAIRS = [['이', '가'], ['을', '를'], ['은', '는'], ['과', '와']];
-const PARTICLE_AFTER_VALUE = /\{(\w+)\}(으로|로|이|가|을|를|은|는|과|와)(?![가-힣(])/g;
+// The copula 이에요/예요 is settled the same way ({fee}예요 -> 💰 9,000이에요).
+const PARTICLE_PAIRS = [['이에요', '예요'], ['이', '가'], ['을', '를'], ['은', '는'], ['과', '와']];
+const PARTICLE_AFTER_VALUE = /\{(\w+)\}(이에요|예요|으로|로|이|가|을|를|은|는|과|와)(?![가-힣(])/g;
 function pickParticle(value, written) {
   if (written === '로' || written === '으로') return eroFor(value);
   const pair = PARTICLE_PAIRS.find((p) => p.includes(written));
@@ -505,7 +524,7 @@ export function fill(template, values = {}) {
   }
   return kept.join('').trim()
     .replace(/([^\s])\(으\)로/gu, (_, ch, off, s) => ch + eroFor(s.slice(0, off + 1)))
-    .replace(/(\S)이\(가\)/gu, (_, ch) => ch + (jongseong(ch) === 0 ? '가' : '이'));
+    .replace(/(\S)이\(가\)/gu, (_, ch, off, s) => ch + (jongseong(lastChar(s.slice(0, off + 1))) === 0 ? '가' : '이'));
 }
 
 // The values an event's templates can use, read from its data (see sim/*.js pushEvent calls).

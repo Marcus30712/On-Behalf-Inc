@@ -621,9 +621,13 @@ export function eventText(event) {
   const adviceKey = event.id === 'client-offer' && channel !== 'phone' ? `client-offer-${channel}`
     : weekendOffer ? 'client-offer-weekend' : event.id === 'backlog-warning' ? 'backlog-growing' : event.id;
   const lines = ADVISOR[adviceKey] ?? [];
+  // A desk's featured person only stars in its done text: nobody's face
+  // changed, so the advisor speaks as if nobody was helped.
+  const advice = event.id === 'build-done'
+    ? { ...values, name: (event.data?.helped ?? []).map((x) => x.name).join('·') || undefined } : values;
   out.advisor = '';
   for (let i = 0; i < lines.length && !out.advisor; i++) {
-    out.advisor = fill(lines[((event.day ?? 0) + i) % lines.length], values);
+    out.advisor = fill(lines[((event.day ?? 0) + i) % lines.length], advice);
   }
   return out;
 }

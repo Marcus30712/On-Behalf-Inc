@@ -12,7 +12,7 @@ import { NATIONS } from '../world/nations.js';
 import { CLIENTS } from '../world/clients.js';
 import { PLANET } from '../world/planet.js';
 import { UI_TEXT, fill } from './text.js';
-import { formatDate, formatMoney, formatPct, formatSec } from './format.js';
+import { formatDate, formatMoney, formatPct, formatSec, formatTarget, hasChannels, CHANNEL_TIPS } from './format.js';
 import { builder } from './dom.js';
 
 export const TABS = ['people', 'roster', 'tasks', 'research', 'hiring', 'clients', 'calendar'];
@@ -71,6 +71,11 @@ export function refusalText(reason, action, v) {
 
 const nationName = (id) => NATIONS.find((n) => n.id === id)?.name ?? '';
 const clientName = (v, id) => v.clients.find((c) => c.id === id)?.name ?? CLIENTS.find((c) => c.id === id)?.name ?? '';
+// v1.3: the channel of a client in the view ('phone' for older views).
+const channelOf = (v, id) => v.clients.find((c) => c.id === id)?.channel ?? 'phone';
+const channelLabel = (h, c) => h('span', { class: 'channel', title: CHANNEL_TIPS[c.channel] }, UI_TEXT.channel[c.channel ?? 'phone']);
+// A client's name in a list, with its channel once there is more than phone.
+const clientChoice = (v, c) => (hasChannels(v) ? `${c.name} · ${UI_TEXT.channel[c.channel ?? 'phone']}` : c.name);
 const roleText = (p) => [UI_TEXT.role[p.role] ?? p.role,
   p.probationDays > 0 ? fill(UI_TEXT.role.probation, { n: p.probationDays }) : null].filter(Boolean).join(' · ');
 
@@ -121,6 +126,9 @@ function activityText(v, p) {
   if (p.shiftToday === 'absent') return UI_TEXT.health.absent.name;
   if (p.health?.kind && p.health.kind !== 'well' && UI_TEXT.health[p.health.kind]) return UI_TEXT.health[p.health.kind].name;
   const shift = SHIFTS[p.shiftToday];
+  // An agent answering chat or email is not 전화 중: the channel says what they do.
+  const channel = p.activity === 'phone' && p.task?.kind === 'phone' ? channelOf(v, p.task.clientId) : 'phone';
+  if (channel !== 'phone') return UI_TEXT.channel[channel];
   if (p.activity === 'off' && shift && v.minute < shift.start) return UI_TEXT.shift[p.shiftToday].full;
   return UI_TEXT.activity[p.activity] ?? '';
 }
@@ -128,7 +136,9 @@ function activityText(v, p) {
 function taskText(v, task) {
   if (!task) return UI_TEXT.activity.idle;
   const name = UI_TEXT.task[task.kind]?.name ?? task.kind;
-  return task.kind === 'phone' ? `${name} · ${clientName(v, task.clientId)}` : name;
+  if (task.kind !== 'phone') return name;
+  const channel = channelOf(v, task.clientId);
+  return [name, clientName(v, task.clientId), channel !== 'phone' && UI_TEXT.channel[channel]].filter(Boolean).join(' · ');
 }
 
 function personCard({ h, v, rerender }) {
@@ -251,7 +261,7 @@ function tasksPanel({ h, v, run, rerender }) {
       },
     },
     (!current || ended) && h('option', { value: current, selected: true, disabled: true }, ended ? clientName(v, current) : T.pickClient),
-    active.map((c) => h('option', { value: c.id, selected: c.id === current }, c.name)));
+    active.map((c) => h('option', { value: c.id, selected: c.id === current }, clientChoice(v, c))));
     return h('tr', {},
       h('th', { scope: 'row' }, p.name),
       h('td', {}, roleText(p)),
@@ -377,16 +387,20 @@ function hiringPanel(ctx) {
 function clientsPanel({ h, v }) {
   const C = UI_TEXT.clients;
   const M = UI_TEXT.metrics;
+  const mixed = hasChannels(v);
   const rows = v.clients.map((c) => {
     const def = CLIENTS.find((d) => d.id === c.id);
     const t = c.today;
+    // Email has no wait or abandon: its on-time share and backlog stand in.
+    const email = c.channel === 'email';
     return h('tr', { 'data-client': c.id, class: c.active ? null : 'ended' },
-      h('th', { scope: 'row' }, c.name, h('br'), h('small', {}, fill(C.fee, { cost: def ? formatMoney(def.monthlyFee) : null }))),
+      h('th', { scope: 'row' }, c.name, mixed && [' ', channelLabel(h, c)],
+        h('br'), h('small', {}, fill(C.fee, { cost: def ? formatMoney(def.monthlyFee) : null }))),
       h('td', {}, nationName(def?.nation)),
-      h('td', {}, fill(M.targetFull, c.slTarget)),
-      h('td', {}, formatPct(t.serviceLevel)),
-      h('td', {}, formatSec(t.asaSec)),
-      h('td', {}, t.offered > 0 ? fill(M.abandonedUnit, { n: t.abandoned }) : M.none),
+      h('td', {}, formatTarget(c)),
+      h('td', {}, email ? `${M.onTime} ${formatPct(c.onTime ?? null)}` : formatPct(t.serviceLevel)),
+      h('td', {}, email ? `${M.backlog} ${fill(M.backlogUnit, { n: Math.round(c.backlog ?? 0) })}` : formatSec(t.asaSec)),
+      h('td', {}, !email && t.offered > 0 ? fill(M.abandonedUnit, { n: t.abandoned }) : M.none),
       h('td', {}, String(Math.round(c.satisfaction))),
       h('td', {}, t.agents.toFixed(1)),
       h('td', {}, c.active ? C.active : C.ended,

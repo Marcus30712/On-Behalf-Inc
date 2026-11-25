@@ -3,7 +3,7 @@
 import { HIRE_COST, SHIFTS } from '../sim/game.js';
 import { CLIENTS } from '../world/clients.js';
 import { UI_TEXT, fill } from './text.js';
-import { formatDate, formatTime, formatMoney, formatPct, formatSec } from './format.js';
+import { formatDate, formatTime, formatMoney, formatPct, formatSec, formatTarget, hasChannels, CHANNEL_TIPS } from './format.js';
 import { SPEEDS } from './clock.js';
 import { builder } from './dom.js';
 import { EVENTS } from '../world/events.js';
@@ -58,29 +58,58 @@ export function renderTopbar(root, v, clock) {
   );
 }
 
+// The client's channel (📞 전화, 💬 채팅, ✉️ 이메일), its tip on hover.
+const channelLabel = (h, c) => h('span', { class: 'channel', title: CHANNEL_TIPS[c.channel] }, UI_TEXT.channel[c.channel ?? 'phone']);
+
+// The chip's tooltip: the target and today's counts, or the nothing-yet note.
+// Mail counts can be fractional in the sim and are rounded.
+function chipTitle(c) {
+  const M = UI_TEXT.metrics;
+  const t = c.today;
+  const n = (x) => Math.round(x);
+  if (c.channel === 'email') {
+    return t.offered > 0 ? [formatTarget(c), `${M.received} ${fill(M.backlogUnit, { n: n(t.offered) })}`,
+      `${M.answered} ${fill(M.backlogUnit, { n: n(t.handled) })}`].join(' · ') : M.noneEmail;
+  }
+  if (c.channel === 'chat') {
+    return t.offered > 0 ? [formatTarget(c), `${M.chats} ${fill(M.abandonedUnit, { n: n(t.offered) })}`,
+      `${M.chatsHandled} ${fill(M.abandonedUnit, { n: n(t.handled) })}`].join(' · ') : M.noneChat;
+  }
+  return t.offered > 0 ? formatTarget(c) : M.noneTip;
+}
+
 export function renderMetrics(root, v) {
   const h = builder(root.ownerDocument);
   const M = UI_TEXT.metrics;
+  const mixed = hasChannels(v);
   const items = v.clients.filter((c) => c.active).map((c) => {
+    const label = mixed && channelLabel(h, c);
     if (weekendOnly(c.id) && v.date.weekday < SATURDAY) {
       return h('li', { class: 'metric weekend-only', 'data-client': c.id, title: M.weekendOnlyTip },
-        h('strong', {}, c.name), h('span', {}, M.weekendOnly));
+        h('strong', {}, c.name), label, h('span', {}, M.weekendOnly));
     }
     const t = c.today;
-    const below = t.serviceLevel !== null && t.serviceLevel * 100 < c.slTarget.pct;
+    const email = c.channel === 'email';
+    const share = email ? c.onTime ?? null : t.serviceLevel;
+    const below = share !== null && share * 100 < c.slTarget.pct;
     const abandoned = t.offered > 0 ? fill(M.abandonedUnit, { n: t.abandoned }) : M.none;
+    const target = h('small', { class: 'target' }, `(${M.target} ${c.slTarget.pct}%)`);
+    const numbers = email
+      ? [h('span', {}, `${M.backlog} ${fill(M.backlogUnit, { n: Math.round(c.backlog ?? 0) })}`),
+        h('span', {}, `${M.onTime} ${formatPct(share)} `, target)]
+      : [h('span', {}, `${M.serviceLevel} ${formatPct(t.serviceLevel)} `, target),
+        h('span', {}, `${M.asa} ${formatSec(t.asaSec)}`),
+        h('span', {}, `${M.abandoned} ${abandoned}`)];
     return h('li', {
       class: below ? 'metric below' : 'metric',
       'data-client': c.id,
-      title: t.offered > 0 ? fill(M.targetFull, c.slTarget) : M.noneTip,
+      title: chipTitle(c),
     },
     h('strong', {}, c.name),
-    h('span', {}, `${M.serviceLevel} ${formatPct(t.serviceLevel)} `,
-      h('small', { class: 'target' }, `(${M.target} ${c.slTarget.pct}%)`)),
-    h('span', {}, `${M.asa} ${formatSec(t.asaSec)}`),
-    h('span', {}, `${M.abandoned} ${abandoned}`),
+    label,
+    numbers,
     h('span', {}, `${M.satisfaction} ${Math.round(c.satisfaction)}`),
     below && h('span', { class: 'warn' }, M.belowTarget));
   });
-  root.replaceChildren(h('ul', { class: 'metrics-list' }, items));
+  root.replaceChildren(h('ul', { class: mixed ? 'metrics-list channels' : 'metrics-list' }, items));
 }

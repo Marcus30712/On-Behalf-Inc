@@ -10,6 +10,7 @@ import { endOfDay } from '../sim/day.js';
 import { onShift, isCenterOpen } from '../sim/schedule.js';
 import { createRng } from '../sim/rng.js';
 import { isCompanyWorkday } from '../sim/calendar.js';
+import { reputation } from '../sim/economy.js';
 import { CLIENTS } from '../world/clients.js';
 import { NATIONS } from '../world/nations.js';
 import { SCENARIOS, runScenario } from './fixtures/weekday-scenario.js';
@@ -362,6 +363,8 @@ test('company timers count Mon–Fri only', () => {
   assert.equal(s.hiring.workdays, 1);
   assert.equal(s.office.build.workdaysLeft, 14);
   s.hiring.waitDays = 5; // no candidates yet whatever the roll
+  // Grade A from here through Monday (seed 3), so a counted day adds one to the streak.
+  s.clients.forEach((c) => { c.satisfaction = 100; });
   s.offerStreak = 3;
   advance(s, 2 * 1440); // Saturday and Sunday: nothing counts
   assert.equal(s.day, MON);
@@ -371,5 +374,6 @@ test('company timers count Mon–Fri only', () => {
   advance(s, 1440); // Monday counts again
   assert.equal(s.hiring.workdays, 2);
   assert.equal(s.office.build.workdaysLeft, 13);
-  assert.notEqual(s.offerStreak, 3);
+  assert.equal(reputation(s), 'A');
+  assert.equal(s.offerStreak, 4, 'Monday adds one at grade A');
 });

@@ -91,7 +91,8 @@ export function renderMetrics(root, v) {
     // A client that does not open at all today (a weekday client at the weekend).
     if (c.openToday === false) {
       return h('li', { class: 'metric closed-today', 'data-client': c.id, title: M.closedTodayTip },
-        h('strong', {}, c.name), label, h('span', {}, M.closedToday));
+        h('strong', {}, c.name), label, h('span', {}, M.closedToday),
+        c.channel === 'email' && h('span', {}, `${M.backlog} ${fill(M.backlogUnit, { n: Math.round(c.backlog ?? 0) })}`));
     }
     const t = c.today;
     const email = c.channel === 'email';

@@ -104,6 +104,7 @@ export function renderPanel(root, v, tab, onAct, { onClose } = {}) {
 
 // A label after other text in a cell: a space, then the label (nothing without one).
 const withSpace = (label) => label && [' ', label];
+const withSep = (label) => label && [' · ', label];
 
 const title = (h, text, help) => [h('h2', {}, text), help && h('p', { class: 'help' }, help)];
 
@@ -173,7 +174,7 @@ function personCard({ h, v, rerender }) {
       h('dt', {}, C.nation), h('dd', {}, nationName(p.nation)),
       h('dt', {}, C.health), h('dd', {}, healthText(p)),
       h('dt', {}, C.shiftToday), h('dd', {}, shift),
-      h('dt', {}, C.task), h('dd', {}, taskText(v, p.task), withSpace(coveringLabel(h, v, p)))),
+      h('dt', {}, C.task), h('dd', {}, taskText(v, p.task), withSep(coveringLabel(h, v, p)))),
     h('h4', {}, C.traits), h('ul', { class: 'traits' }, traits),
     h('h4', {}, C.skills), h('ul', { class: 'skills' }, skills),
     h('h4', {}, C.condition), bar(h, 'fatigue', p.fatigue), bar(h, 'stress', p.stress), bar(h, 'morale', p.morale),
@@ -251,7 +252,9 @@ function tasksPanel({ h, v, run, rerender }) {
   const onPhone = v.people.filter((p) => p.task?.kind === 'phone');
   // Seats are for agents (sim/hiring.js); a lead or QA on the phone uses their own desk.
   const seated = onPhone.filter((p) => p.role === 'agent').length;
-  const byClient = active.map((c) => fill(T.byClient, { client: c.name, n: onPhone.filter((p) => p.task.clientId === c.id).length }));
+  // Now: people on the phone count under the client they answer, the others
+  // under their assigned client (view.people[].answering).
+  const byClient = active.map((c) => fill(T.byClient, { client: c.name, n: onPhone.filter((p) => p.answering === c.id).length }));
   const rows = v.people.map((p) => {
     const phone = p.task?.kind === 'phone' || pendingPhone.has(p.id);
     const kind = pendingPhone.has(p.id) ? 'phone' : p.task?.kind ?? '';

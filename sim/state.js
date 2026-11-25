@@ -132,7 +132,10 @@ export function deserialize(text) {
     // v1.4: a malformed backlog (or entry) resets to empty instead of throwing later.
     if (!hasShape(s.backlog, 'object')) s.backlog = {};
     for (const [id, e] of Object.entries(s.backlog)) {
-      if (!hasShape(e, 'object') || !Array.isArray(e.items)) s.backlog[id] = { openMin: 0, items: [], carry: 0 };
+      if (!hasShape(e, 'object') || !Array.isArray(e.items)) { s.backlog[id] = { openMin: 0, items: [], carry: 0 }; continue; }
+      e.items = e.items.filter((it) => hasShape(it, 'object') && Number.isFinite(it.at) && Number.isFinite(it.n));
+      if (!Number.isFinite(e.openMin)) e.openMin = 0;
+      if (!Number.isFinite(e.carry)) e.carry = 0;
     }
     // v1.1 saves: offered held bare ids; they count as offered on the day the save is loaded.
     s.offered = s.offered.map((o) => (typeof o === 'string' ? { id: o, day: s.day } : o));

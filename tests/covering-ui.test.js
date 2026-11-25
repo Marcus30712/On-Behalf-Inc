@@ -147,3 +147,47 @@ test('metrics: a weekday client shows 오늘 휴무 on Saturday and the 아직 f
   assert.ok(chip('gureum-travel').textContent.includes('서비스 레벨'), chip('gureum-travel').textContent);
   assert.equal(chip(BARAM).textContent, '바람개비 배달주말 운영', 'the weekend client keeps 주말 운영 on weekdays');
 });
+
+// v1.4 final fix I1: the per-client count in the tasks panel is "now": people on the
+// phone count under the client they answer, the others under their assignment.
+test('tasks header: on Saturday the weekend client count equals its 돕는 중 rows', () => {
+  const { s } = weekendGame(SAT, 600);
+  const v = view(s);
+  const r = makeRoot();
+  renderPanel(r, v, 'tasks', () => ({ ok: true }));
+  const rows = [...r.querySelectorAll('.covering')].filter((e) => e.textContent === '바람개비 배달 돕는 중').length;
+  assert.equal(rows, 2);
+  assert.equal(r.querySelector('p.seats').textContent, '상담사 좌석 8 / 8 · 구름다리 여행 응대 2명 · 물빛 통신 응대 4명 · 바람개비 배달 응대 2명');
+});
+
+test('view: answering is the assigned client for a phone person who is not on the phone now', () => {
+  const { s, crew } = weekendGame(SAT, 600);
+  const v = view(s);
+  const off = v.people.find((p) => p.task?.kind === 'phone' && p.activity !== 'phone');
+  assert.ok(off, 'someone assigned to phones is not on them');
+  assert.equal(off.answering, off.task.clientId);
+  assert.equal(v.people.find((p) => p.id === crew[0].id).answering, BARAM);
+});
+
+// v1.4 final fix M1
+test('metrics: an email client closed today keeps its backlog count beside 오늘 휴무', () => {
+  const { s } = weekendGame(SAT, 600, { emailOn: true });
+  s.backlog[BOOKS] = { openMin: 0, items: [{ at: 30, n: 13 }], carry: 0 };
+  const r = makeRoot();
+  renderMetrics(r, view(s));
+  const chip = r.querySelector(`[data-client="${BOOKS}"]`);
+  assert.ok(chip.classList.contains('closed-today'));
+  assert.ok(chip.textContent.includes('오늘 휴무'), chip.textContent);
+  assert.ok(chip.textContent.includes('밀린 메일 13통'), chip.textContent);
+});
+
+// v1.4 final fix M3
+test('person card: the assigned client and the covered client are separated by " · "', () => {
+  const { s, crew } = weekendGame(SAT, 600);
+  const v = view(s);
+  const c = makeRoot();
+  selectPerson(crew[0].id);
+  renderPanel(c, v, 'people', () => ({ ok: true }));
+  const text = [...c.querySelectorAll(`[data-card="${crew[0].id}"] dd`)].map((d) => d.textContent).find((t) => t.includes('돕는 중'));
+  assert.equal(text, '상담 응대 · 구름다리 여행 · 바람개비 배달 돕는 중');
+});

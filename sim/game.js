@@ -240,15 +240,19 @@ function holidaysAhead(state, p) {
   }));
 }
 
-function answeringNow(state, p) {
+// Only someone on the phone now answers another client; a person on a phone
+// assignment who is off, on break or away keeps their assigned client.
+function answeringNow(state, p, activityNow) {
   const a = state.assignment[p.id];
   if (a?.kind !== 'phone') return null;
+  if (activityNow !== 'phone') return a.clientId;
   return answeringClient(state, a, state.day, state.minute) ?? a.clientId;
 }
 
 function personView(state, p, weekday, groups) {
   const rosterShift = state.roster[p.id]?.[weekday] ?? 'off';
   const breakGroup = groups.get(p.id) ?? 0;
+  const personActivity = activity(state, p, rosterShift, breakGroup);
   return {
     id: p.id,
     name: p.name,
@@ -265,13 +269,14 @@ function personView(state, p, weekday, groups) {
     // Monday to Sunday; days missing from the roster (old saves) are 'off'.
     week: Array.from({ length: WEEKDAYS }, (_, w) => state.roster[p.id]?.[w] ?? 'off'),
     shiftToday: shiftToday(state, p, rosterShift),
-    activity: activity(state, p, rosterShift, breakGroup),
+    activity: personActivity,
     breakGroup,
     task: state.assignment[p.id] ?? null,
     // The client the person answers now: their own, or an open one they cover
-    // while theirs is closed (sim/interval.js); their own when none is open;
-    // null off phones.
-    answering: answeringNow(state, p),
+    // while theirs is closed (sim/interval.js), only while they are on the
+    // phone now; their assigned client when not on the phone now; null off
+    // phone assignments.
+    answering: answeringNow(state, p, personActivity),
     holidays: holidaysAhead(state, p),
   };
 }

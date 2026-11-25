@@ -9,6 +9,7 @@ import { stepInterval } from '../sim/interval.js';
 import { endOfDay } from '../sim/day.js';
 import { onShift, isCenterOpen } from '../sim/schedule.js';
 import { createRng } from '../sim/rng.js';
+import { isCompanyWorkday } from '../sim/calendar.js';
 import { CLIENTS } from '../world/clients.js';
 import { NATIONS } from '../world/nations.js';
 import { SCENARIOS, runScenario } from './fixtures/weekday-scenario.js';
@@ -165,14 +166,15 @@ test('day-end rules run on an open weekend day and plan spikes per client', () =
   const spikeDay = Object.fromEntries(s.spikes.map((x) => [x.clientId, x.day]));
   assert.equal(spikeDay[WEEKEND], SAT);
   assert.equal(spikeDay['gureum-travel'], MON);
-  // Saturday ends with a history entry and the hiring wait counts the day.
+  // Saturday ends with a history entry; the hiring wait, a company timer,
+  // counts Monday to Friday only (v1.4), so Saturday does not count.
   s.day = SAT;
   s.minute = 1410;
   const before = s.history.length;
   advance(s, 30);
   assert.equal(s.history.length, before + 1);
   assert.equal(s.history.at(-1).day, SAT);
-  assert.equal(s.hiring.workdays, 1);
+  assert.equal(s.hiring.workdays, 0);
 });
 
 test('an old save with 5-day rosters loads; the weekend reads as off', () => {
@@ -279,25 +281,30 @@ test('a weekend crew still assigned to a weekday client answers the weekend clie
 
 // Final review, Important 4: a client's churn countdown counts only the days
 // that client opens, so a weekend client's 20 workdays are 20 of its own days.
+// v1.4: the warning itself is given only on an open day, so on Saturday.
 test('a weekend client\'s churn countdown runs on its own days only', () => {
   const BARAM = 'baram-delivery';
   const s = createGame(3);
-  s.clients.push({ id: BARAM, satisfaction: 19, active: true });
+  s.clients.push({ id: BARAM, satisfaction: 10, active: true });
   const left = () => s.churn.find((e) => e.clientId === BARAM)?.workdaysLeft;
-  advance(s, 1440 - s.minute); // Monday ends: the warning is given
+  advance(s, 5 * 1440); // Monday-Friday: baram is closed, no warning yet
+  assert.equal(left(), undefined);
+  advance(s, 1440); // Saturday ends: the warning is given
   assert.equal(left(), 20);
-  advance(s, 4 * 1440); // Tuesday-Friday: baram is closed, nothing counts
-  assert.equal(left(), 20);
-  advance(s, 2 * 1440); // Saturday and Sunday count
-  assert.equal(left(), 18);
-  advance(s, 5 * 1440);
-  assert.equal(left(), 18);
+  advance(s, 1440); // Sunday counts
+  assert.equal(left(), 19);
+  advance(s, 5 * 1440); // Monday-Friday: nothing counts
+  assert.equal(left(), 19);
+  advance(s, 2 * 1440);
+  assert.equal(left(), 17);
 });
 
 test('a weekend client in a churn warning that is well staffed can recover', () => {
   const BARAM = 'baram-delivery';
   const s = createGame(3);
-  s.clients.push({ id: BARAM, satisfaction: 19, active: true });
+  // 15, not 19: the warning waits for Saturday (v1.4), and one well-staffed
+  // Saturday would lift 19 above the line before it is given.
+  s.clients.push({ id: BARAM, satisfaction: 15, active: true });
   // A weekend-only crew of four on baram (the other four agents keep the weekdays).
   const crew = s.people.filter((p) => p.role === 'agent').slice(0, 4);
   for (const p of crew) {
@@ -314,4 +321,55 @@ test('a weekend client in a churn warning that is well staffed can recover', () 
   assert.equal(baram.active, true, `baram kept (satisfaction ${baram.satisfaction.toFixed(1)})`);
   assert.ok(baram.satisfaction > 40, String(baram.satisfaction));
   assert.ok(!s.churn.some((e) => e.clientId === BARAM), 'the warning is over');
+});
+
+// v1.4 Task 5: a churn warning is given only on a day the client opens; a
+// weekday client that falls to the line at the weekend is warned on Monday.
+test('churn warning only on an open day', () => {
+  const BARAM = 'baram-delivery';
+  const s = createGame(3);
+  s.clients.push({ id: BARAM, satisfaction: 70, active: true });
+  advance(s, 5 * 1440); // Monday-Friday
+  assert.equal(s.day, SAT);
+  const weekday = s.clients[0];
+  weekday.satisfaction = 10;
+  const warnings = () => s.inbox.filter((e) => e.id === 'churn-warning' && e.clientId === weekday.id);
+  advance(s, 1440); // Saturday (the center opens for baram)
+  assert.equal(warnings().length, 0, 'no warning on Saturday');
+  assert.ok(!s.churn.some((e) => e.clientId === weekday.id));
+  advance(s, 1440); // Sunday
+  assert.equal(warnings().length, 0, 'no warning on Sunday');
+  advance(s, 1440); // Monday
+  assert.equal(warnings().length, 1, 'warned on Monday');
+  assert.equal(warnings()[0].day, MON);
+  assert.equal(s.churn.find((e) => e.clientId === weekday.id).workdaysLeft, 20);
+});
+
+// v1.4 Task 5: company timers (offer streak, hiring wait, build days) count
+// Monday to Friday only, even when a weekend client opens the center.
+test('company timers count Mon–Fri only', () => {
+  for (let d = 0; d < 14; d++) assert.equal(isCompanyWorkday(d), d % 7 < 5, `day ${d}`);
+  const BARAM = 'baram-delivery';
+  const s = createGame(3);
+  s.clients.push({ id: BARAM, satisfaction: 70, active: true });
+  s.cash = 500000;
+  s.office = { level: 1, build: null, level1Day: 0 }; // a free seat to hire into
+  advance(s, 4 * 1440); // Monday-Thursday
+  assert.deepEqual(act(s, { type: 'startHiring' }), { ok: true });
+  assert.deepEqual(act(s, { type: 'startExpansion' }), { ok: true });
+  advance(s, 1440); // Friday counts
+  assert.equal(s.day, SAT);
+  assert.equal(s.hiring.workdays, 1);
+  assert.equal(s.office.build.workdaysLeft, 14);
+  s.hiring.waitDays = 5; // no candidates yet whatever the roll
+  s.offerStreak = 3;
+  advance(s, 2 * 1440); // Saturday and Sunday: nothing counts
+  assert.equal(s.day, MON);
+  assert.equal(s.offerStreak, 3, 'offer streak');
+  assert.equal(s.hiring.workdays, 1, 'hiring wait');
+  assert.equal(s.office.build.workdaysLeft, 14, 'build days');
+  advance(s, 1440); // Monday counts again
+  assert.equal(s.hiring.workdays, 2);
+  assert.equal(s.office.build.workdaysLeft, 13);
+  assert.notEqual(s.offerStreak, 3);
 });

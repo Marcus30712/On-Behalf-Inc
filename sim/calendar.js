@@ -25,6 +25,12 @@ export function isWorkday(day) {
   return dateOf(day).weekday < 5;
 }
 
+// v1.4: company timers (offer streak, hiring wait, build days) count Monday to
+// Friday only, even on a weekend day the center opens for a weekend client.
+export function isCompanyWorkday(day) {
+  return dateOf(day).weekday < 5;
+}
+
 // Start day of the holiday's occurrence for 1-based year y.
 function startOfYear(rule, y) {
   if (rule.kind === 'fixed') {

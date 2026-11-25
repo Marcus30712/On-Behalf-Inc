@@ -1,11 +1,12 @@
 // Money, reputation, churn, client offers, milestones and game over. Pure rules, no DOM.
 //
-// state.cash; state.churn = [{ clientId, workdaysLeft }]; state.offerStreak (workdays at A+);
+// state.cash; state.churn = [{ clientId, workdaysLeft }]; state.offerStreak (Mon-Fri workdays at A+, v1.4);
 // state.offered = [{ id, day }] (the day a client was last offered; v1.1 saves held bare ids, state.js converts); state.milestones = [eventId]; state.gameOver = { kind, day } | undefined;
 // state.rankSStreak (workdays in a row at S; missing in v1.0 saves, read as 0).
-// The game calls dailyEconomy after endOfDay on workdays, and monthEnd after
+// The game calls dailyEconomy after endOfDay on days the center opens, and monthEnd after
 // endOfDay on the last day of each 30-day month.
-import { DAYS_PER_MONTH, dateOf } from './calendar.js';
+import { DAYS_PER_MONTH } from './calendar.js';
+import { isOpenDay } from './interval.js';
 import { pushEvent } from './events.js';
 import { CLIENTS } from '../world/clients.js';
 import { rentOf, officeLevel } from './office.js';
@@ -114,7 +115,7 @@ export function monthEnd(state) {
     income += def.monthlyFee * (metDays / days.length < FEE_CUT_BELOW ? FEE_CUT : 1);
   }
   const salaries = state.people.reduce((s, p) => s + (SALARY[p.role] ?? 0), 0);
-  state.cash = (state.cash ?? 0) + income - salaries - rentOf(state);
+  state.cash = (state.cash ?? 0) + income - salaries - rentOf(state, monthStart, state.day);
   state.reputationPenalty = (state.reputationPenalty ?? 0) / 2;
   if (state.cash < 0) endGame(state, 'game-over-cash');
 }
@@ -152,7 +153,7 @@ function runChurn(state) {
     // Only the client's own open days count (a weekend client's Sat/Sun); weekday
     // clients open every weekday, so for them nothing changes.
     const def = CLIENTS.find((d) => d.id === client.id);
-    if (def && !def.hours.days.includes(dateOf(state.day).weekday)) {
+    if (def && !isOpenDay(def, state.day)) {
       kept.push(entry);
       continue;
     }
@@ -163,6 +164,10 @@ function runChurn(state) {
   state.churn = kept;
   for (const c of activeClients(state)) {
     if (c.satisfaction > CHURN_AT || state.churn.some((e) => e.clientId === c.id)) continue;
+    // v1.4: warned only on a day the client opens (a weekday client that falls
+    // to the line at the weekend is warned on Monday, its countdown starting then).
+    const def = CLIENTS.find((d) => d.id === c.id);
+    if (def && !isOpenDay(def, state.day)) continue;
     state.churn.push({ clientId: c.id, workdaysLeft: CHURN_WORKDAYS });
     pushEvent(state, { id: 'churn-warning', clientId: c.id, data: { days: CHURN_WORKDAYS } });
   }
@@ -199,8 +204,10 @@ function runOffers(state, grade) {
   pushEvent(state, { id: 'client-offer', clientId: def.id, deadlineDay: state.day + OFFER_DEADLINE_DAYS, ...(Object.keys(data).length ? { data } : {}) });
 }
 
-// Once per workday, after endOfDay.
-export function dailyEconomy(state) {
+// Once per day the center opened, after endOfDay. companyDay (v1.4): the game
+// passes false on Saturday and Sunday, when the offer streak, a company timer
+// that counts Monday to Friday only, neither moves nor raises an offer.
+export function dailyEconomy(state, { companyDay = true } = {}) {
   if (state.gameOver) return;
   runChurn(state);
   if (state.gameOver) return;
@@ -208,7 +215,7 @@ export function dailyEconomy(state) {
   state.rankSStreak = grade === 'S' ? (state.rankSStreak ?? 0) + 1 : 0;
   if (state.rankSStreak >= RANK_S_WORKDAYS) milestone(state, 'milestone-rank-s');
   checkBigClient(state);
-  runOffers(state, grade);
+  if (companyDay) runOffers(state, grade);
 }
 
 // 'client-offer' accept: the client joins (or returns) at satisfaction 70.

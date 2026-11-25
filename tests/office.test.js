@@ -2,9 +2,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createGame, act, view, advance, load, save } from '../sim/game.js';
 import { serialize, deserialize } from '../sim/state.js';
-import { OFFICE_LEVELS, seatsOf, startExpansion, advanceExpansion } from '../sim/office.js';
+import { OFFICE_LEVELS, seatsOf, startExpansion, advanceExpansion, rentOf } from '../sim/office.js';
 import { startHiring } from '../sim/hiring.js';
 import { monthEnd } from '../sim/economy.js';
+import { eventText } from '../ui/text.js';
 
 test('office levels table', () => {
   assert.deepEqual(OFFICE_LEVELS, [
@@ -108,4 +109,71 @@ test('v1.1 save without office loads at level 0', () => {
   assert.equal(seatsOf(loaded), 8);
   assert.deepEqual(view(loaded).office.build, null);
   assert.deepEqual(act(loaded, { type: 'startExpansion' }), { ok: false, reason: 'no-cash' });
+});
+
+// v1.4 Task 5: the month an expansion finishes pays rent from its completion
+// day (inclusive) only; months are 30 days. Old saves without a completion day pay in full.
+test('rent prorated from completion day', () => {
+  const s = createGame(1);
+  // Level 1 finished on day 20 of month 0 (days 0-29): days 20-29 are 10 days.
+  s.office = { level: 1, build: null, level1Day: 20 };
+  assert.equal(rentOf(s, 0, 29), 3000 * 10 / 30);
+  assert.equal(rentOf(s, 30, 59), 3000, 'full rent the next month');
+  assert.equal(rentOf(s), 3000, 'without a month, the full monthly rent');
+  // Through monthEnd: against the same game at level 0.
+  const a = createGame(1); const b = createGame(1);
+  a.cash = b.cash = 200000;
+  a.day = b.day = 29;
+  b.office = { level: 1, build: null, level1Day: 20 };
+  monthEnd(a); monthEnd(b);
+  assert.equal(a.cash - b.cash, 1000);
+  a.day = b.day = 59;
+  const gap = a.cash - b.cash;
+  monthEnd(a); monthEnd(b);
+  assert.equal(a.cash - b.cash - gap, 3000);
+  // Level 2 finishing on day 45 (days 45-59: 15 days); level 1 is paid in full.
+  s.office = { level: 2, build: null, level1Day: 20, level2Day: 45 };
+  assert.equal(rentOf(s, 30, 59), 3000 + 2000 * 15 / 30);
+  assert.equal(rentOf(s, 60, 89), 5000);
+  // A v1.3 save at level 2 has no level2Day: full rent.
+  s.office = { level: 2, build: null, level1Day: 20 };
+  assert.equal(rentOf(s, 30, 59), 5000);
+});
+
+test('finishing expansion 2 records its day', () => {
+  const s = createGame(2);
+  s.cash = 200000;
+  s.office = { level: 1, build: null, level1Day: 9 };
+  startExpansion(s);
+  for (let i = 0; i < 15; i++) { s.day = 60 + i; advanceExpansion(s); }
+  assert.equal(s.office.level, 2);
+  assert.equal(s.office.level2Day, 74);
+  assert.equal(s.office.level1Day, 9);
+  const loaded = deserialize(serialize(s));
+  assert.equal(loaded.office.level2Day, 74);
+});
+
+test('expansion-start event is pushed with {stage, days} and renders without {', () => {
+  const s = createGame(1);
+  s.cash = 100000;
+  startExpansion(s);
+  const started = s.inbox.filter((e) => e.id === 'expansion-start');
+  assert.equal(started.length, 1);
+  assert.deepEqual(started[0].data, { stage: 1, days: 10 });
+  const t = eventText(started[0]);
+  assert.equal(t.title, '창가 구역 공사 시작');
+  assert.equal(t.text, '창가 구역 공사를 시작했어요. 10근무일 뒤에 완공돼요. 그동안 조금 시끄러울 거예요.');
+  assert.ok(t.advisor.length > 0);
+  assert.ok(!/[{}]/.test(t.title + t.text + t.advisor), t.title + t.text + t.advisor);
+  // A refused start pushes nothing.
+  assert.deepEqual(startExpansion(s), { ok: false, reason: 'building' });
+  assert.equal(s.inbox.filter((e) => e.id === 'expansion-start').length, 1);
+  // Stage 2 names the inner area.
+  const s2 = createGame(1);
+  s2.cash = 100000;
+  s2.office = { level: 1, build: null, level1Day: 0 };
+  startExpansion(s2);
+  const t2 = eventText(s2.inbox.find((e) => e.id === 'expansion-start'));
+  assert.equal(t2.title, '안쪽 구역 공사 시작');
+  assert.equal(t2.text, '안쪽 구역 공사를 시작했어요. 15근무일 뒤에 완공돼요. 그동안 조금 시끄러울 거예요.');
 });

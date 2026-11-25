@@ -3,7 +3,7 @@
 // storage is passed in (localStorage in the browser).
 import { newGame, serialize, deserialize } from './state.js';
 import { restoreRng } from './rng.js';
-import { dateOf, upcomingHolidays, holidaysOn, DAYS_PER_MONTH } from './calendar.js';
+import { dateOf, upcomingHolidays, holidaysOn, DAYS_PER_MONTH, isCompanyWorkday } from './calendar.js';
 import { stepInterval, breakGroups, answeringClient, channelOf } from './interval.js';
 import { endOfDay } from './day.js';
 import { backlogCount } from './backlog.js';
@@ -42,7 +42,8 @@ export function createGame(seed) {
 // add up. Returns the minutes actually simulated (a multiple of 30).
 // Each step: interval, research, build. At midnight: end of day; on a day the
 // center opened (Mon-Fri, and Sat-Sun with an active weekend client) then the
-// daily economy, hiring and expansion; on a month's last day the month end.
+// daily economy, and on Mon-Fri hiring and expansion (v1.4: company timers
+// skip the weekend); on a month's last day the month end.
 // Nothing moves once the game is over; a game that ends at midnight stays on
 // its last day (minute 1440).
 export function advance(state, minutes) {
@@ -62,9 +63,13 @@ export function advance(state, minutes) {
     const opened = isCenterOpen(state, state.day);
     endOfDay(state, rng);
     if (opened) {
-      dailyEconomy(state);
-      advanceHiring(state, rng);
-      advanceExpansion(state);
+      // v1.4: company timers (offer streak, hiring wait, build days) count Mon-Fri only.
+      const companyDay = isCompanyWorkday(state.day);
+      dailyEconomy(state, { companyDay });
+      if (companyDay) {
+        advanceHiring(state, rng);
+        advanceExpansion(state);
+      }
     }
     if (state.day % DAYS_PER_MONTH === DAYS_PER_MONTH - 1) monthEnd(state);
     if (state.gameOver) { done++; break; }

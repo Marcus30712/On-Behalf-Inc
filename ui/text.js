@@ -559,7 +559,7 @@ function valuesFor(event) {
   const values = {
     name: d.name,
     client: d.client ?? clientDef?.name,
-    stage: UI_TEXT.office.stages[d.level]?.name,
+    stage: UI_TEXT.office.stages[d.stage ?? d.level]?.name, // expansion-start: stage; expansion-done: level
     seats: d.seats,
     holiday: holiday?.name ?? d.holiday,
     nation: nation?.name ?? d.nation,

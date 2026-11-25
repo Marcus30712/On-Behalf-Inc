@@ -212,8 +212,10 @@ export function dailyEconomy(state, { companyDay = true } = {}) {
   runChurn(state);
   if (state.gameOver) return;
   const grade = reputation(state);
-  state.rankSStreak = grade === 'S' ? (state.rankSStreak ?? 0) + 1 : 0;
-  if (state.rankSStreak >= RANK_S_WORKDAYS) milestone(state, 'milestone-rank-s');
+  if (companyDay) { // v1.4: the S streak is a company timer, Mon-Fri only
+    state.rankSStreak = grade === 'S' ? (state.rankSStreak ?? 0) + 1 : 0;
+    if (state.rankSStreak >= RANK_S_WORKDAYS) milestone(state, 'milestone-rank-s');
+  }
   checkBigClient(state);
   if (companyDay) runOffers(state, grade);
 }

@@ -67,10 +67,13 @@ export function advanceExpansion(state) {
 export function officeView(state) {
   const level = officeLevel(state);
   const next = OFFICE_LEVELS[level + 1];
+  const day = state.day ?? 0;
+  const monthStart = day - (day % DAYS_PER_MONTH);
   return {
     level,
     seats: seatsOf(state),
     build: state.office?.build ?? null,
+    rentThisMonth: rentOf(state, monthStart, monthStart + DAYS_PER_MONTH - 1),
     next: next ? { cost: next.cost, buildWorkdays: next.buildWorkdays, rent: next.rent } : null,
   };
 }

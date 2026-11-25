@@ -3,7 +3,7 @@
 import { HIRE_COST, SHIFTS } from '../sim/game.js';
 import { CLIENTS } from '../world/clients.js';
 import { UI_TEXT, fill } from './text.js';
-import { formatDate, formatTime, formatMoney, formatPct, formatSec, formatTarget, hasChannels, CHANNEL_TIPS } from './format.js';
+import { formatDate, formatTime, formatMoney, formatPct, formatSec, formatTarget, hasChannels, channelLabel } from './format.js';
 import { SPEEDS } from './clock.js';
 import { builder } from './dom.js';
 import { EVENTS } from '../world/events.js';
@@ -58,9 +58,6 @@ export function renderTopbar(root, v, clock) {
       `${UI_TEXT.topbar.reputation} ⭐ ${UI_TEXT.grade[v.reputation]?.grade ?? v.reputation}`),
   );
 }
-
-// The client's channel (📞 전화, 💬 채팅, ✉️ 이메일), its tip on hover.
-const channelLabel = (h, c) => h('span', { class: 'channel', title: CHANNEL_TIPS[c.channel] }, UI_TEXT.channel[c.channel ?? 'phone']);
 
 // The chip's tooltip: the target and today's counts, or the nothing-yet note.
 // Mail counts can be fractional in the sim and are rounded.

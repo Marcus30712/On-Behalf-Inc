@@ -205,3 +205,13 @@ test('end of day pushes the backlog warning', () => {
   endOfDay(s, createRng(3));
   assert.ok(s.inbox.some((e) => e.id === 'backlog-warning' && e.clientId === BOOKS.id));
 });
+
+// v1.4 Task 6: float noise in on-time / offered must never push the email SL over 100%.
+test('email serviceLevel never exceeds 1 with float noise', () => {
+  const entry = {
+    openMin: 300, carry: 0,
+    items: [{ at: 176, n: 0.4 }, { at: 240, n: 0.1 }, { at: 300, n: 0.1 }],
+  };
+  const r = stepBacklog(entry, { arrivals: 0, agents: 3, ahtMin: 3.4, targetMin: 100 });
+  assert.ok(r.serviceLevel <= 1, `serviceLevel ${r.serviceLevel}`);
+});

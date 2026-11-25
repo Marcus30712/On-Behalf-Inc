@@ -71,7 +71,7 @@ export function stepBacklog(entry, {
     offered,
     handled: processed,
     abandoned: 0,
-    serviceLevel: offered > 0 ? onTime / offered : 1,
+    serviceLevel: offered > 0 ? Math.min(1, onTime / offered) : 1,
     asaSec: 0,
     occupancy: agents > 0 && ahtMin > 0 ? Math.min(1, (processed * ahtMin) / (agents * INTERVAL)) : 0,
     overdue,

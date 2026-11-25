@@ -279,3 +279,18 @@ test('the expansion question closes when another tab renders', () => {
   renderPanel(root, view(state), 'hiring', onAct);
   assert.equal(root.querySelector('[role="alertdialog"]'), null);
 });
+
+// v1.4 Task 6: the screen shows what monthEnd will charge, not a full month the sim will not.
+test('rent this month is prorated in the month an expansion finishes', () => {
+  const state = createGame(11);
+  state.day = 25; // month 0 is days 0-29
+  state.office = { level: 1, build: null, level1Day: 20 }; // days 20-29: 10 of 30
+  assert.equal(view(state).office.rentThisMonth, 1000);
+  const root = makeRoot();
+  renderPanel(root, view(state), 'hiring', (a) => act(state, a));
+  assert.ok(root.textContent.includes('이번 달 임대료 💰 1,000'));
+  assert.ok(!root.textContent.includes('이번 달 임대료 💰 3,000'));
+  state.day = 40; // the next month: full rent
+  renderPanel(root, view(state), 'hiring', (a) => act(state, a));
+  assert.ok(root.textContent.includes('이번 달 임대료 💰 3,000'));
+});

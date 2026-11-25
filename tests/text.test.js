@@ -250,7 +250,7 @@ test('expansion events fill stage, days and seats', () => {
 });
 
 test('v1.2 UI_TEXT keys exist', () => {
-  for (const k of ['shift.weekend.short', 'shift.weekend.full', 'tasks.seatsOf', 'refuse.office.no-cash', 'refuse.building', 'refuse.max-level', 'topbar.weekendOpen', 'metrics.weekendOnly', 'metrics.weekendOnlyTip', 'roster.colDaysWeekend', 'roster.weekendHelp', 'roster.weekendCount', 'roster.sixDays', 'roster.sixDaysShort', 'office.title', 'office.confirmText', 'office.stages.2.name']) {
+  for (const k of ['shift.weekend.short', 'shift.weekend.full', 'tasks.seatsOf', 'refuse.office.no-cash', 'refuse.building', 'refuse.max-level', 'topbar.weekendOpen', 'metrics.weekendOnly', 'metrics.weekendOnlyTip', 'roster.weekendHelp', 'roster.weekendCount', 'roster.sixDays', 'roster.sixDaysShort', 'office.title', 'office.confirmText', 'office.stages.2.name']) {
     assert.equal(typeof k.split('.').reduce((o, p) => o?.[p], UI_TEXT), 'string', k);
   }
   assert.equal(UI_TEXT.shift.weekend.full, '주말 조');

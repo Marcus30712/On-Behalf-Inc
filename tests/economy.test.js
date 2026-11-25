@@ -295,3 +295,19 @@ test('milestones fire once', () => {
   assert.equal(events(s, 'milestone-big-client').length, 1);
   assert.equal(events(s, 'milestone-rank-s').length, 1);
 });
+
+// v1.4 Task 6: rankSStreak is a company timer (Mon-Fri only), like the offer streak.
+test('the S streak does not advance on a weekend client day', () => {
+  const s = makeState();
+  s.history = monthHistory({ [GUREUM]: 22, [MULBIT]: 22 });
+  s.clients.forEach((c) => { c.satisfaction = 80; }); // 92 -> S
+  for (let i = 0; i < 29; i++) dailyEconomy(s);
+  assert.equal(s.rankSStreak, 29);
+  dailyEconomy(s, { companyDay: false }); // Saturday
+  dailyEconomy(s, { companyDay: false }); // Sunday
+  assert.equal(s.rankSStreak, 29, 'weekend days neither count nor reset');
+  assert.equal(events(s, 'milestone-rank-s').length, 0);
+  dailyEconomy(s);
+  assert.equal(s.rankSStreak, 30);
+  assert.equal(events(s, 'milestone-rank-s').length, 1);
+});

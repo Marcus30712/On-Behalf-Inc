@@ -247,8 +247,6 @@ export const UI_TEXT = {
     "title": "근무표",
     "help": "칸을 누를 때마다 이른 조 → 늦은 조 → 휴무 순서로 바뀌어요.",
     "colName": "이름",
-    "colDays": "월 · 화 · 수 · 목 · 금",
-    "colDaysWeekend": "월 · 화 · 수 · 목 · 금 · 토 · 일",
     "weekendHelp": "토·일 칸은 주말 조 → 휴무 순서로 바뀌어요. 주말 조는 09:00~18:00예요.",
     "weekendCount": "주말 조 {n}명",
     "sixDays": "주 6일 이상 일해요. 피로가 빨리 쌓여요.",
@@ -548,6 +546,9 @@ export function fill(template, values = {}) {
     .replace(/(\S)이\(가\)/gu, (_, ch, off, s) => ch + (jongseong(lastChar(s.slice(0, off + 1))) === 0 ? '가' : '이'));
 }
 
+// The names of the people a desk build helped, joined with a middle dot.
+const helpedNames = (helped) => helped.map((x) => x.name).join('·');
+
 // The values an event's templates can use, read from its data (see sim/*.js pushEvent calls).
 function valuesFor(event) {
   const d = event.data ?? {};
@@ -577,7 +578,7 @@ function valuesFor(event) {
     values.fee = fill(UI_TEXT.common.money, { cost: formatMoney(clientDef.monthlyFee) });
   }
   if (event.id === 'build-done') {
-    values.name = helped.map((h) => h.name).join('·') || d.featured?.name || undefined;
+    values.name = helpedNames(helped) || d.featured?.name || undefined;
     const left = [...new Set(helped.map((h) => h.daysLeft).filter((n) => n !== undefined))];
     values.days = left.length > 0 ? left.join('·') : undefined;
   }
@@ -627,7 +628,7 @@ export function eventText(event) {
   // A desk's featured person only stars in its done text: nobody's face
   // changed, so the advisor speaks as if nobody was helped.
   const advice = event.id === 'build-done'
-    ? { ...values, name: (event.data?.helped ?? []).map((x) => x.name).join('·') || undefined } : values;
+    ? { ...values, name: helpedNames(event.data?.helped ?? []) || undefined } : values;
   out.advisor = '';
   for (let i = 0; i < lines.length && !out.advisor; i++) {
     out.advisor = fill(lines[((event.day ?? 0) + i) % lines.length], advice);

@@ -26,3 +26,6 @@ export const formatTarget = (c) => (c.channel === 'email'
 export const hasChannels = (v) => v.clients.some((c) => (c.channel ?? 'phone') !== 'phone');
 
 export const CHANNEL_TIPS = { chat: UI_TEXT.channel.chatTip, email: UI_TEXT.channel.emailTip };
+
+// The client's channel (📞 전화, 💬 채팅, ✉️ 이메일), its tip on hover.
+export const channelLabel = (h, c) => h('span', { class: 'channel', title: CHANNEL_TIPS[c.channel] }, UI_TEXT.channel[c.channel ?? 'phone']);

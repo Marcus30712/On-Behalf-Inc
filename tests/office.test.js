@@ -90,7 +90,7 @@ test('hiring uses seatsOf: full at 8, free after expansion', () => {
 test('act startExpansion and view.office', () => {
   const s = createGame(1);
   assert.deepEqual(view(s).office, {
-    level: 0, seats: 8, build: null, next: { cost: 30000, buildWorkdays: 10, rent: 3000 },
+    level: 0, seats: 8, build: null, rentThisMonth: 0, next: { cost: 30000, buildWorkdays: 10, rent: 3000 },
   });
   s.cash = 40000;
   assert.deepEqual(act(s, { type: 'startExpansion' }), { ok: true });

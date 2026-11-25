@@ -129,6 +129,11 @@ export function deserialize(text) {
     for (const c of s.clients) if (!c.active && c.lostDay === undefined) c.lostDay = s.day;
     s.office ??= { level: 0, build: null };
     s.backlog ??= {}; // v1.2 saves and saves made while no mail had arrived
+    // v1.4: a malformed backlog (or entry) resets to empty instead of throwing later.
+    if (!hasShape(s.backlog, 'object')) s.backlog = {};
+    for (const [id, e] of Object.entries(s.backlog)) {
+      if (!hasShape(e, 'object') || !Array.isArray(e.items)) s.backlog[id] = { openMin: 0, items: [], carry: 0 };
+    }
     // v1.1 saves: offered held bare ids; they count as offered on the day the save is loaded.
     s.offered = s.offered.map((o) => (typeof o === 'string' ? { id: o, day: s.day } : o));
     return s;

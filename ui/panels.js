@@ -12,7 +12,7 @@ import { NATIONS } from '../world/nations.js';
 import { CLIENTS } from '../world/clients.js';
 import { PLANET } from '../world/planet.js';
 import { UI_TEXT, fill } from './text.js';
-import { formatDate, formatMoney, formatPct, formatSec, formatTarget, hasChannels, CHANNEL_TIPS } from './format.js';
+import { formatDate, formatMoney, formatPct, formatSec, formatTarget, hasChannels, channelLabel } from './format.js';
 import { builder } from './dom.js';
 
 export const TABS = ['people', 'roster', 'tasks', 'research', 'hiring', 'clients', 'calendar'];
@@ -73,7 +73,6 @@ const nationName = (id) => NATIONS.find((n) => n.id === id)?.name ?? '';
 const clientName = (v, id) => v.clients.find((c) => c.id === id)?.name ?? CLIENTS.find((c) => c.id === id)?.name ?? '';
 // v1.3: the channel of a client in the view ('phone' for older views).
 const channelOf = (v, id) => v.clients.find((c) => c.id === id)?.channel ?? 'phone';
-const channelLabel = (h, c) => h('span', { class: 'channel', title: CHANNEL_TIPS[c.channel] }, UI_TEXT.channel[c.channel ?? 'phone']);
 // A client's name in a list, with its channel once there is more than phone.
 const clientChoice = (v, c) => (hasChannels(v) ? `${c.name} · ${UI_TEXT.channel[c.channel ?? 'phone']}` : c.name);
 const roleText = (p) => [UI_TEXT.role[p.role] ?? p.role,
@@ -372,8 +371,7 @@ function officeStage(ctx, level) {
 function officeSection(ctx) {
   const { h, v } = ctx;
   const O = UI_TEXT.office;
-  let rent = 0;
-  for (let i = 1; i <= v.office.level; i++) rent += OFFICE_LEVELS[i].rent;
+  const rent = v.office.rentThisMonth ?? 0;
   const stages = OFFICE_LEVELS.slice(1).map((_, i) => officeStage(ctx, i + 1));
   return h('section', { class: 'office' },
     h('h3', {}, O.title),

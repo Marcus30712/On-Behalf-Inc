@@ -138,3 +138,13 @@ test('v1.2 save loads without backlog', async () => {
   assert.equal(advance(s, 1440), 1440);
   assert.equal(s.day, 1);
 });
+
+// v1.4 Task 6: a malformed backlog entry in a save resets to an empty entry; it never throws.
+test('deserialize resets a malformed backlog entry', () => {
+  const raw = JSON.parse(serialize(newGame(2)));
+  raw.backlog = { x: 5, y: { openMin: 30, items: 'no' }, z: null, w: [], ok: { openMin: 60, items: [{ at: 30, n: 2 }], carry: 0.5 } };
+  const s = deserialize(JSON.stringify(raw));
+  assert.ok(s);
+  for (const k of ['x', 'y', 'z', 'w']) assert.deepEqual(s.backlog[k], { openMin: 0, items: [], carry: 0 }, k);
+  assert.deepEqual(s.backlog.ok, { openMin: 60, items: [{ at: 30, n: 2 }], carry: 0.5 });
+});

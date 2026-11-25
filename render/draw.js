@@ -220,10 +220,12 @@ export function createDrawer(makeCanvas = defaultMakeCanvas) {
   // A chat or email agent at work: a small 💬 or ✉️ by the head in place of
   // the headset (no art of its own).
   function channelMark(ctx, mark, px, py) {
+    ctx.save();
     ctx.font = `${MARK_PX}px sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(mark, px + 14 * U, py + 2 * U);
+    ctx.restore();
   }
 
   // clients: view.clients; an agent answering a chat or email client gets

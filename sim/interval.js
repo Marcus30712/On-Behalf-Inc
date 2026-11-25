@@ -5,8 +5,10 @@
 // A person with no assignment does no work: on shift or not, they rest.
 // v1.3: the kind stays 'phone' for every channel (save compatibility); the
 // client's `channel` (channelOf) decides how the work runs: phone as before,
-// chat with concurrent seats, email through the backlog (not the queue loop).
+// chat with concurrent seats, email through the backlog (sim/backlog.js) in
+// the same staff/satisfaction/occupancy path as a queue.
 import { intervalQueue } from './queue.js';
+import { stepBacklog, newBacklog } from './backlog.js';
 import { dateOf, holidaysOn } from './calendar.js';
 import { ahtFor, applyWork, applyRest, traitMul, traitAdd } from './people.js';
 import { onShift, workShare, rosteredDays } from './schedule.js';
@@ -215,20 +217,28 @@ export function stepInterval(state, rng) {
       if (share > 0) staff.get(clientId).push({ person: p, share });
     }
 
-    // Queues, in state.clients order (one rng draw each).
+    // Queues (phone, chat) and backlogs (email), in state.clients order (one rng draw each).
     const results = new Map();
     for (const { state: cs, def } of open) {
-      // Email is not a queue: its backlog is run elsewhere (Task 3).
-      if (channelOf(def) === 'email') continue;
+      const channel = channelOf(def);
       const list = staff.get(def.id);
-      const seats = channelOf(def) === 'chat' ? CHAT_CONCURRENCY * CHAT_EFFICIENCY : 1;
+      const seats = channel === 'chat' ? CHAT_CONCURRENCY * CHAT_EFFICIENCY : 1;
       const agents = list.reduce((s, x) => s + x.share * staffAvail(x.person, day), 0) * seats;
       const ahtMin = staffAverage(list, (p) => ahtFor(p, def), def.ahtMin);
       let calls = callsFor(def, day, minute, rng, state);
       if ((state.spikes ?? []).some((s) => s.clientId === def.id && s.day === day)) calls *= SPIKE_MUL;
-      const q = intervalQueue({
-        calls, ahtMin, agents, targetSec: def.slTarget.sec, patienceSec: def.patienceSec,
-      });
+      let q;
+      if (channel === 'email') {
+        state.backlog ??= {};
+        const entry = (state.backlog[def.id] ??= newBacklog());
+        q = stepBacklog(entry, {
+          arrivals: calls, agents, ahtMin, targetMin: def.slTarget.openMinutes,
+        });
+      } else {
+        q = intervalQueue({
+          calls, ahtMin, agents, targetSec: def.slTarget.sec, patienceSec: def.patienceSec,
+        });
+      }
       results.set(def.id, q);
 
       const target = def.slTarget.pct / 100;
@@ -254,6 +264,7 @@ export function stepInterval(state, rng) {
         offered: q.offered, handled: q.handled, abandoned: q.abandoned,
         serviceLevel: q.serviceLevel, asaSec: q.asaSec, agents,
       };
+      if (channel === 'email') report.clients[def.id].overdue = q.overdue;
     }
 
     // People: work, or rest for the time not worked.
@@ -265,8 +276,8 @@ export function stepInterval(state, rng) {
       let occupancy = NON_PHONE_OCCUPANCY;
       if (a?.kind === 'phone') {
         const clientId = answering.get(p.id);
-        if (results.has(clientId)) occupancy = results.get(clientId).occupancy;
-        else if (!openIds.has(clientId)) share = 0;
+        if (openIds.has(clientId)) occupancy = results.get(clientId).occupancy;
+        else share = 0;
       } else if (a && PROGRESS_KINDS.includes(a.kind) && share > 0) {
         let gain = share;
         if (a.kind === 'research') gain *= researchSkillMul(p);

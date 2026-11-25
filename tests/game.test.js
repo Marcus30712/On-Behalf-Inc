@@ -288,6 +288,28 @@ test('view is a plain snapshot for the screen', () => {
   assert.equal(view(s).date.weekdayLabel, '목');
 });
 
+test('view gives each client its channel, and an email client its backlog and on-time share', () => {
+  const s = createGame(21);
+  const v0 = view(s);
+  for (const c of v0.clients) {
+    assert.equal(c.channel, 'phone', c.id);
+    assert.equal('backlog' in c, false, c.id);
+  }
+  s.clients.push({ id: 'solbang-books', satisfaction: 70, active: true });
+  let books = view(s).clients.find((c) => c.id === 'solbang-books');
+  assert.equal(books.channel, 'email');
+  assert.equal(books.backlog, 0);
+  assert.equal(books.onTime, null);
+  assert.deepEqual(books.slTarget, { pct: 90, openMinutes: 720 });
+  s.backlog['solbang-books'] = { openMin: 90, items: [{ at: 60, n: 3 }, { at: 90, n: 4 }], carry: 0 };
+  s.today.clients['solbang-books'] = {
+    offered: 8, handled: 6, abandoned: 0, intervals: 3, intervalsMet: 2, agentShareSum: 3, inTarget: 6, waitSec: 0,
+  };
+  books = view(s).clients.find((c) => c.id === 'solbang-books');
+  assert.equal(books.backlog, 7);
+  assert.equal(books.onTime, 6 / 8);
+});
+
 test('view shows no service level before the first interval', () => {
   const v = view(createGame(1));
   assert.equal(v.clients[0].today.serviceLevel, null);

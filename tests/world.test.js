@@ -81,9 +81,9 @@ test('two starting clients and three offers; weekday hours Mon-Fri 09:00-21:00 e
   }
 });
 
-const USED_EVENTS = ['sick', 'burnout', 'no-show', 'argument', 'resign-notice', 'holiday-leave', 'friday-off', 'call-spike', 'client-offer', 'churn-warning', 'research-done', 'build-done', 'candidate', 'game-over-cash', 'game-over-clients', 'milestone-big-client', 'milestone-rank-s', 'expansion-done'];
-// Ids the sim pushes whose copy is not approved yet (none: v1.2 copy is in).
-const PENDING_COPY = [];
+const USED_EVENTS = ['sick', 'burnout', 'no-show', 'argument', 'resign-notice', 'holiday-leave', 'friday-off', 'call-spike', 'client-offer', 'churn-warning', 'research-done', 'build-done', 'candidate', 'game-over-cash', 'game-over-clients', 'milestone-big-client', 'milestone-rank-s', 'expansion-done', 'backlog-warning'];
+// Ids the sim pushes whose copy is not in world/ yet (v1.3 Task 4 adds it).
+const PENDING_COPY = ['backlog-warning'];
 
 test('every event used by the sim has text, and advice', () => {
   for (const id of USED_EVENTS.filter((e) => !PENDING_COPY.includes(e))) {

@@ -79,12 +79,19 @@ export function newGame(seed) {
     rankSStreak: 0, // v1.1; not in REQUIRED, so v1.0 saves still load (read as 0)
     offered: [],
     office: { level: 0, build: null }, // v1.2; not in REQUIRED, so v1.1 saves load at level 0
+    // v1.3 email backlogs by client id (sim/backlog.js); not in REQUIRED, so v1.2
+    // saves load with none. Left out of the save while empty (weekday golden).
+    backlog: {},
     reputationPenalty: 0,
     lastEndedDay: null,
   };
 }
 
 export function serialize(state) {
+  if (state.backlog && Object.keys(state.backlog).length === 0) {
+    const { backlog, ...rest } = state;
+    return JSON.stringify(rest);
+  }
   return JSON.stringify(state);
 }
 
@@ -121,6 +128,7 @@ export function deserialize(text) {
     // mark fades from the day the save is loaded.
     for (const c of s.clients) if (!c.active && c.lostDay === undefined) c.lostDay = s.day;
     s.office ??= { level: 0, build: null };
+    s.backlog ??= {}; // v1.2 saves and saves made while no mail had arrived
     // v1.1 saves: offered held bare ids; they count as offered on the day the save is loaded.
     s.offered = s.offered.map((o) => (typeof o === 'string' ? { id: o, day: s.day } : o));
     return s;

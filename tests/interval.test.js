@@ -300,12 +300,15 @@ test('chat uses concurrent seats', () => {
   assert.equal(r.serviceLevel, expected.serviceLevel);
 });
 
-test('email clients are skipped by the queue loop', () => {
+test('email clients run their backlog, not the call queue', () => {
   const books = CLIENTS.find((c) => c.id === 'solbang-books');
   const s = makeState({ minute: H(10), phoneA: 0 });
   s.clients = [{ id: books.id, satisfaction: 70, active: true }];
   s.assignment.a0 = { kind: 'phone', clientId: books.id };
   const report = stepInterval(s, flat);
-  assert.equal(report.clients[books.id], undefined);
-  assert.equal(s.clients[0].satisfaction, 70);
+  const r = report.clients[books.id];
+  assert.equal(r.abandoned, 0);
+  assert.equal(r.asaSec, 0);
+  assert.equal(r.overdue, 0);
+  assert.equal(s.backlog[books.id].openMin, 30);
 });

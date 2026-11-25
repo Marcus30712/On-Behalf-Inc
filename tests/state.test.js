@@ -117,3 +117,24 @@ test('nobody in a new game shares a name with a colleague', () => {
     assert.equal(new Set(names).size, names.length, `seed ${seed}: ${names.join(', ')}`);
   }
 });
+
+test('a new game has an empty backlog, left out of the save until a mail arrives', () => {
+  const s = newGame(4);
+  assert.deepEqual(s.backlog, {});
+  // Weekday phone-only saves stay byte-identical to v1.2 (weekday golden).
+  assert.equal('backlog' in JSON.parse(serialize(s)), false);
+  s.backlog['solbang-books'] = { openMin: 30, items: [{ at: 30, n: 2 }], carry: 0 };
+  assert.deepEqual(deserialize(serialize(s)).backlog, s.backlog);
+});
+
+test('v1.2 save loads without backlog', async () => {
+  const { advance } = await import('../sim/game.js');
+  // A v1.2-shaped save: no backlog field, clients without a channel.
+  const old = JSON.parse(serialize(newGame(6)));
+  delete old.backlog;
+  const s = deserialize(JSON.stringify(old));
+  assert.ok(s);
+  assert.deepEqual(s.backlog, {});
+  assert.equal(advance(s, 1440), 1440);
+  assert.equal(s.day, 1);
+});

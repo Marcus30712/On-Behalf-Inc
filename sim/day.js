@@ -8,6 +8,7 @@
 import { dateOf, holidaysOn } from './calendar.js';
 import { moraleOf, overnight, wearDay, WEAR } from './people.js';
 import { pushEvent, expireEvents } from './events.js';
+import { backlogWarnings } from './backlog.js';
 import { SHIFTS, isCenterOpen, shiftRunsOn } from './schedule.js';
 import { CLIENTS } from '../world/clients.js';
 import { NATIONS } from '../world/nations.js';
@@ -259,6 +260,7 @@ export function endOfDay(state, rng) {
     }
     grow(state);
     planSpikes(state, rng);
+    backlogWarnings(state);
     (state.history ??= []).push({ day: state.day, clients: structuredClone(state.today?.clients ?? {}) });
   }
   state.today = { clients: {} };

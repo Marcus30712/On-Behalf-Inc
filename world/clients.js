@@ -22,7 +22,7 @@ export const CLIENTS = [
   },
   // v1.2: offered after expansion 1 (requiresOfficeLevel 1). callsPerDay set by the v1.2
   // balance task (balance record, v1.2 section): they arrive once calls have grown
-  // (x1.14, up to x1.28 after expansion 1), so 70 grows to about 90; four agents
+  // (x1.14, up to x1.21 after expansion 1), so 70 grows to about 85; four agents
   // mostly meet the weekday client and a crew of three the weekend one, whose
   // 09:00-18:00 window sees about 80% of the daily CURVE.
   {

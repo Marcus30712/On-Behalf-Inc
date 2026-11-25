@@ -43,12 +43,16 @@ const SIX_DAYS = 6;
 export const CALL_GROWTH = { perQuarter: 0.07, quarters: 2 };
 const QUARTER_DAYS = 90;
 
-// v1.2: when expansion 1 is finished (state.office.level1Day) growth resumes:
-// the same number of quarters again, counted from that day, on top of the first
-// ones (total at most 2 x quarters steps, x1.28). Without it, as in v1.1.
+// v1.2: when expansion 1 is finished (state.office.level1Day) growth resumes
+// for `RESUMED_GROWTH.quarters` more quarter(s), counted from that day, on top
+// of the first ones (at most x1.21). Without it, as in v1.1. One quarter, not
+// two, so an office that keeps service can still pay for its expansion
+// (balance record, v1.2 section).
+export const RESUMED_GROWTH = { quarters: 1 };
 function growthMul(day, level1Day) {
-  const quarters = (from) => Math.min(CALL_GROWTH.quarters, Math.max(0, Math.floor((day - from) / QUARTER_DAYS)));
-  const steps = quarters(0) + (level1Day === undefined ? 0 : quarters(level1Day));
+  const quarters = (from, max) => Math.min(max, Math.max(0, Math.floor((day - from) / QUARTER_DAYS)));
+  const steps = quarters(0, CALL_GROWTH.quarters)
+    + (level1Day === undefined ? 0 : quarters(level1Day, RESUMED_GROWTH.quarters));
   return 1 + CALL_GROWTH.perQuarter * steps;
 }
 

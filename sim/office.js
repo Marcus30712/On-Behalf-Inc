@@ -9,7 +9,8 @@ import { pushEvent } from './events.js';
 export const OFFICE_LEVELS = [
   { seats: 8, cost: 0, buildWorkdays: 0, rent: 0 },
   { seats: 12, cost: 30000, buildWorkdays: 10, rent: 3000 },
-  { seats: 16, cost: 45000, buildWorkdays: 15, rent: 4500 },
+  // Level 2: cost and rent set by the v1.2 balance task (balance record, v1.2 section).
+  { seats: 16, cost: 36000, buildWorkdays: 15, rent: 2000 },
 ];
 
 export const officeLevel = (state) => Math.min(Math.max(state.office?.level ?? 0, 0), OFFICE_LEVELS.length - 1);

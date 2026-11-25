@@ -10,8 +10,14 @@ test('office levels table', () => {
   assert.deepEqual(OFFICE_LEVELS, [
     { seats: 8, cost: 0, buildWorkdays: 0, rent: 0 },
     { seats: 12, cost: 30000, buildWorkdays: 10, rent: 3000 },
-    { seats: 16, cost: 45000, buildWorkdays: 15, rent: 4500 },
+    { seats: 16, cost: 36000, buildWorkdays: 15, rent: 2000 },
   ]);
+});
+
+// The approved copy says "공사 비용 💰 {cost}은": right only when the amount, read
+// in Korean, ends in a final consonant. Whole thousands end in 천 or 만 (ㄴ).
+test('expansion costs are whole thousands, so "{cost}은" reads right', () => {
+  for (const { cost } of OFFICE_LEVELS.slice(1)) assert.equal(cost % 1000, 0, String(cost));
 });
 
 test('seatsOf defaults to 8 without office, follows level', () => {
@@ -65,7 +71,7 @@ test('rent is paid at month end for completed levels only', () => {
   a.cash = b.cash = 50000;
   b.office = { level: 2, build: null };
   monthEnd(a); monthEnd(b);
-  assert.equal(a.cash - b.cash, 7500);
+  assert.equal(a.cash - b.cash, OFFICE_LEVELS[1].rent + OFFICE_LEVELS[2].rent);
   const c = createGame(1); c.cash = 50000;
   c.office = { level: 0, build: { level: 1, workdaysLeft: 3 } };
   monthEnd(c);

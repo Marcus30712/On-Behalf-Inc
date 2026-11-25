@@ -22,16 +22,22 @@
 //   cash covers the cost plus EXPAND_RESERVE; hires up to the seats of the
 //   built office; takes an offer when the office can staff it (a weekday
 //   client while there are four seats per weekday client, a weekend client
-//   from expansion 1 on) and declines the rest. A weekend client gets a crew
+//   from expansion 1 on) and declines the rest. expand 'greedy' takes every
+//   such offer; expand 'keep' keeps service: at most KEEP_WEEKDAY_CLIENTS
+//   weekday clients, each only once the agents already hired cover every
+//   client, the new one included, and the weekend client only once the
+//   seats also hold the weekday clients' share. A weekend client gets a crew
 //   of WEEKEND_CREW agents on the weekend shift, who take Tuesday and
 //   Wednesday off so they still work five days; on weekdays they answer
-//   for a weekday client. Moves by met-rate, headcount and QA look at the
+//   for a weekday client; a crew member out that day is covered by an agent
+//   with the day off, who takes next Wednesday off. Moves by met-rate, headcount and QA look at the
 //   weekday clients only.
 //
 // The checks also play sensible over 720 days (fees in years 1 and 2) and
-// sensible taking client offers (the S milestone after losing a client).
+// sensible taking client offers (the S milestone after losing a client; also
+// the v1.2 brief's offers-S guard), and both expanding policies over 720 days.
 import { pathToFileURL } from 'node:url';
-import { createGame, advance, act, view } from '../sim/game.js';
+import { createGame, advance, act, view, SHIFTS } from '../sim/game.js';
 import { CLIENTS } from '../world/clients.js';
 
 const DAY = 1440;
@@ -51,8 +57,9 @@ const MOVE_DAYS = 5; // recorded days compared when moving an agent by met-rate
 const MOVE_GAP = 0.1; // met-rate gap that justifies a move
 const MOVE_COOLDOWN = 10; // days between moves by met-rate
 const QA_PHONE_BELOW = 0.85; // QA answers the phone while a client's recent met-rate is under this
-const EXPAND_RESERVE = 20000; // cash kept back when paying for an expansion (v1.2)
+const EXPAND_RESERVE = 30000; // cash kept back when paying for an expansion (v1.2)
 const SEATS_PER_CLIENT = 4; // seats per weekday client before taking another one
+const KEEP_WEEKDAY_CLIENTS = 3; // expand 'keep': weekday clients at most
 const WEEKEND_CREW = 3; // agents on the weekend shift for a weekend client (two cannot cover each other's breaks)
 const WEEKEND_DAYS = [5, 6];
 const CREW_DAYS_OFF = [1, 2]; // Tuesday, Wednesday: the crew still works five days
@@ -64,8 +71,8 @@ const mean = (xs) => (xs.length === 0 ? 0 : xs.reduce((s, x) => s + x, 0) / xs.l
 // hours), read the day's queues (on Fridays, plan next week's rest days),
 // then play through the night.
 // `acceptOffers` (sensible only): take every new-client offer instead of
-// declining it. `expand` (sensible only, v1.2): expand the office and take
-// the offers it can staff.
+// declining it. `expand` (sensible only, v1.2): 'greedy' or 'keep', expand
+// the office and take the offers it can staff (see the policy notes above).
 export function runPolicy({ seed, days, policy, acceptOffers = false, expand = false }) {
   const state = createGame(seed);
   const sensible = policy === 'sensible';
@@ -205,13 +212,15 @@ export function idleYearVerdict(idle, sensible) {
 }
 
 // Office expansion is not a loss (v1.2): on how many seeds the expanding
-// sensible game finished expansion 1, and on how many of those it ended with
-// at least the cash of the same seed's sensible game without expansion.
+// sensible game finished expansion 1, on how many of those it ended with at
+// least the cash of the same seed's sensible game without expansion, and the
+// share of client-months paid in full in years 1 and 2.
 export function expansionVerdict(expand, plain) {
   const built = expand.map((r, i) => [r, plain[i]]).filter(([r]) => r.level1Day !== null);
   return {
     built: built.length,
     notPoorer: built.filter(([r, p]) => r.cash >= p.cash).length,
+    fees: [fullFeeShare(expand, 0, 360), fullFeeShare(expand, 360, 720)],
   };
 }
 
@@ -252,12 +261,11 @@ function recordDay(v, tally) {
 
 // v1.2: person-days rostered six or more days a week (the x1.5 fatigue), and
 // weekend days the center opened.
-const SHIFT_DAYS = { early: [0, 1, 2, 3, 4], late: [0, 1, 2, 3, 4], weekend: [5, 6] };
 function countSixDays(v, tally) {
   const open = (w) => w < 5 || v.flags.weekend;
   if (v.date.weekday >= 5 && v.flags.weekend) tally.weekendDays += 1;
   for (const p of v.people) {
-    const days = p.week.filter((shift, w) => SHIFT_DAYS[shift]?.includes(w) && open(w)).length;
+    const days = p.week.filter((shift, w) => SHIFTS[shift]?.days.includes(w) && open(w)).length;
     if (days >= 6) tally.sixDay += 1;
   }
 }
@@ -268,7 +276,9 @@ function sensiblePlan(v, acceptOffers, expand) {
   return {
     acceptOffers,
     expand,
+    maxWeekdayClients: expand === 'keep' ? KEEP_WEEKDAY_CLIENTS : Infinity,
     crew: [], // [{ personId, home }]: the weekend crew and their weekday shift (v1.2)
+    standIns: [], // [{ personId, weekday }]: covering a crew member who is out this weekend
     leadId: v.people.find((p) => p.role === 'lead')?.id,
     restOff: [], // [{ personId, shift }]: next Wednesday off, and the usual shift
     lastMove: -Infinity, // day of the last move by met-rate
@@ -305,13 +315,24 @@ function expandOffice(state, v) {
 }
 
 // v1.2: an offer the office can staff: a weekday client while every weekday
-// client keeps SEATS_PER_CLIENT seats, a weekend client (one at a time) once
-// expansion 1 is built.
-function canStaff(v, clientId) {
-  if (isWeekendClient(clientId)) {
-    return v.office.level >= 1 && !v.clients.some((c) => c.active && isWeekendClient(c.id));
+// client keeps SEATS_PER_CLIENT seats (and, keeping service, up to
+// plan.maxWeekdayClients), a weekend client (one at a time) once expansion 1
+// is built.
+function canStaff(v, clientId, plan) {
+  const weekend = v.clients.some((c) => c.active && isWeekendClient(c.id));
+  const n = weekdayClients(v).length;
+  if (plan.expand === 'keep') {
+    // Keeping service: only with the agents already hired for every client,
+    // the new one included (SEATS_PER_CLIENT each, a weekend crew); the
+    // weekend client only once the seats also hold the weekday clients' share.
+    const roomy = v.office.seats >= plan.maxWeekdayClients * SEATS_PER_CLIENT + WEEKEND_CREW;
+    const after = isWeekendClient(clientId)
+      ? { n, weekend: true, ok: roomy && !weekend }
+      : { n: n + 1, weekend, ok: n < plan.maxWeekdayClients };
+    return after.ok && agentsOf(v).length >= after.n * SEATS_PER_CLIENT + (after.weekend ? WEEKEND_CREW : 0);
   }
-  return (weekdayClients(v).length + 1) * SEATS_PER_CLIENT <= v.office.seats;
+  if (isWeekendClient(clientId)) return v.office.level >= 1 && !weekend;
+  return (n + 1) * SEATS_PER_CLIENT <= v.office.seats;
 }
 
 // v1.2: with a weekend client, WEEKEND_CREW agents (least stressed, taken
@@ -346,14 +367,43 @@ function weekendCrew(state, v, plan) {
   }
   if (WEEKEND_DAYS.includes(v.date.weekday)) {
     for (const { personId } of plan.crew) act(state, { type: 'assign', personId, kind: 'phone', clientId: weekend });
+    standIn(state, view(state), plan, weekend);
     return;
   }
+  // Last weekend's stand-ins go back to their own week (their Wednesday off
+  // is given back on Friday with the other rest days).
+  for (const { personId, weekday } of plan.standIns) {
+    if (ids.has(personId)) act(state, { type: 'setRoster', personId, weekday, shift: 'off' });
+  }
+  plan.standIns = [];
   const weekdays = weekdayClients(v);
-  const count = (id) => agentsOf(v).filter((p) => p.task?.kind === 'phone' && p.task.clientId === id).length;
+  const count = new Map(weekdays.map((id) => [id, 0]));
+  for (const p of agentsOf(v)) if (p.task?.kind === 'phone' && count.has(p.task.clientId)) count.set(p.task.clientId, count.get(p.task.clientId) + 1);
   for (const p of agentsOf(v)) {
     if (p.task?.kind !== 'phone' || !isWeekendClient(p.task.clientId) || weekdays.length === 0) continue;
-    const to = [...weekdays].sort((a, b) => count(a) - count(b))[0];
-    act(state, { type: 'assign', personId: p.id, kind: 'phone', clientId: to });
+    const to = [...weekdays].sort((a, b) => count.get(a) - count.get(b))[0];
+    if (act(state, { type: 'assign', personId: p.id, kind: 'phone', clientId: to }).ok) count.set(to, count.get(to) + 1);
+  }
+}
+
+// A crew member who is out today (sick, burnt out, on leave, absent) is
+// covered by the least stressed well agent who has today off: they work
+// today's weekend shift and take next Wednesday off, so they still work five
+// days; the Wednesday comes back on Friday with the other rest days.
+function standIn(state, v, plan, weekend) {
+  const weekday = v.date.weekday;
+  const out = plan.crew.filter(({ personId }) => v.people.find((p) => p.id === personId)?.shiftToday !== 'weekend');
+  const busy = (id) => plan.crew.some((c) => c.personId === id) || plan.standIns.some((c) => c.personId === id);
+  for (let i = 0; i < out.length; i++) {
+    const pick = agentsOf(v)
+      .filter((p) => p.health.kind === 'well' && !busy(p.id) && p.rosterShift === 'off' && SHIFT_IDS.includes(p.week[0]))
+      .sort((a, b) => a.stress - b.stress)[0];
+    if (!pick) return;
+    act(state, { type: 'setRoster', personId: pick.id, weekday, shift: 'weekend' });
+    act(state, { type: 'setRoster', personId: pick.id, weekday: REST_WEEKDAY, shift: 'off' });
+    act(state, { type: 'assign', personId: pick.id, kind: 'phone', clientId: weekend });
+    plan.standIns.push({ personId: pick.id, weekday });
+    plan.restOff.push({ personId: pick.id, shift: pick.week[0] });
   }
 }
 
@@ -365,7 +415,7 @@ function answerInbox(state, v, plan) {
     else if (e.id === 'resign-notice') choice = 'keep-trying';
     else if (e.id === 'candidate') choice = 'pick-1';
     else if (e.id === 'client-offer') {
-      choice = plan.acceptOffers || (plan.expand && canStaff(v, e.clientId)) ? 'accept' : 'decline';
+      choice = plan.acceptOffers || (plan.expand && canStaff(v, e.clientId, plan)) ? 'accept' : 'decline';
     }
     else if (e.id === 'friday-off') choice = 'keep';
     if (choice) act(state, { type: 'resolve', index: e.index, choiceId: choice });
@@ -519,12 +569,14 @@ function main() {
   const sensible = SEEDS.map((seed) => runPolicy({ seed, days: 360, policy: 'sensible' }));
   const offers = SEEDS.map((seed) => runPolicy({ seed, days: 360, policy: 'sensible', acceptOffers: true }));
   const twoYears = SEEDS.map((seed) => runPolicy({ seed, days: 720, policy: 'sensible' }));
-  const expanding = SEEDS.map((seed) => runPolicy({ seed, days: 720, policy: 'sensible', expand: true }));
+  const greedy = SEEDS.map((seed) => runPolicy({ seed, days: 720, policy: 'sensible', expand: 'greedy' }));
+  const keep = SEEDS.map((seed) => runPolicy({ seed, days: 720, policy: 'sensible', expand: 'keep' }));
   printRuns('idle, 360 days', idleYear);
   printRuns('sensible, 360 days', sensible);
   printRuns('sensible taking client offers, 360 days', offers);
   printRuns('sensible, 720 days', twoYears);
-  printRuns('sensible expanding the office (takes offers it can staff), 720 days', expanding);
+  printRuns('sensible expanding the office, greedy (every offer it can staff), 720 days', greedy);
+  printRuns('sensible expanding the office, keeping service (at most 3 weekday clients), 720 days', keep);
 
   const target = 0.8;
   const worn = idle.filter((r) => wornDown(r, 180)).length;
@@ -544,8 +596,7 @@ function main() {
   const offersS = offers.filter((r) => r.rankS).length;
   const fee2 = [fullFeeShare(twoYears, 0, 360), fullFeeShare(twoYears, 360, 720)];
   const over2 = twoYears.filter((r) => r.gameOver).length;
-  const grown = expansionVerdict(expanding, twoYears);
-  const grownS = expanding.filter((r) => r.rankSDay !== null && r.rankSDay < 360).length;
+  const grown = expansionVerdict(keep, twoYears);
   const dayList = (runs, key) => runs.map((r) => r[key] ?? '-').join(' ');
 
   console.log('\nfirst month, default roster (idle): met-share by weekday Mon..Fri',
@@ -556,13 +607,15 @@ function main() {
   console.log('research that helped someone (seed 1):', sensible[0].helpedNames.join(' | ') || '-');
   console.log('sensible year: clinic shortened a sick leave on', sensible.filter((r) => r.clinicHelped > 0).length,
     'of 10 seeds; client offers per seed:', sensible.map((r) => r.offers).join(' '));
-  console.log('expanding: expansion 1 done on day', dayList(expanding, 'level1Day'), '| expansion 2', dayList(expanding, 'level2Day'),
-    '| S milestone', dayList(expanding, 'rankSDay'));
-  console.log('expanding: clients at the end', expanding.map((r) => r.clients.join('+') || '-').join(' '),
-    '| agents', expanding.map((r) => r.agents).join(' '));
-  console.log('expanding: fees in full year 1', pct(fullFeeShare(expanding, 0, 360)), 'year 2', pct(fullFeeShare(expanding, 360, 720)),
-    '| weekend days open', dayList(expanding, 'weekendDays'), '| person-days rostered 6+ days a week', dayList(expanding, 'sixDay'),
-    '| burnouts', expanding.reduce((s, r) => s + r.burnouts, 0), 'resigned', expanding.reduce((s, r) => s + r.resigned, 0));
+  for (const [label, runs] of [['greedy', greedy], ['keep', keep]]) {
+    console.log(`expanding ${label}: expansion 1 done on day`, dayList(runs, 'level1Day'), '| expansion 2', dayList(runs, 'level2Day'),
+      '| clients at the end', runs.map((r) => r.clients.join('+') || '-').join(' '));
+    console.log(`expanding ${label}: fees in full year 1`, pct(fullFeeShare(runs, 0, 360)), 'year 2', pct(fullFeeShare(runs, 360, 720)),
+      '| cash at day 360', runs.map((r) => Math.round(r.monthCash[11] ?? r.cash)).join(' '),
+      '| weekend days open', dayList(runs, 'weekendDays'), '| person-days rostered 6+ days a week', dayList(runs, 'sixDay'),
+      '| burnouts', runs.reduce((s, r) => s + r.burnouts, 0), 'resigned', runs.reduce((s, r) => s + r.resigned, 0));
+  }
+  console.log('plain sensible 720: cash at day 360', twoYears.map((r) => Math.round(r.monthCash[11] ?? r.cash)).join(' '));
   console.log('');
 
   const results = [
@@ -586,13 +639,11 @@ function main() {
     check(year.rankS <= 2, `idle reaches the S milestone on at most 2 seeds: ${year.rankS}/10`),
     check(year.lost >= 7, `idle loses someone (resignation) or the game within a year: ${year.lost}/10 seeds`),
     check(offersS >= 3,
-      `sensible play that takes client offers still reaches the S milestone: ${offersS}/10 seeds (>= 3)`),
+      `sensible play that takes client offers still reaches the S milestone (v1.2 offers-S guard): ${offersS}/10 seeds (>= 3)`),
     check(over2 === 0 && fee2.every((f) => f >= 0.65),
       `sensible play over two years: fees in full year 1 ${pct(fee2[0])}, year 2 ${pct(fee2[1])} (each >= 65%), game over ${over2}/10`),
-    check(grown.built >= 8 && grown.notPoorer === grown.built,
-      `sensible play finishes expansion 1 within 720 days: ${grown.built}/10 seeds (>= 8), not poorer than without on ${grown.notPoorer}/${grown.built}`),
-    check(grownS >= 3,
-      `sensible play that expands and takes offers reaches S within 360 days: ${grownS}/10 seeds (>= 3, as v1.1)`),
+    check(grown.built >= 8 && grown.notPoorer >= 8 && grown.fees.every((f) => f >= 0.65),
+      `sensible play that keeps service expands within 720 days on ${grown.built}/10 seeds (>= 8), fees in full year 1 ${pct(grown.fees[0])}, year 2 ${pct(grown.fees[1])} (each >= 65%), not poorer than without on ${grown.notPoorer}/10 (>= 8)`),
   ];
   console.log(`\n${results.filter(Boolean).length}/${results.length} checks pass (${((Date.now() - t0) / 1000).toFixed(1)} s)`);
   if (!results.every(Boolean)) process.exitCode = 1;

@@ -162,23 +162,23 @@ test('without an expansion, call growth is the v1.1 curve (two quarters, then ho
   assert.equal(factor(undefined, 2000), factor(s, 2000), 'state is optional');
 });
 
-test('after expansion 1, growth resumes for two quarters from its completion day, capped at x1.28', () => {
+test('after expansion 1, growth resumes for one quarter from its completion day, capped at x1.21', () => {
   const s = createGame(1);
   s.office = { level: 1, build: null, level1Day: 200 };
   // Day 200 + 90 = 290: the first extra step. Before that, the v1.1 curve (x1.14).
   assert.ok(Math.abs(factor(s, 285) - (1 + 2 * step)) < 1e-9, 'first quarter after completion: nothing extra yet');
   assert.ok(Math.abs(factor(s, 295) - (1 + 3 * step)) < 1e-9, 'one quarter after completion');
   assert.ok(Math.abs(factor(s, 375) - (1 + 3 * step)) < 1e-9);
-  assert.ok(Math.abs(factor(s, 385) - (1 + 4 * step)) < 1e-9, 'two quarters after completion');
-  assert.ok(Math.abs(factor(s, 5000) - 1.28) < 1e-9, 'capped');
+  assert.ok(Math.abs(factor(s, 385) - (1 + 3 * step)) < 1e-9, 'two quarters after completion: no more');
+  assert.ok(Math.abs(factor(s, 5000) - 1.21) < 1e-9, 'capped');
 });
 
-test('an early expansion stacks on the first quarters, still capped at x1.28', () => {
+test('an early expansion stacks on the first quarters, still capped at x1.21', () => {
   const s = createGame(1);
   s.office = { level: 1, build: null, level1Day: 10 };
   assert.ok(Math.abs(factor(s, 105) - (1 + 2 * step)) < 1e-9, 'day 105: base quarter 1 + extra quarter 1');
-  assert.ok(Math.abs(factor(s, 195) - (1 + 4 * step)) < 1e-9);
-  assert.ok(Math.abs(factor(s, 3000) - 1.28) < 1e-9);
+  assert.ok(Math.abs(factor(s, 195) - (1 + 3 * step)) < 1e-9);
+  assert.ok(Math.abs(factor(s, 3000) - 1.21) < 1e-9);
 });
 
 test('level 0 without level1Day is v1.1 growth', () => {

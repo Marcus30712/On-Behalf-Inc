@@ -176,3 +176,12 @@ test('no show-old button when 3 or fewer events are resolved', () => {
   renderInbox(root, view(state), onAct);
   assert.equal(root.querySelector('button.show-old'), null);
 });
+
+test('v1.7 lead-candidate shows skills with 2 decimals; a lead\'s notice has its own advice', () => {
+  const out = eventText({ id: 'lead-candidate', day: 0, data: { cand1: '가을', cand2: '나무', c1: 6, c2: 7.5, p1: 4.7, p2: 3 } });
+  assert.equal(out.text, '가을 씨(코칭 6.00 · 스케줄링 4.70)와 나무 씨(코칭 7.50 · 스케줄링 3.00)가 팀장 자리에 지원했어요. 누구와 함께할까요?');
+  const lead = eventText({ id: 'resign-notice', day: 0, data: { name: '가을', days: 10, leaveDay: 12, lead: true } });
+  assert.equal(lead.advisor, '팀장이 떠나면 휴식표를 짤 사람이 없어요. 채용 탭에서 새 팀장을 미리 찾아 둬요.');
+  const agent = eventText({ id: 'resign-notice', day: 0, data: { name: '가을', days: 10, leaveDay: 12 } });
+  assert.notEqual(agent.advisor, lead.advisor);
+});

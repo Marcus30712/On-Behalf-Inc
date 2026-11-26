@@ -23,6 +23,7 @@ const DEFAULT_CHOICE = {
   'friday-off': 'keep',
   'resign-notice': 'let-go',
   candidate: 'hold',
+  'lead-candidate': 'hold',
   'client-offer': 'decline',
 };
 
@@ -74,6 +75,12 @@ export const EVENT_EFFECTS = {
     },
   },
   candidate: {
+    'pick-1'(state) { hireCandidate(state, 0); },
+    'pick-2'(state) { hireCandidate(state, 1); },
+    hold(state) { dropHiring(state); },
+  },
+  // v1.7: the same choices for a lead search.
+  'lead-candidate': {
     'pick-1'(state) { hireCandidate(state, 0); },
     'pick-2'(state) { hireCandidate(state, 1); },
     hold(state) { dropHiring(state); },

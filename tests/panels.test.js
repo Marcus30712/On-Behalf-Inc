@@ -324,3 +324,68 @@ test('roster with a weekend client: week header, six-day column heading, equal c
   renderPanel(root2, view(calm), 'roster', () => ({ ok: true }));
   assert.ok(![...root2.querySelectorAll('thead th')].some((th) => th.textContent === '주 6일'));
 });
+
+// --- v1.7 lead hiring -------------------------------------------------------
+import { LEAD_HIRE_COST } from '../sim/game.js';
+
+function leadGone(seed = 11) {
+  const state = createGame(seed);
+  const lead = state.people.find((p) => p.role === 'lead');
+  state.people = state.people.filter((p) => p !== lead);
+  delete state.roster[lead.id];
+  delete state.assignment[lead.id];
+  return state;
+}
+
+test('v1.7 with no lead the hiring tab offers lead hiring, and starting it shows the search', () => {
+  const L = UI_TEXT.hiring.lead;
+  const state = leadGone();
+  const root = makeRoot();
+  const onAct = (a) => act(state, a);
+  renderPanel(root, view(state), 'hiring', onAct);
+  const block = root.querySelector('.lead-hiring');
+  assert.ok(block, 'lead block');
+  assert.ok(block.textContent.includes(L.title));
+  assert.ok(block.textContent.includes(L.missing));
+  assert.ok(block.textContent.includes(fill(L.cost, { cost: formatMoney(LEAD_HIRE_COST) })));
+  const button = block.querySelector('[data-action="startHiring-lead"]');
+  assert.equal(button.textContent, L.start);
+  click(button);
+  assert.equal(view(state).hiring.role, 'lead');
+  renderPanel(root, view(state), 'hiring', onAct);
+  const after = root.querySelector('.lead-hiring');
+  assert.ok(after.textContent.includes(fill(L.searching, { n: 0 })));
+  assert.equal(after.querySelector('button'), null);
+  // The agent block does not claim an agent search is running.
+  assert.equal(root.querySelector('.state').textContent, L.busy);
+});
+
+test('v1.7 a lead present: no lead block; a lead leaving: the leaving line', () => {
+  const state = createGame(11);
+  const root = makeRoot();
+  renderPanel(root, view(state), 'hiring', (a) => act(state, a));
+  assert.equal(root.querySelector('.lead-hiring'), null);
+  const lead = state.people.find((p) => p.role === 'lead');
+  state.leaving.push({ personId: lead.id, day: state.day + 10 });
+  renderPanel(root, view(state), 'hiring', (a) => act(state, a));
+  assert.ok(root.querySelector('.lead-hiring').textContent.includes(UI_TEXT.hiring.lead.leaving));
+});
+
+test('v1.7 during an agent search the lead block says to wait, with no button', () => {
+  const state = leadGone();
+  state.people = state.people.filter((p, i) => !(p.role === 'agent' && i === 0)); // free a seat
+  assert.deepEqual(act(state, { type: 'startHiring' }), { ok: true });
+  const root = makeRoot();
+  renderPanel(root, view(state), 'hiring', (a) => act(state, a));
+  const block = root.querySelector('.lead-hiring');
+  assert.ok(block.textContent.includes(UI_TEXT.hiring.lead.busy));
+  assert.equal(block.querySelector('button'), null);
+});
+
+test('v1.7 the people tab warns when there is no lead', () => {
+  const root = makeRoot();
+  renderPanel(root, view(createGame(11)), 'people', () => ({ ok: true }));
+  assert.ok(!root.textContent.includes(UI_TEXT.people.noLead));
+  renderPanel(root, view(leadGone()), 'people', () => ({ ok: true }));
+  assert.equal(root.querySelector('.warn').textContent, '팀장 없음 · 휴식이 무작위로 정해지고 있어요.');
+});

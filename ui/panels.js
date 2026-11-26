@@ -5,7 +5,7 @@
 // caller re-renders with a fresh view. resetPanels() clears the panels' own
 // state (open card, notices, pending phone picks, an open expansion question)
 // for a new or loaded game.
-import { HIRE_COST, SHIFTS, OFFICE_LEVELS, planningOf } from '../sim/game.js';
+import { HIRE_COST, LEAD_HIRE_COST, SHIFTS, OFFICE_LEVELS, planningOf } from '../sim/game.js';
 import { RESEARCH } from '../world/research.js';
 import { TRAITS } from '../world/traits.js';
 import { NATIONS } from '../world/nations.js';
@@ -199,6 +199,7 @@ function peoplePanel(ctx) {
   if (selected !== null) return personCard(ctx);
   const P = UI_TEXT.people;
   if (v.people.length === 0) return [title(h, P.title), h('p', {}, P.empty)];
+  const noLead = !v.people.some((p) => p.role === 'lead') && h('p', { class: 'warn' }, P.noLead);
   const cards = v.people.map((p) => h('button', {
     type: 'button', class: 'person', 'data-person': p.id, title: P.open,
     onclick: () => { selected = p.id; rerender(); },
@@ -207,7 +208,7 @@ function peoplePanel(ctx) {
   h('span', {}, roleText(p)),
   h('span', {}, activityText(v, p)),
   h('span', {}, healthText(p))));
-  return [title(h, P.title, fill(P.count, { n: v.people.length })), h('div', { class: 'person-list' }, cards)];
+  return [title(h, P.title, fill(P.count, { n: v.people.length })), noLead, h('div', { class: 'person-list' }, cards)];
 }
 
 const shiftRunsOn = (shift, w) => !!SHIFTS[shift]?.days.includes(w);
@@ -396,15 +397,35 @@ function officeSection(ctx) {
     h('ul', { class: 'office-list' }, stages));
 }
 
+// v1.7: lead hiring, shown above agent hiring while the center needs a lead.
+function leadHiring({ h, v, run }) {
+  const L = UI_TEXT.hiring.lead;
+  const mine = v.hiring?.role === 'lead';
+  let action;
+  if (!v.hiring) {
+    action = h('button', { type: 'button', 'data-action': 'startHiring-lead', onclick: () => run({ type: 'startHiring', role: 'lead' }) }, L.start);
+  } else if (!mine) action = h('p', { class: 'help' }, L.busy);
+  else if (v.hiring.candidates) action = h('p', {}, UI_TEXT.hiring.state.arrived);
+  else action = h('p', {}, fill(L.searching, { n: v.hiring.workdays }));
+  return h('section', { class: 'lead-hiring' },
+    h('h3', {}, L.title),
+    h('p', { class: 'warn' }, v.leadLeaving ? L.leaving : L.missing),
+    h('p', { class: 'help' }, L.help),
+    h('p', {}, fill(L.cost, { cost: formatMoney(LEAD_HIRE_COST) })),
+    action);
+}
+
 function hiringPanel(ctx) {
   const { h, v, run } = ctx;
   const H = UI_TEXT.hiring;
   const free = Math.max(0, v.office.seats - v.people.filter((p) => p.role === 'agent').length);
   let state;
   if (!v.hiring) state = free > 0 ? H.state.ready : H.noSeats;
+  else if (v.hiring.role === 'lead') state = H.lead.busy;
   else if (v.hiring.candidates) state = H.state.arrived;
   else state = fill(H.state.searching, { n: v.hiring.workdays });
   return [title(h, H.title, H.help),
+    v.needsLead && leadHiring(ctx),
     h('p', { class: 'state' }, state),
     h('p', {}, fill(H.cost, { cost: formatMoney(HIRE_COST) })),
     (free > 0 || v.hiring) && h('p', {}, free > 0 ? fill(H.seats, { n: free }) : H.noSeats),

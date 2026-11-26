@@ -135,3 +135,115 @@ test('candidates never share a name with each other or with current staff', () =
     assert.ok(!staff.has(c1.name) && !staff.has(c2.name), `seed ${seed}: ${c1.name}, ${c2.name}`);
   }
 });
+
+// --- v1.7 lead hiring -------------------------------------------------------
+import { needsLead, LEAD_HIRE_COST, hireCandidate } from '../sim/hiring.js';
+import { planningOf } from '../sim/people.js';
+
+const withoutLead = (s) => { s.people = s.people.filter((p) => p.role !== 'lead'); delete s.roster.l1; delete s.assignment.l1; return s; };
+const leadOffers = (state) => state.inbox.filter((e) => e.id === 'lead-candidate');
+// Advance Mon-Fri workdays until the candidates arrive; returns the workday count.
+function untilCandidates(s, rng) {
+  let n = 0;
+  while (!s.hiring.candidates && n < 20) { advanceHiring(s, rng); n += 1; }
+  return n;
+}
+
+test('v1.7 needsLead: a lead present, gone, or surely leaving', () => {
+  const s = makeState();
+  assert.equal(needsLead(s), false);
+  s.leaving = [{ personId: 'l1', day: 10 }];
+  assert.equal(needsLead(s), true, 'a lead who was let go is leaving');
+  s.leaving = [{ personId: 'l1', day: 10, withdrawIfMoraleAbove: 50 }];
+  assert.equal(needsLead(s), false, 'a lead being talked round may stay');
+  assert.equal(needsLead(withoutLead(makeState())), true);
+});
+
+test('v1.7 starting a lead search: cost, refusals, no seat needed', () => {
+  assert.equal(LEAD_HIRE_COST, 3000);
+  assert.deepEqual(startHiring(makeState(), 'lead'), { ok: false, reason: 'no-need' });
+
+  const s = withoutLead(makeState());
+  assert.deepEqual(startHiring(s, 'lead'), { ok: true });
+  assert.equal(s.cash, 10000 - 3000);
+  assert.equal(s.hiring.role, 'lead');
+  assert.deepEqual(startHiring(s), { ok: false, reason: 'already' });
+
+  const full = withoutLead(makeState({ agents: 8 }));
+  assert.deepEqual(startHiring(full, 'lead'), { ok: true }, 'the lead has their own desk');
+
+  const busy = withoutLead(makeState());
+  startHiring(busy);
+  assert.deepEqual(startHiring(busy, 'lead'), { ok: false, reason: 'already' });
+
+  const poor = withoutLead(makeState({ cash: 2999 }));
+  assert.deepEqual(startHiring(poor, 'lead'), { ok: false, reason: 'no-cash' });
+  assert.equal(poor.cash, 2999);
+});
+
+test('v1.7 lead candidates arrive after 5-7 workdays with their skills in the event', () => {
+  for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
+    const s = withoutLead(makeState());
+    startHiring(s, 'lead');
+    const n = untilCandidates(s, createRng(seed));
+    assert.ok(n >= 5 && n <= 7, `seed ${seed}: ${n} workdays`);
+    assert.deepEqual(s.hiring.candidates.map((p) => p.role), ['lead', 'lead']);
+    assert.equal(candidates(s).length, 0);
+    const [e] = leadOffers(s);
+    const [a, b] = s.hiring.candidates;
+    assert.equal(e.data.cand1, a.name);
+    assert.equal(e.data.c1, a.skills.coaching);
+    assert.equal(e.data.p1, planningOf(a));
+    assert.equal(e.data.c2, b.skills.coaching);
+    assert.equal(e.data.p2, planningOf(b));
+    for (const p of [e.data.p1, e.data.p2]) assert.ok(p >= 3 && p <= 8, `planning ${p}`);
+  }
+});
+
+test('v1.7 a hired lead coaches on the early shift, with no probation', () => {
+  const s = withoutLead(makeState());
+  startHiring(s, 'lead');
+  untilCandidates(s, createRng(4));
+  const [e] = leadOffers(s);
+  const chosen = s.hiring.candidates[1];
+  resolveEvent(s, s.inbox.indexOf(e), 'pick-2');
+  assert.ok(s.people.includes(chosen));
+  assert.equal(s.hiring, null);
+  assert.deepEqual(s.roster[chosen.id], { 0: 'early', 1: 'early', 2: 'early', 3: 'early', 4: 'early' });
+  assert.deepEqual(s.assignment[chosen.id], { kind: 'coaching' });
+  assert.equal(chosen.probationDays ?? 0, 0, 'no probation');
+  assert.equal(needsLead(s), false);
+});
+
+test('v1.7 no second lead joins while one is in place', () => {
+  const s = withoutLead(makeState());
+  startHiring(s, 'lead');
+  untilCandidates(s, createRng(4));
+  s.people.push(createPerson(createRng(9), { id: 'l9', role: 'lead', nation: 'veltora' }));
+  const before = s.people.length;
+  hireCandidate(s, 0);
+  assert.equal(s.people.length, before);
+  assert.equal(s.hiring, null);
+});
+
+test('v1.7 unanswered lead candidates are held, like agent ones', () => {
+  const s = withoutLead(makeState());
+  startHiring(s, 'lead');
+  untilCandidates(s, createRng(4));
+  const [e] = leadOffers(s);
+  s.day = e.deadlineDay + 1;
+  expireEvents(s);
+  assert.equal(e.choice, 'hold');
+  assert.equal(s.hiring, null);
+  assert.equal(needsLead(s), true);
+});
+
+test('v1.7 a v1.6 save mid-search (no role) still hires an agent', () => {
+  const s = makeState();
+  s.cash -= HIRE_COST;
+  s.hiring = { workdays: 0 };
+  untilCandidates(s, createRng(5));
+  assert.deepEqual(s.hiring.candidates.map((p) => p.role), ['agent', 'agent']);
+  assert.equal(candidates(s).length, 1);
+  assert.equal(leadOffers(s).length, 0);
+});

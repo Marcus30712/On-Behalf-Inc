@@ -153,7 +153,8 @@ export const UI_TEXT = {
     "count": "모두 {n}명",
     "empty": "아직 함께하는 사람이 없어요.",
     "open": "자세히",
-    "leftNote": "이 사람은 센터를 떠났어요."
+    "leftNote": "이 사람은 센터를 떠났어요.",
+    "noLead": "팀장 없음 · 휴식이 무작위로 정해지고 있어요."
   },
   "role": {
     "agent": "상담사",
@@ -349,7 +350,17 @@ export const UI_TEXT = {
       "arrived": "지원자가 왔어요. 알림에서 골라 주세요."
     },
     "probationNote": "새 사람은 처음 두 주 동안 수습이에요. 교육을 맡기면 빨리 늘어요.",
-    "noRefund": "보류하면 채용 비용은 돌려받지 못해요."
+    "noRefund": "보류하면 채용 비용은 돌려받지 못해요.",
+    "lead": {
+      "title": "팀장 채용",
+      "missing": "지금은 팀장이 없어요. 휴식이 무작위로 정해지고 코칭도 멈춰 있어요.",
+      "leaving": "팀장이 곧 떠나요. 지금 새 팀장을 찾기 시작할 수 있어요.",
+      "help": "팀장은 휴식표를 짜고 상담사를 코칭해요. 며칠 뒤 지원자 두 명이 오면 한 명을 고를 수 있어요.",
+      "cost": "팀장 채용 비용 💰 {cost}",
+      "start": "팀장 채용 시작",
+      "searching": "팀장 지원자를 찾는 중 · {n}근무일째",
+      "busy": "다른 채용이 끝나면 시작할 수 있어요."
+    }
   },
   "clients": {
     "title": "고객사",
@@ -579,6 +590,8 @@ function valuesFor(event) {
     cand2: d.cand2,
     n: d.n,
   };
+  // v1.7 lead-candidate: coaching and planning, 2 decimals (display rule).
+  for (const k of ['c1', 'c2', 'p1', 'p2']) if (d[k] !== undefined) values[k] = formatDecimal(d[k]);
   if (clientDef) {
     values.sl = channelOf(clientDef) === 'email'
       ? fill(UI_TEXT.metrics.targetEmail, { hours: clientDef.slTarget.openMinutes / 60, pct: formatDecimal(clientDef.slTarget.pct) })
@@ -631,7 +644,8 @@ export function eventText(event) {
   }
   const weekendOffer = event.id === 'client-offer' && clientDef(event)?.hours.days.some((x) => x >= 5);
   const adviceKey = event.id === 'client-offer' && channel !== 'phone' ? `client-offer-${channel}`
-    : weekendOffer ? 'client-offer-weekend' : event.id === 'backlog-warning' ? 'backlog-growing' : event.id;
+    : weekendOffer ? 'client-offer-weekend' : event.id === 'backlog-warning' ? 'backlog-growing'
+      : event.id === 'resign-notice' && event.data?.lead ? 'resign-notice-lead' : event.id;
   const lines = ADVISOR[adviceKey] ?? [];
   // A desk's featured person only stars in its done text: nobody's face
   // changed, so the advisor speaks as if nobody was helped.

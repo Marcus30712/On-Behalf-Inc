@@ -1,9 +1,11 @@
 // Hiring: pay up front, wait a few workdays, choose one of two candidates.
 // Pure rules, no DOM.
 //
-// state.hiring = null | { workdays, waitDays?, candidates? }; state.nextId numbers new people.
+// state.hiring = null | { workdays, role?, waitDays?, candidates? }; state.nextId numbers new people.
+// v1.7: role 'lead' hires a team lead (own desk, no seat); no role means an agent
+// (v1.6 saves). One search runs at a time, whatever its role.
 // The game calls advanceHiring once per Mon-Fri workday (v1.4, even with a weekend client), after endOfDay.
-import { createPerson } from './people.js';
+import { createPerson, planningOf } from './people.js';
 import { pushEvent } from './events.js';
 import { neediestClient } from './economy.js';
 import { NATIONS } from '../world/nations.js';
@@ -11,8 +13,10 @@ import { seatsOf } from './office.js';
 
 export const SEATS = 8; // level-0 seats, kept for compatibility; use seatsOf(state)
 export const HIRE_COST = 1500;
+export const LEAD_HIRE_COST = 3000; // v1.7, 가상 값
 
 const WAIT_WORKDAYS = [3, 5];
+const LEAD_WAIT_WORKDAYS = [5, 7]; // v1.7, 가상 값
 const PROBATION_DAYS = 10;
 const ANSWER_DAYS = 7;
 const WEEKDAYS = [0, 1, 2, 3, 4];
@@ -20,12 +24,23 @@ const WEEKDAYS = [0, 1, 2, 3, 4];
 // People who left are no longer in state.people; sick or on leave still sit.
 const agentCount = (state) => state.people.filter((p) => p.role === 'agent').length;
 
-export function startHiring(state) {
+// v1.7: true when no lead stays: none at all, or every lead was let go
+// (on state.leaving without a chance to withdraw).
+export function needsLead(state) {
+  const sureToLeave = (p) => (state.leaving ?? [])
+    .some((l) => l.personId === p.id && l.withdrawIfMoraleAbove === undefined);
+  return !state.people.some((p) => p.role === 'lead' && !sureToLeave(p));
+}
+
+export function startHiring(state, role = 'agent') {
+  const lead = role === 'lead';
   if (state.hiring) return { ok: false, reason: 'already' };
-  if (agentCount(state) >= seatsOf(state)) return { ok: false, reason: 'no-seat' };
-  if ((state.cash ?? 0) < HIRE_COST) return { ok: false, reason: 'no-cash' };
-  state.cash -= HIRE_COST;
-  state.hiring = { workdays: 0 };
+  if (lead && !needsLead(state)) return { ok: false, reason: 'no-need' };
+  if (!lead && agentCount(state) >= seatsOf(state)) return { ok: false, reason: 'no-seat' };
+  const cost = lead ? LEAD_HIRE_COST : HIRE_COST;
+  if ((state.cash ?? 0) < cost) return { ok: false, reason: 'no-cash' };
+  state.cash -= cost;
+  state.hiring = lead ? { workdays: 0, role: 'lead' } : { workdays: 0 };
   return { ok: true };
 }
 
@@ -39,19 +54,23 @@ function newId(state) {
 export function advanceHiring(state, rng) {
   const h = state.hiring;
   if (state.gameOver || !h || h.candidates) return;
-  h.waitDays ??= rng.int(...WAIT_WORKDAYS);
+  const lead = h.role === 'lead';
+  h.waitDays ??= rng.int(...(lead ? LEAD_WAIT_WORKDAYS : WAIT_WORKDAYS));
   h.workdays += 1;
   if (h.workdays < h.waitDays) return;
   h.candidates = [];
   for (let i = 0; i < 2; i++) {
     const takenNames = [...state.people, ...h.candidates].map((p) => p.name);
     h.candidates.push(createPerson(rng, {
-      id: newId(state), role: 'agent', nation: rng.pick(NATIONS).id, takenNames,
+      id: newId(state), role: lead ? 'lead' : 'agent', nation: rng.pick(NATIONS).id, takenNames,
     }));
   }
+  const [a, b] = h.candidates;
   pushEvent(state, {
-    id: 'candidate',
-    data: { cand1: h.candidates[0].name, cand2: h.candidates[1].name },
+    id: lead ? 'lead-candidate' : 'candidate',
+    data: lead
+      ? { cand1: a.name, cand2: b.name, c1: a.skills.coaching, c2: b.skills.coaching, p1: planningOf(a), p2: planningOf(b) }
+      : { cand1: a.name, cand2: b.name },
     deadlineDay: state.day + ANSWER_DAYS,
   });
 }
@@ -68,9 +87,18 @@ function quieterShift(state) {
 
 // 'candidate' pick-1 / pick-2: the candidate joins on probation, answering the
 // phone for the client that has done worst lately.
+// v1.7: a lead joins without probation, coaching on the early shift, and only
+// while the center still needs one.
 export function hireCandidate(state, index) {
   const candidate = state.hiring?.candidates?.[index];
   state.hiring = null;
+  if (candidate?.role === 'lead') {
+    if (!needsLead(state)) return;
+    state.people.push(candidate);
+    state.roster[candidate.id] = Object.fromEntries(WEEKDAYS.map((d) => [d, 'early']));
+    state.assignment[candidate.id] = { kind: 'coaching' };
+    return;
+  }
   if (!candidate || agentCount(state) >= seatsOf(state)) return;
   candidate.probationDays = PROBATION_DAYS;
   state.people.push(candidate);

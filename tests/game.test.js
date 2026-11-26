@@ -449,3 +449,42 @@ test('view gives each person the client they answer and each client whether it o
   crew.forEach((p, i) => assert.equal(mon.people.find((x) => x.id === p.id).answering, own[i], `${p.id} on Monday`));
   assert.deepEqual(open(mon), { 'gureum-travel': true, 'mulbit-telecom': true, [BARAM]: false });
 });
+
+test('v1.7 lead hiring through the game: action role, view flags', () => {
+  const s = createGame(42);
+  assert.deepEqual(act(s, { type: 'startHiring', role: 'lead' }), { ok: false, reason: 'no-need' });
+  assert.equal(view(s).needsLead, false);
+  assert.equal(view(s).leadLeaving, false);
+  const lead = s.people.find((p) => p.role === 'lead');
+  s.leaving.push({ personId: lead.id, day: s.day + 10 });
+  assert.equal(view(s).needsLead, true);
+  assert.equal(view(s).leadLeaving, true);
+  assert.deepEqual(act(s, { type: 'startHiring', role: 'lead' }), { ok: true });
+  assert.equal(view(s).hiring.role, 'lead');
+  s.people = s.people.filter((p) => p !== lead);
+  s.leaving = [];
+  assert.equal(view(s).needsLead, true);
+  assert.equal(view(s).leadLeaving, false);
+});
+
+// v1.7 (final review): the let-go lead overlaps the new one, then leaves; one
+// lead stays, and that lead plans the breaks.
+test('v1.7 a lead hired while the old one works out notice is the only lead after', () => {
+  const s = createGame(7);
+  const old = s.people.find((p) => p.role === 'lead');
+  s.leaving.push({ personId: old.id, day: s.day + 14 });
+  assert.deepEqual(act(s, { type: 'startHiring', role: 'lead' }), { ok: true });
+  const offer = () => s.inbox.findIndex((e) => e.id === 'lead-candidate' && !e.resolved);
+  assert.ok(advanceUntil(s, () => offer() >= 0, 20), 'candidates arrive');
+  const chosen = s.hiring.candidates[0];
+  assert.deepEqual(act(s, { type: 'resolve', index: offer(), choiceId: 'pick-1' }), { ok: true });
+  assert.equal(view(s).needsLead, false);
+  playDays(s, 20);
+  const leads = s.people.filter((p) => p.role === 'lead');
+  assert.deepEqual(leads.map((p) => p.id), [chosen.id]);
+  assert.equal(view(s).needsLead, false);
+  advanceUntil(s, () => s.minute >= 600 && view(s).date.weekday < 5, 3);
+  const plan = Object.values(s.breaks?.plan ?? {});
+  assert.ok(plan.length > 0, 'a plan exists');
+  assert.ok(plan.every((e) => e.by === 'lead'), 'planned by the lead');
+});

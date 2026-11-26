@@ -140,7 +140,11 @@ function rollBreakingPoint(state, person, rng) {
   } else if (!hasOpenNotice(state, person)) {
     const leaveDay = addPersonWorkdays(state, person, state.day, RESIGN_WORKDAYS);
     pushEvent(state, {
-      id: kind, personId: person.id, data: { days: RESIGN_WORKDAYS, leaveDay }, deadlineDay: leaveDay,
+      id: kind,
+      personId: person.id,
+      // v1.7: lead marks a lead's notice (Kim Miso's advice differs).
+      data: { days: RESIGN_WORKDAYS, leaveDay, ...(person.role === 'lead' && { lead: true }) },
+      deadlineDay: leaveDay,
     });
   }
 }

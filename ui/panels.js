@@ -114,7 +114,7 @@ const bar = (h, key, value) => {
   return h('div', { class: danger ? 'bar danger' : 'bar', title: UI_TEXT.bar[key].tip },
     h('span', { class: 'bar-name' }, UI_TEXT.bar[key].name),
     h('meter', { min: 0, max: 100, value: Math.round(value) }),
-    h('span', { class: 'bar-value' }, String(Math.round(value))),
+    h('span', { class: 'bar-value' }, formatDecimal(value)),
     flag && h('span', { class: 'warn' }, flag));
 };
 
@@ -431,7 +431,7 @@ function clientsPanel({ h, v }) {
       h('td', {}, email ? `${M.onTime} ${formatPct(c.onTime ?? null)}` : formatPct(t.serviceLevel)),
       h('td', {}, email ? `${M.backlog} ${fill(M.backlogUnit, { n: Math.round(c.backlog ?? 0) })}` : formatSec(t.asaSec)),
       h('td', {}, !email && t.offered > 0 ? fill(M.abandonedUnit, { n: t.abandoned }) : M.none),
-      h('td', {}, String(Math.round(c.satisfaction))),
+      h('td', {}, formatDecimal(c.satisfaction)),
       h('td', {}, formatDecimal(t.agents)),
       h('td', {}, c.active ? C.active : C.ended,
         c.active && c.churnWorkdaysLeft !== null && c.churnWorkdaysLeft !== undefined

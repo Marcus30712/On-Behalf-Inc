@@ -74,3 +74,29 @@ test('the metrics strip shows 92.44% and its target as 80.00%', () => {
   assert.ok(chip.includes('92.44%'), chip);
   assert.ok(chip.includes('(목표 80.00%)'), chip);
 });
+
+// Ruling: satisfaction and the condition bars are scores too.
+test('satisfaction shows 2 decimals in the clients panel and the metrics strip', () => {
+  const v = plainView();
+  const c = v.clients.find((x) => x.active);
+  c.satisfaction = 70;
+  const root = makeRoot();
+  renderPanel(root, v, 'clients', () => ({ ok: true }));
+  const cells = [...root.querySelector(`[data-client="${c.id}"]`).querySelectorAll('td')].map((td) => td.textContent);
+  assert.ok(cells.includes('70.00'), JSON.stringify(cells));
+  c.satisfaction = 68.456;
+  const m = makeRoot();
+  renderMetrics(m, v);
+  assert.ok(m.querySelector(`[data-client="${c.id}"]`).textContent.includes('만족도 68.46'), m.textContent);
+});
+
+test('the card shows 피로, 스트레스 and 사기 with 2 decimals', () => {
+  const v = plainView();
+  const p = v.people[0];
+  Object.assign(p, { fatigue: 23.456, stress: 46, morale: 62.999999 });
+  const root = makeRoot();
+  selectPerson(p.id);
+  renderPanel(root, v, 'people', () => ({ ok: true }));
+  const values = [...root.querySelectorAll('.bar .bar-value')].map((x) => x.textContent);
+  assert.deepEqual(values, ['23.46', '46.00', '63.00']);
+});

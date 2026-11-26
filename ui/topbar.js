@@ -114,7 +114,7 @@ export function renderMetrics(root, v) {
     h('strong', {}, c.name),
     label,
     numbers,
-    h('span', {}, `${M.satisfaction} ${Math.round(c.satisfaction)}`),
+    h('span', {}, `${M.satisfaction} ${formatDecimal(c.satisfaction)}`),
     below && h('span', { class: 'warn' }, M.belowTarget));
   });
   // From five clients on the chips use the compact form (smaller type, tighter

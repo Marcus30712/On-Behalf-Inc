@@ -28,9 +28,12 @@ const PERSON_LIFT = PERSON_H - TILE_PX;
 // v1.6 role tag: the role's name (UI_TEXT.role) on a small dark plate, one
 // sprite pixel above the sprite's top (the tallest hair, the tied topknot, is
 // on row 0). Painted once per role at screen size and copied 1:1, so the
-// text stays crisp. Bubbles, channel marks and sparkles stack above the tag,
-// one sprite pixel clear of it; where the canvas top leaves no room (people
-// in row 1, under the wall) they go beside the tag instead.
+// text stays crisp. Every role's plate is as wide as the widest name, so a
+// tag drawn over another hides it whole. Bubbles, channel marks and sparkles
+// stack above the tag, one sprite pixel clear of it; where the canvas top
+// leaves no room for the tallest of them (people in row 1, under the wall)
+// they go beside the tag instead: the mark on its left, the bubble and the
+// sparkle on its right.
 const TAG_FONT_PX = 13; // still legible where the page shows the canvas at 0.8x
 const TAG_FONT = `bold ${TAG_FONT_PX}px system-ui, "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans CJK KR", sans-serif`;
 const TAG_H = 5 * U;
@@ -42,6 +45,8 @@ const TAG_PLATES = { agent: '#33415c', lead: '#9a5b13', qa: '#2e6b5e' };
 const BUBBLE_W = 11 * U; // the box; its tail hangs one sprite pixel below
 const BUBBLE_H = 12 * U;
 const SPARKLE_PX = 9 * U;
+const TAG_ROLES = ['agent', 'lead', 'qa'];
+const STACK_H = Math.max(BUBBLE_H, MARK_PX, SPARKLE_PX + 4 * U); // the sparkle twinkles 4 higher
 
 function defaultMakeCanvas(w, h) {
   if (typeof OffscreenCanvas !== 'undefined') return new OffscreenCanvas(w, h);
@@ -103,8 +108,10 @@ export function createDrawer(makeCanvas = defaultMakeCanvas) {
     let c = sprites.get(key);
     if (c) return c;
     const text = UI_TEXT.role[role] ?? String(role);
-    // An even number of pixels wide, so it centres on the sprite exactly.
-    const w = Math.ceil((textWidth(text) + 2 * TAG_PAD) / 2) * 2;
+    // As wide as the widest role name, an even number of pixels, so it
+    // centres on the sprite exactly and covers any tag under it.
+    const widest = Math.max(...[...TAG_ROLES, role].map((r) => textWidth(UI_TEXT.role[r] ?? String(r))));
+    const w = Math.ceil((widest + 2 * TAG_PAD) / 2) * 2;
     c = makeCanvas(w, TAG_H);
     const g = c.getContext('2d');
     g.fillStyle = TAG_PLATES[role] ?? OUTLINE;
@@ -125,17 +132,19 @@ export function createDrawer(makeCanvas = defaultMakeCanvas) {
     const w = roleTag(role).width;
     const x = clamp(px + PERSON_W / 2 - w / 2, 0, CANVAS_W - w);
     const y = Math.max(0, py - TAG_GAP - TAG_H);
-    return { x, y, w, above: y - STACK_GAP };
+    const above = y - STACK_GAP;
+    return { x, y, w, above, beside: above < STACK_H };
   }
 
   // Top-left of a w x h box standing on the stack line at x; with no room
-  // above (row 1), beside the tag at the top: right of it, or left near the
-  // right edge.
-  function overTag(st, x, w, h) {
-    const y = st.above - h;
-    if (y >= 0) return [x, y];
+  // above the tag (row 1), beside it at the canvas top on `side` (the other
+  // side only where the canvas ends).
+  function overTag(st, x, w, h, side = 'right') {
+    if (!st.beside) return [x, st.above - h];
     const right = st.x + st.w + U;
-    return [right + w <= CANVAS_W ? right : st.x - U - w, 0];
+    const left = st.x - U - w;
+    if (side === 'left') return [left >= 0 ? left : right, 0];
+    return [right + w <= CANVAS_W ? right : left, 0];
   }
 
   function blit(ctx, name, px, py) {
@@ -314,7 +323,7 @@ export function createDrawer(makeCanvas = defaultMakeCanvas) {
   // A chat or email agent at work: a small 💬 or ✉️ above the tag, right of
   // where the status bubble goes, in place of the headset (no art of its own).
   function channelMark(ctx, mark, st, px) {
-    const [x, y] = overTag(st, px + 12.5 * U, MARK_PX, MARK_PX);
+    const [x, y] = overTag(st, px + 12.5 * U, MARK_PX, MARK_PX, 'left');
     ctx.save();
     ctx.font = `${MARK_PX}px sans-serif`;
     ctx.textAlign = 'center';
@@ -328,7 +337,8 @@ export function createDrawer(makeCanvas = defaultMakeCanvas) {
   // (p.answering) decides, so an email agent covering a phone client wears the
   // headset.
   // Role tags and channel marks go on after every person, so someone walking
-  // in a lower row never covers them.
+  // in a lower row never covers them. People on one tile (arriving at the
+  // door) show one tag: the person drawn last's.
   function drawActors(ctx, actors, peopleView, timeMs = 0, clients = []) {
     ctx.imageSmoothingEnabled = false;
     const channelOf = new Map(clients.map((c) => [c.id, c.channel]));
@@ -345,11 +355,13 @@ export function createDrawer(makeCanvas = defaultMakeCanvas) {
       if (mark) marks.set(p.id, mark);
       else blit(ctx, back ? 'headsetBack' : 'headset', px, py);
     }
+    const tileOf = (a) => `${Math.round(a.x)},${Math.round(a.y)}`;
+    const tagged = new Map(shown.map(({ a }) => [tileOf(a), a.id])); // the last one per tile wins
     for (const { a, p } of shown) {
       const [px, py] = spot(a);
       const st = headStack(p.role, px, py);
       const tag = roleTag(p.role);
-      ctx.drawImage(tag, st.x, st.y, tag.width, tag.height);
+      if (tagged.get(tileOf(a)) === a.id) ctx.drawImage(tag, st.x, st.y, tag.width, tag.height);
       if (marks.has(p.id)) channelMark(ctx, marks.get(p.id), st, px);
     }
   }

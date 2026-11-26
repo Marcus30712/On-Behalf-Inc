@@ -261,6 +261,8 @@ def play_viewport(browser, size):
         page.screenshot(path=str(OUT / f'tab-{name}-{tag}.png'), full_page=True)
         check_text(page, f'{tag} tab {name}')
         check_no_sideways(page, f'{tag} tab {name}')
+    if size == VIEWPORTS[0]:
+        check_card_breaks(page, tag)
     page.click('.panel-root .panel-close')  # close the last one
     if page.locator('.panel-root .panel').count() != 0:
         fail(f'{tag}: the close button did not close the panel')
@@ -449,7 +451,7 @@ def check_channels(browser):
     page.click('[data-tab="clients"]')
     page.wait_for_timeout(100)
     target = page.locator('.clients tr[data-client="solbang-books"]').inner_text()
-    if '영업시간 12시간 안에 90%' not in target or '밀린 메일' not in target:
+    if '영업시간 12시간 안에 90.00%' not in target or '밀린 메일' not in target:
         fail(f'{tag}: the email row lacks its target or backlog: {target!r}')
     check_panel_visible(page, size, f'{tag} clients')
     check_text(page, f'{tag} clients')
@@ -503,6 +505,36 @@ def check_metrics_fit(browser):
         check_no_sideways(page, tag)
         check_errors(page, tag)
         page.context.close()
+
+
+BREAKS_LINE_RE = re.compile(r'^휴식 \d\d:\d\d · 점심 \d\d:\d\d · 휴식 \d\d:\d\d$')
+
+
+def check_card_breaks(page, tag):
+    """v1.6: a working person's card shows the 오늘 휴식 row with three times."""
+    page.click('[data-tab="people"]')
+    page.wait_for_timeout(100)
+    ids = page.eval_on_selector_all('.panel-root .person', 'bs => bs.map((b) => b.dataset.person)')
+    for pid in ids:
+        page.click(f'.panel-root .person[data-person="{pid}"]')
+        page.wait_for_selector('.panel-root .card')
+        line = page.evaluate("""() => {
+            const dt = [...document.querySelectorAll('.panel-root .card dt')].find((d) => d.textContent === '오늘 휴식');
+            return dt ? dt.nextElementSibling.textContent : null;
+        }""")
+        if line is None:
+            fail(f'{tag}: card of {pid} has no 오늘 휴식 row')
+            return
+        if BREAKS_LINE_RE.match(line):
+            check_panel_visible(page, VIEWPORTS[0], f'{tag} card')
+            page.screenshot(path=str(OUT / 'card-breaks.png'))
+            check_text(page, f'{tag} card')
+            page.click('.panel-root .card .back')
+            return
+        if line != '오늘은 근무가 없어요.':
+            fail(f'{tag}: card of {pid} shows {line!r} for 오늘 휴식')
+        page.click('.panel-root .card .back')
+    fail(f'{tag}: nobody at work shows a 오늘 휴식 line')
 
 
 def shoot_preview(browser):

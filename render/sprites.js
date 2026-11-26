@@ -1030,16 +1030,18 @@ const ICON_SICK = [
   '..OOOOO..',
   '.........',
 ];
+// v1.6: a lightning bolt alone (the old cloud with a 3-pixel bolt read as a
+// yellow "+" at this size): slants down to the left, a crossbar, a thin tail.
 const ICON_STRESS = [
-  '...OOO...',
-  '.OOgggOO.',
-  'OgggggggO',
-  'OgggggggO',
-  '.OOOYOOO.',
-  '...YY....',
-  '....YY...',
-  '....Y....',
-  '.........',
+  '....OOOOO',
+  '...OYYYO.',
+  '..OYYYO..',
+  '.OYYYOOO.',
+  'OYYYYYYO.',
+  'OOOOYYO..',
+  '...OYO...',
+  '..OYO....',
+  '..OO.....',
 ];
 const ICON_LEAVE = [
   '...OOO...',

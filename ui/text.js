@@ -7,7 +7,7 @@ import { ADVISOR } from '../world/advisor.js';
 import { RESEARCH } from '../world/research.js';
 import { NATIONS } from '../world/nations.js';
 import { CLIENTS } from '../world/clients.js';
-import { formatMoney } from './money.js';
+import { formatMoney, formatDecimal } from './money.js';
 import { channelOf } from '../sim/interval.js';
 
 export const UI_TEXT = {
@@ -581,8 +581,8 @@ function valuesFor(event) {
   };
   if (clientDef) {
     values.sl = channelOf(clientDef) === 'email'
-      ? fill(UI_TEXT.metrics.targetEmail, { hours: clientDef.slTarget.openMinutes / 60, pct: clientDef.slTarget.pct })
-      : fill(UI_TEXT.metrics.targetFull, { sec: clientDef.slTarget.sec, pct: clientDef.slTarget.pct });
+      ? fill(UI_TEXT.metrics.targetEmail, { hours: clientDef.slTarget.openMinutes / 60, pct: formatDecimal(clientDef.slTarget.pct) })
+      : fill(UI_TEXT.metrics.targetFull, { sec: clientDef.slTarget.sec, pct: formatDecimal(clientDef.slTarget.pct) });
     values.fee = fill(UI_TEXT.common.money, { cost: formatMoney(clientDef.monthlyFee) });
   }
   if (event.id === 'build-done') {

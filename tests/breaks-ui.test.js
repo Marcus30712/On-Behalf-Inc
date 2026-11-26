@@ -5,7 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
-import { createGame, advance, view, planningOf } from '../sim/game.js';
+import { createGame, advance, view } from '../sim/game.js';
 import { UI_TEXT } from '../ui/text.js';
 import { renderPanel, selectPerson, resetPanels } from '../ui/panels.js';
 import { createDrawer, TILE_PX, SCALE, CANVAS_W } from '../render/draw.js';
@@ -87,16 +87,20 @@ test('the card lists 스케줄링 with its tip, after the other skills', () => {
   const items = [...card(v, p.id).querySelectorAll('ul.skills li')];
   assert.equal(items.length, 5);
   const last = items.at(-1);
-  assert.equal(last.textContent, '스케줄링 6.5');
+  assert.equal(last.textContent, '스케줄링 6.50');
   assert.equal(last.getAttribute('title'), '휴식 시간을 짜는 솜씨. 팀장이 높을수록 콜이 몰리는 시간을 피해 휴식을 배정해요.');
 });
 
+// Seed 11's people have no stored planning: the card shows the value derived
+// from id and name (sim/people.js planningOf), within each role's range.
 test('스케줄링 shows the derived value for people without a stored one', () => {
   const v = plainView();
-  for (const p of v.people) {
-    assert.equal(p.skills.planning, undefined, 'not stored');
-    const last = [...card(v, p.id).querySelectorAll('ul.skills li')].at(-1);
-    assert.equal(last.textContent, `스케줄링 ${planningOf(p)}`, p.role);
+  const want = { p0: ['비스 소랭', 'agent', '스케줄링 1.60'], p8: ['비스 순테', 'lead', '스케줄링 7.10'], p9: ['무알로', 'qa', '스케줄링 1.80'] };
+  for (const [id, [name, role, text]] of Object.entries(want)) {
+    const p = v.people.find((x) => x.id === id);
+    assert.deepEqual([p.name, p.role, p.skills.planning], [name, role, undefined], id);
+    const last = [...card(v, id).querySelectorAll('ul.skills li')].at(-1);
+    assert.equal(last.textContent, text, `${id} ${role}`);
   }
 });
 
@@ -267,4 +271,67 @@ test('the 💬/✉️ marker sits above the tag, clear of it and of the bubble',
       assert.ok(!overlaps(bubbleRect(c2), box), `${spot}: bubble ${bubbleRect(c2)} clear of marker ${box}`);
     }
   }
+});
+
+// ---- fix round 1 -----------------------------------------------------------------
+
+test('every role plate is the same width, so a tag on top hides the one under it', () => {
+  const { drawer } = setup();
+  const widths = ['agent', 'lead', 'qa'].map((r) => drawer.roleTag(r).width);
+  assert.equal(new Set(widths).size, 1, `widths ${widths}`);
+  assert.equal(new Set(['agent', 'lead', 'qa'].map((r) => drawer.roleTag(r).height)).size, 1);
+});
+
+test('people stacked on one tile get one tag: the person drawn last', () => {
+  const { drawer, ctx } = setup();
+  // At the door on load: an agent and the lead on the same tile, the lead's
+  // feet a little lower (drawn last); a QA on the next tile keeps her own tag.
+  const people = [person('a1', 'agent', 'off'), person('l1', 'lead', 'off'), person('q1', 'qa', 'off')];
+  const actors = [
+    { id: 'a1', x: 10, y: 10.9, path: [[10, 10]], target: [10, 10], gone: false },
+    { id: 'l1', x: 10, y: 11, path: [[10, 10]], target: [10, 10], gone: false },
+    { id: 'q1', x: 11, y: 10, path: [], target: [11, 10], gone: false },
+  ];
+  drawer.drawActors(ctx, actors, people, 0, []);
+  const tagIds = new Map(['agent', 'lead', 'qa'].map((r) => [drawer.roleTag(r).id, r]));
+  const drawn = ctx.ops.filter((o) => o[0] === 'drawImage' && tagIds.has(o[1])).map((o) => [tagIds.get(o[1]), o[2], o[3]]);
+  assert.equal(drawn.filter(([, x]) => x < 11 * TILE_PX).length, 1, `one tag on the door tile: ${JSON.stringify(drawn)}`);
+  assert.deepEqual(drawn.map(([r]) => r).sort(), ['lead', 'qa']);
+});
+
+test('row 1: tag, status bubble and 💬/✉️ marker never overlap (plan Review Focus 5)', () => {
+  for (const [x, y] of [[1, 1], [6, 1], [11, 1], [18, 1], [6, 1.5], [6, 1.9]]) {
+    for (const [channel, mark] of [['chat', '💬'], ['email', '✉️']]) {
+      const p = person('a1', 'agent', 'phone', { stress: 95, task: { kind: 'phone', clientId: channel }, answering: channel });
+      const actor = { id: 'a1', x, y, path: [], target: [x, y], gone: false };
+      const { drawer, ctx } = setup();
+      drawer.drawActors(ctx, [actor], [p], 0, [{ id: channel, channel }]);
+      const tag = tagRects(drawer, ctx, 'agent')[0];
+      const [[, text, mx, my]] = ctx.ops.filter((o) => o[0] === 'fillText');
+      assert.equal(text, mark);
+      const size = 7 * U;
+      const marker = [mx - size / 2, my - size / 2, size, size];
+      const { drawer: d2, ctx: c2 } = setup();
+      d2.drawBubbles(c2, [actor], [p], {});
+      const b = bubbleRect(c2);
+      const where = `(${x},${y}) ${channel}: tag ${tag} marker ${marker} bubble ${b}`;
+      for (const r of [tag, marker, b]) assert.ok(r[0] >= 0 && r[1] >= 0 && r[0] + r[2] <= CANVAS_W, `on canvas ${where}`);
+      assert.ok(!overlaps(tag, marker), `tag/marker ${where}`);
+      assert.ok(!overlaps(tag, b), `tag/bubble ${where}`);
+      assert.ok(!overlaps(marker, b), `marker/bubble ${where}`);
+    }
+  }
+});
+
+// Review check: the view's breaks follow today's health, so someone who
+// falls sick during the day loses their breaks line at once.
+test('someone who goes home sick mid-day has no breaks: the card says 오늘은 근무가 없어요.', () => {
+  const s = createGame(11);
+  advance(s, 11 * 60);
+  const id = view(s).people.find((p) => p.breaks).id;
+  s.people.find((p) => p.id === id).health = { kind: 'sick', daysLeft: 2 };
+  const v = view(s);
+  const p = v.people.find((x) => x.id === id);
+  assert.equal(p.breaks, null);
+  assert.equal(field(card(v, id), '오늘 휴식'), '오늘은 근무가 없어요.');
 });

@@ -12,7 +12,7 @@ import { NATIONS } from '../world/nations.js';
 import { CLIENTS } from '../world/clients.js';
 import { PLANET } from '../world/planet.js';
 import { UI_TEXT, fill } from './text.js';
-import { formatDate, formatTime, formatMoney, formatPct, formatSec, formatTarget, hasChannels, channelLabel } from './format.js';
+import { formatDate, formatTime, formatMoney, formatDecimal, formatPct, formatSec, formatTarget, hasChannels, channelLabel } from './format.js';
 import { builder } from './dom.js';
 
 export const TABS = ['people', 'roster', 'tasks', 'research', 'hiring', 'clients', 'calendar'];
@@ -169,8 +169,9 @@ function personCard({ h, v, rerender }) {
   const C = UI_TEXT.card;
   const traits = p.traits.map((id) => TRAITS.find((t) => t.id === id)).filter(Boolean)
     .map((t) => h('li', {}, h('strong', {}, t.name), ' ', t.blurb));
-  // v1.6 스케줄링 is not stored on most people: planningOf derives it.
-  const skillValue = (k) => (k === 'planning' ? planningOf(p) : p.skills?.[k] ?? 0);
+  // v1.6 스케줄링 is not stored on most people: planningOf derives it. Shown
+  // with 2 decimals (display rule), so float steps never show (6.00, 6.30).
+  const skillValue = (k) => formatDecimal(k === 'planning' ? planningOf(p) : p.skills?.[k] ?? 0);
   const skills = SKILLS.map((k) => h('li', { title: UI_TEXT.skill[k].tip }, `${UI_TEXT.skill[k].name} ${skillValue(k)}`));
   const holidays = (p.holidays ?? []).map((x) => {
     const n = x.startDay - v.day;
@@ -431,7 +432,7 @@ function clientsPanel({ h, v }) {
       h('td', {}, email ? `${M.backlog} ${fill(M.backlogUnit, { n: Math.round(c.backlog ?? 0) })}` : formatSec(t.asaSec)),
       h('td', {}, !email && t.offered > 0 ? fill(M.abandonedUnit, { n: t.abandoned }) : M.none),
       h('td', {}, String(Math.round(c.satisfaction))),
-      h('td', {}, t.agents.toFixed(1)),
+      h('td', {}, formatDecimal(t.agents)),
       h('td', {}, c.active ? C.active : C.ended,
         c.active && c.churnWorkdaysLeft !== null && c.churnWorkdaysLeft !== undefined
           && h('div', { class: 'warn' }, fill(C.churnWarning, { days: c.churnWorkdaysLeft }))));

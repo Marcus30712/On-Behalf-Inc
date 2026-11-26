@@ -156,7 +156,7 @@ test('formatTime, formatMoney, formatPct, formatSec', () => {
   assert.equal(formatTime(21 * 60), '21:00');
   assert.equal(formatMoney(12400), '12,400');
   assert.equal(formatMoney(-500), '-500');
-  assert.equal(formatPct(0.82), '82%');
+  assert.equal(formatPct(0.82), '82.00%');
   assert.equal(formatPct(null), '—');
   assert.equal(formatSec(14.4), '14초');
   assert.equal(formatSec(14.4), fill(UI_TEXT.metrics.asaUnit, { n: 14 }));
@@ -317,11 +317,11 @@ test('rendered money lines read right: refusals, offers and the holiday line', (
 // v1.3 channels: literal rendered strings (numbers and 예요/이에요 settle at render time).
 test('chat and email offers use their own variants, fee and target', () => {
   const chat = offer('saebyeol-bank');
-  assert.equal(chat.text, '새벽별 은행에서 채팅 상담 계약을 제안했어요. 한 사람이 채팅 두 건을 함께 받아요. 목표는 60초 안에 80%, 월 계약금은 💰 20,000이에요.');
+  assert.equal(chat.text, '새벽별 은행에서 채팅 상담 계약을 제안했어요. 한 사람이 채팅 두 건을 함께 받아요. 목표는 60초 안에 80.00%, 월 계약금은 💰 20,000이에요.');
   assert.equal(chat.choices[0].result, '새벽별 은행이 새 고객사가 돼요. 업무 배치에서 채팅을 맡을 사람을 정해 주세요.');
   assert.equal(chat.advisor, '채팅은 동시에 받으니 사람이 적어 보여도 돼요. 다만 한 건이 길어지는 건 각오해야 해요.');
   const mail = offer('solbang-books');
-  assert.equal(mail.text, '솔방울 서점에서 이메일 상담 계약을 제안했어요. 메일은 쌓아 두었다가 답해도 되지만 기한이 있어요. 목표는 영업시간 12시간 안에 90%, 월 계약금은 💰 12,000이에요.');
+  assert.equal(mail.text, '솔방울 서점에서 이메일 상담 계약을 제안했어요. 메일은 쌓아 두었다가 답해도 되지만 기한이 있어요. 목표는 영업시간 12시간 안에 90.00%, 월 계약금은 💰 12,000이에요.');
   assert.equal(mail.choices[0].result, '솔방울 서점이 새 고객사가 돼요. 업무 배치에서 메일을 맡을 사람을 정해 주세요. 아무도 없으면 메일이 계속 쌓여요.');
   assert.equal(mail.advisor, '메일은 조용히 쌓여요. 한가한 사람이 생기면 메일부터 맡겨 봐요.');
   // Channel wins over the v1.2 office-level variant; a re-offer keeps its prefix.
@@ -364,7 +364,7 @@ test('v1.3 UI_TEXT keys hold the approved copy', () => {
 
 test('the email target reads hours from openMinutes', () => {
   const out = offer('solbang-books');
-  assert.ok(out.text.includes('목표는 영업시간 12시간 안에 90%,'));
+  assert.ok(out.text.includes('목표는 영업시간 12시간 안에 90.00%,'));
 });
 
 test('no leftover braces in any new v1.3 event or variant', () => {

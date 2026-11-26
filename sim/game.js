@@ -233,6 +233,9 @@ function shiftToday(state, p, rosterShift) {
 // calls), 'task' (coaching, QA, research or training), 'lunch' (the interval
 // touches their lunch hour, v1.6), 'break' (a short break), 'idle' (on shift
 // with nothing to do) or 'off' (not at work). `breaks` is their plan today.
+// v1.8: without breaks (null) it is what the person does at the desk; the
+// view passes that as deskActivity so the card and the sprite can tell a
+// break's own minutes from the rest of a 30-minute break interval.
 function activity(state, p, rosterShift, breaks) {
   if (!onShift(state, p, state.day, state.minute)) return 'off';
   if (breaks && atLunch(state.minute, breaks)) return 'lunch';
@@ -287,6 +290,7 @@ function personView(state, p, weekday, breaksOf) {
     week: Array.from({ length: WEEKDAYS }, (_, w) => state.roster[p.id]?.[w] ?? 'off'),
     shiftToday: shiftToday(state, p, rosterShift),
     activity: personActivity,
+    deskActivity: activity(state, p, rosterShift, null),
     breaks,
     task: state.assignment[p.id] ?? null,
     // The client the person answers now: their own, or an open one they cover

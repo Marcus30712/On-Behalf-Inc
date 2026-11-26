@@ -27,6 +27,7 @@ const REPRESENTATIVE = {
   'friday-off': { data: { name: '하나', nationId: 'kamuen', fridayDay: 4 } },
   'resign-notice': { data: { name: '하나', days: 3, leaveDay: 9 } },
   candidate: { data: { cand1: '가을', cand2: '나무' } },
+  'lead-candidate': { data: { cand1: '가을', cand2: '나무', c1: 6, c2: 7.5, p1: 4.7, p2: 3 } },
   'client-offer': { data: { client: '달빛몰' }, clientId: 'dalbit-mall' },
   'backlog-warning': { clientId: 'solbang-books', data: { n: 120 } },
   'expansion-start': { data: { level: 1, days: 10 } },

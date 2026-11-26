@@ -2,7 +2,7 @@
 // panels, inbox, autosave and the game-over screen. start() is the testable
 // entry: index.html passes the browser's storage, clock and frame scheduler.
 import { createGame, act, save, load, view, SAVE_KEY } from '../sim/game.js';
-import { createClock } from './clock.js';
+import { createClock, gameMinutesFor } from './clock.js';
 import { UI_TEXT, eventText, fill } from './text.js';
 import { renderTopbar, renderMetrics } from './topbar.js';
 import { TABS, renderPanel, resetPanels, selectPerson, closePanel } from './panels.js';
@@ -368,7 +368,12 @@ export function start({ document, storage, now, requestFrame, seedSource: pickSe
       }
       collectSparkles(v, r.newEvents, t);
       if (r.newEvents.length > 0) showNewAdvice(v, r.newEvents);
-      actors = stepActors(actors, v.people, dt, undefined, v.office?.seats);
+      // v1.6: people leave their desk only during their break's own minutes, and
+      // walk at a pace that keeps up with game time (render/actors.js).
+      actors = stepActors(actors, v.people, dt, undefined, v.office?.seats, {
+        minute: clock.minuteNow,
+        rate: gameMinutesFor(1000, clock.speed, v),
+      });
       draw(v, t);
       refresh(v, t);
     }

@@ -34,6 +34,10 @@ export function createClock({ state }) {
   const clock = {
     get speed() { return speed; },
     get autoPaused() { return autoPaused; },
+    // v1.6: the game minute now, between intervals too: the sim's minute (start
+    // of the interval in progress) plus the minutes run toward it. The view
+    // shows the interval; render/actors.js uses this to time breaks.
+    get minuteNow() { return state.minute + (state.pendingMinutes ?? 0); },
     setSpeed(n) {
       if (!SPEEDS.includes(n)) return;
       speed = n;

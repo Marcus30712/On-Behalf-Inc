@@ -313,8 +313,11 @@ export function channelsVerdict(runs, keep) {
 // days) and the share of ended client-months paid in full. `better`: seeds
 // where the skilled lead has fewer abandoned calls and an equal or higher
 // service level.
+// A run's total of one daily client figure (offered, abandoned, inTarget, ...).
+const dayTotal = (r, key) => r.days.reduce((s, d) => s + Object.values(d.clients).reduce((t, c) => t + (c[key] ?? 0), 0), 0);
+
 export function leadSkillVerdict(high, low) {
-  const total = (r, key) => r.days.reduce((s, d) => s + Object.values(d.clients).reduce((t, c) => t + (c[key] ?? 0), 0), 0);
+  const total = dayTotal;
   const of = (r) => {
     const offered = total(r, 'offered');
     return {
@@ -331,7 +334,7 @@ export function leadSkillVerdict(high, low) {
 // v1.7: seeds where the play that rehired a lead dropped fewer calls than the
 // same play without a lead (both lost their lead on the same day).
 export function leadHireVerdict(rehired, without) {
-  const abandoned = (r) => r.days.reduce((s, d) => s + Object.values(d.clients).reduce((t, c) => t + (c.abandoned ?? 0), 0), 0);
+  const abandoned = (r) => dayTotal(r, 'abandoned'); // v1.8.1: shared with leadSkillVerdict
   const seeds = rehired.map((r, i) => ({ rehired: abandoned(r), without: abandoned(without[i]) }));
   return { seeds, better: seeds.filter((x) => x.rehired < x.without).length };
 }

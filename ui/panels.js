@@ -6,7 +6,7 @@
 // state (open card, notices, pending phone picks, an open expansion question)
 // for a new or loaded game.
 import { HIRE_COST, LEAD_HIRE_COST, SHIFTS, OFFICE_LEVELS, planningOf } from '../sim/game.js';
-import { nowActivity } from '../sim/away.js';
+import { nowActivity, answeringAt } from '../sim/away.js';
 import { RESEARCH } from '../world/research.js';
 import { TRAITS } from '../world/traits.js';
 import { NATIONS } from '../world/nations.js';
@@ -87,7 +87,8 @@ export function renderPanel(root, v, tab, onAct, { onClose, minuteNow } = {}) {
   const notice = h('p', { class: 'notice', role: 'status' }, noticeFor(tab, v));
   const ctx = {
     h, v,
-    minuteNow: Number.isFinite(minuteNow) ? minuteNow : v.minute,
+    // v1.8.1: a number or a function (read on every render, ctx.rerender too).
+    minuteNow: (() => { const m = typeof minuteNow === 'function' ? minuteNow() : minuteNow; return Number.isFinite(m) ? m : v.minute; })(),
     rerender: () => renderPanel(root, v, tab, onAct, { onClose, minuteNow }),
     // Focuses the first match of the selectors, in order (after a rerender).
     focus: (...sels) => sels.map((sel) => root.querySelector(sel)).find(Boolean)?.focus?.(),
@@ -136,7 +137,7 @@ function activityText(v, p, minute = v.minute) {
   const shift = SHIFTS[p.shiftToday];
   // An agent answering chat or email is not 전화 중: the channel says what they
   // do, by the client answered now (a covered client's, not their own).
-  const channel = now === 'phone' && p.task?.kind === 'phone' ? channelOf(v, p.answering ?? p.task.clientId) : 'phone';
+  const channel = now === 'phone' && p.task?.kind === 'phone' ? channelOf(v, answeringAt(p, minute) ?? p.task.clientId) : 'phone';
   if (channel !== 'phone') return UI_TEXT.channel[channel];
   if (now === 'off' && shift && v.minute < shift.start) return UI_TEXT.shift[p.shiftToday].full;
   return UI_TEXT.activity[now] ?? '';

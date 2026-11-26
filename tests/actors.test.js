@@ -261,3 +261,35 @@ test('v1.6: the clock tells the current game minute between intervals', () => {
   assert.equal(state.minute, 600);
   assert.equal(clock.minuteNow, 615);
 });
+
+// v1.8.1: while a let-go lead works out notice next to the new one, the second
+// lead waits on a free floor tile instead of sharing the lead desk.
+test('v1.8.1 two leads never share the lead desk', () => {
+  const lead = (id) => ({ id, role: 'lead', activity: 'idle', task: null, health: { kind: 'well', daysLeft: 0 } }); // at their desk
+  const targets = planTargets([lead('l1'), lead('l2')]);
+  const [a, b] = [targets.get('l1'), targets.get('l2')];
+  assert.ok(a && b, 'both have a target');
+  assert.notDeepEqual(a, b);
+  assert.ok([a, b].some((t) => t[0] === MAP.spots.leadDesk[0] && t[1] === MAP.spots.leadDesk[1]), 'one sits at the lead desk');
+});
+
+// v1.8.1: in a break interval's desk minutes, someone on a table task goes to
+// the task table (deskActivity 'task'), not their home desk.
+test('v1.8.1 desk minutes of a break interval: a table task goes to the task table', () => {
+  const p = { id: 'l1', role: 'lead', activity: 'lunch', deskActivity: 'task', task: { kind: 'coaching' },
+    breaks: { am: 600, lunch: 735, pm: 900 }, health: { kind: 'well', daysLeft: 0 } };
+  const table = MAP.spots.taskTable.map(([x, y]) => `${x},${y}`);
+  const desk = planTargets([p], MAP, undefined, { minute: 725 }).get('l1');
+  assert.ok(table.includes(`${desk[0]},${desk[1]}`), `at the task table: ${desk}`);
+  const away = planTargets([p], MAP, undefined, { minute: 740 }).get('l1');
+  assert.ok(MAP.spots.breakRoom.some(([x, y]) => x === away[0] && y === away[1]), `in the break room: ${away}`);
+});
+
+// v1.8.1 (regression guard): only the lead and QA desks seat one; people
+// heading out (the door) may share their target.
+test('v1.8.1 two people going home both head for the door', () => {
+  const off = (id, role) => ({ id, role, activity: 'off', task: null, health: { kind: 'well', daysLeft: 0 } });
+  const t = planTargets([off('l1', 'lead'), off('q1', 'qa')]);
+  const door = `${MAP.spots.door[0]},${MAP.spots.door[1]}`;
+  assert.deepEqual([t.get('l1'), t.get('q1')].map((x) => x && `${x[0]},${x[1]}`), [door, door]);
+});

@@ -20,3 +20,10 @@ export function nowActivity(person, minute) {
   });
   return away ? person.activity : (person.deskActivity ?? 'idle');
 }
+
+// v1.8.1: the client a person answers at this minute: deskAnswering in a break
+// interval's desk minutes, else answering (view.people[]).
+export function answeringAt(person, minute) {
+  const desk = nowActivity(person, minute) !== person.activity;
+  return desk ? (person.deskAnswering ?? person.answering) : person.answering;
+}

@@ -27,6 +27,8 @@ export const SAVE_KEY = 'on-behalf-inc:save:v1';
 export { SEATS, HIRE_COST } from './hiring.js';
 export { SHIFTS } from './schedule.js';
 export { seatsOf, OFFICE_LEVELS } from './office.js';
+// v1.6: a person's 스케줄링 (stored, or derived from id and name), for the card.
+export { planningOf } from './people.js';
 
 const INTERVAL = 30;
 const DAY_MINUTES = 1440;

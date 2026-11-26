@@ -147,15 +147,16 @@ test('email chip: below target warns; before the first mail it says so', () => {
 test('email chip on an unstaffed first day: the tooltip counts the mail that came in', () => {
   const s = createGame(2);
   s.clients.push({ id: 'solbang-books', satisfaction: 70, active: true });
-  // Day 0, 15:00, nobody on the mail (the final review saw 56 here at 100 mails a day; 84 now).
+  // Day 0, 15:00, nobody on the mail (the final review saw 56 here at 100 mails a day,
+  // 47 at 84; 38 at 67 since v1.6 volumes x0.8).
   advance(s, 15 * 60 - s.minute);
   const r = makeRoot();
   renderMetrics(r, view(s));
   const chip = r.querySelector('[data-client="solbang-books"]');
-  assert.ok(chip.textContent.includes('밀린 메일 47통'), chip.textContent);
+  assert.ok(chip.textContent.includes('밀린 메일 38통'), chip.textContent);
   const title = chip.getAttribute('title');
   assert.ok(!title.includes('오늘은 아직 메일이 없어요'), title);
-  assert.equal(title, '영업시간 12시간 안에 90% · 들어온 메일 47통 · 답장한 메일 0통');
+  assert.equal(title, '영업시간 12시간 안에 90% · 들어온 메일 38통 · 답장한 메일 0통');
 });
 
 test('chat chip: like the phone chip, with chat labels', () => {

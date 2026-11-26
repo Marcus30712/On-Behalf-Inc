@@ -18,6 +18,10 @@ const MET_DAY = 0.8; // share of a day's intervals at target for the day to coun
 const FEE_CUT_BELOW = 0.7; // share of met workdays in the month
 const FEE_CUT = 0.8;
 const RECENT_WORKDAYS = 20;
+// v1.6 (real breaks): S stays at 90 by measurement. Idle play holds 89.1 for 30
+// workdays in its first year on one seed, so any lower S threshold lets idle
+// reach S; offer-taking sensible play still reaches it within two years
+// (balance record, v1.6 section).
 const GRADES = [['S', 90], ['A', 75], ['B', 60], ['C', 40]];
 const CHURN_AT = 20;
 const CHURN_RECOVER_ABOVE = 40;

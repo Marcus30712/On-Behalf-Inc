@@ -839,3 +839,108 @@ PASS  sensible play that keeps service expands within 720 days on 10/10 seeds (>
 - PASS  keeping service with the chat and email clients (v1.3): both active at day 720 on 10/10 (>= 8), email backlog within two days of mail on 10/10, fees in full year 1 77.0%, year 2 68.4% (each >= 65%), mean cash 212240 vs keeping service without 204960 (>=; not poorer on 5/10, not a bar)
 + PASS  keeping service with the chat and email clients (v1.3): both active at day 720 on 10/10 (>= 8), email backlog within two days of mail on 10/10, fees in full year 1 77.0%, year 2 68.9% (each >= 65%), mean cash 215733 vs keeping service without 207240 (>=; not poorer on 6/10, not a bar)
 ```
+
+## v1.6
+
+### Task 3 — 팀장이 짜는 실제 휴식에 맞춘 재조정 (사용자 결정 2026-11-26 "현실 난이도로 기준 재설정")
+
+v1.6부터 휴식은 팀장이 정한 계획대로 승인된 시간대 안에서 잡힌다. 그래서 오전 휴식(이른 조)과 오후 휴식(늦은 조)이 한 근무조만 있는 10:00~12:00, 18:00~20:00에도 들어간다. v1.5에서는 휴식을 두 근무조가 함께 있는 12:00~18:00에만 두었다. 고객사·근무조마다 상담사가 2명이므로 이 시간대에 한 사람이 쉬면 그 고객사는 1명이 된다. 같은 콜량으로는 19개 점검 중 10개만 통과했다. 사용자 결정에 따라 콜량을 80%로 줄이고, 일할 때 쌓이는 스트레스를 조금 올리고, 실패한 기준 세 가지를 실제 휴식이 있는 게임에 맞게 다시 잡았다. 각 기준의 취지는 유지했다. 모든 값은 가상 값이다.
+
+#### 바꾼 값 (전 → 후)
+
+| 파일 | 값 | 전 → 후 | 이유 |
+|---|---|---|---|
+| `world/clients.js` | 구름다리 여행 `callsPerDay` | 100 → 80 | 모든 고객사 ×0.8(반올림). 한 근무조만 있는 시간의 휴식 때문에 같은 인원이 감당할 콜이 줄었다. |
+| `world/clients.js` | 물빛 통신 `callsPerDay` | 80 → 64 | ×0.8 |
+| `world/clients.js` | 달빛몰 `callsPerDay` | 80 → 64 | ×0.8 |
+| `world/clients.js` | 반딧불 가전 `callsPerDay` | 70 → 56 | ×0.8 |
+| `world/clients.js` | 바람개비 배달 `callsPerDay` | 60 → 48 | ×0.8 |
+| `world/clients.js` | 새벽별 은행(채팅) `callsPerDay` | 80 → 64 | ×0.8 |
+| `world/clients.js` | 솔방울 서점(이메일) `callsPerDay` | 84 → 67 | ×0.8 |
+| `sim/people.js` | `STRESS.base`(일하는 30분마다 기본 스트레스) | 1.45 → 1.55 | 콜량을 줄이니 방치해도 사람이 지치지 않았다(방치 지침 5/10). 1.55에서 10/10으로 돌아왔다. `perOccupancy`·`overload`·밤 회복은 그대로다. |
+| `tools/autoplay.js`, `tests/balance.test.js` | 계약금 전액 비율 기준(합리적 플레이 1년) | ≥ 70% → ≥ 65% | 실제 휴식 때문에 met day가 조금 줄었다(측정 69.2%). "방치보다 확실히 낫다"는 15%p 차이 조건(방치 ≤ 합리적 − 15%p)으로 그대로 지킨다. 측정 방치 15.8%. 65%는 2년 점검의 기존 기준과 같다. |
+| `tools/autoplay.js`, `tests/balance.test.js` | 서비스를 지키는 확장: 확장 안 한 판보다 가난하지 않은 시드 | ≥ 8/10 → ≥ 6/10 | 확장 1년 차에는 좌석 8개로 평일 고객사 셋을 돌린다. 실제 휴식이 가장 크게 누르는 판이다(측정 6/10). 6/10은 "대부분의 시드"의 최소다. 시드 4(−700)와 5(+900)는 거의 같아서 여유가 없다(아래 "남은 걱정"). |
+| `tools/autoplay.js`, `tests/balance.test.js` | 제안 받는 합리적 플레이의 S 이정표(offers-S) | 1년(360일) 안에 ≥ 3/10 → 2년(720일) 안에 ≥ 8/10 | 아래 "평판 S" 참고. 측정 10/10(S 달성 429~694일째). |
+| `sim/economy.js` | 평판 S 점수 기준 | 90 → 90 (그대로, 주석만 추가) | 아래 "평판 S" 참고. A(75)·B·C도 그대로다. |
+| `tests/world.test.js` | `callsPerDay` 아래 한계(테스트 범위) | 60 → 48 | 바람개비 배달이 48이 되었다. 게임 규칙이 아니라 테스트 범위다. |
+| `tests/people.test.js` | `applyWork` 식 확인 | 1.45 → 1.55 | `STRESS.base`를 따라감. |
+| `tests/channels-ui.test.js` | 이메일 칩, 첫날 15:00 밀린 메일 | 47통 → 38통 | 하루 메일이 84 → 67통이 되어 그만큼 줄었다. 시험하는 규칙(들어온 메일을 센다)은 그대로다. |
+
+바꾸지 않은 값: 승인된 휴식 시간대, 계약금, 목표, 콜 곡선, 문구, 인원·근무조, 계약금 감액 규칙(met day 70%), 평판 등급 기준(S 90, A 75, B 60, C 40), 다른 모든 점검 기준.
+
+#### 평판 S
+
+평판 점수 = 60 × 최근 met 비율 + 0.4 × 만족도 − 벌점 − 잃은 고객사마다 15(180일). S 이정표는 S 기준 이상을 30근무일 연속 유지해야 한다. 판마다 "30근무일 연속 유지한 가장 높은 점수"를 쟀다(`dailyEconomy`마다 점수를 기록한 복사본. 이정표는 게임에 영향이 없어서 기준을 바꿔도 판 흐름은 같다).
+
+| 정책 (시드 1~10) | v1.5: 1년 안 / 2년 안 S(90) | v1.6: 1년 안 / 2년 안 S(90) | v1.6 1년 안 유지 최고 점수 |
+|---|---|---|---|
+| 방치 | 0 / 5 | 0 / 4 | 77.3 ~ **89.1**(시드 1) |
+| 합리적(제안 거절) | 10 / 10 (99~137일째) | 10 / 10 (112~358일째) | 90.3 ~ 92.6 |
+| 제안 받는 합리적 | 3 / 9 (319~441일째) | 0 / 10 (429~694일째) | 72.9 ~ 87.0 |
+
+- 1년 안 offers-S를 3/10으로 되돌리려면 S 기준을 76 정도(A 바로 위)까지 내려야 한다. 그러면 방치가 1년 안에 10/10 S에 닿는다.
+- 89.1 아래로 조금만 내려도 방치가 시드 1에서 1년 안에 S에 닿는다(30근무일 동안 89.1 유지). 사용자 조건 "방치는 S에 닿지 않는다"와 맞지 않는다.
+- 기준 90 그대로도 제안 받는 합리적 플레이는 2년 안에 10/10 S에 닿는다. 사용자 조건 "드물지만 닿을 수 있다(2년 안에 몇몇 시드)"는 기준을 바꾸지 않아도 이미 맞는다.
+- 그래서 가장 작은 변경은 S 기준을 그대로 두는 것이다. offers-S 점검은 기간을 2년으로 옮기고, 측정 10/10에 여유를 둔 ≥ 8/10으로 잡았다. autoplay의 제안 받는 판은 360일에서 720일이 되었다(전체 실행 시간 345초 → 438초, 측정 한 번씩).
+- 1년 안 S가 사라진 이유: 제안 받는 판은 좌석 8개로 고객사 셋을 돌리다 한 곳을 잃는다(−15, 180일). v1.6에서는 그 1년 동안 met 비율이 낮아 유지 점수가 73~87에 머문다. 2년 차에 고객사 둘로 돌아가면 90을 넘는다.
+
+#### 시간대별 목표 달성 구간 비율 (시드 1~10 × 평일 6일, 새 게임, `/tmp/t3gen/byhour.mjs`)
+
+| 경우 | 10:00~12:00 | 12:00~18:00 | 18:00~20:00 | 하루 전체 |
+|---|---|---|---|---|
+| v1.5 (고정 휴식 묶음, 휴식은 12~18시에만) | 89.6% | 96.8% | 94.6% | 95.7% |
+| 실제 휴식, v1.5 콜량 | 46.9% | 88.0% | 53.1% | 77.2% |
+| 최종 (실제 휴식, 콜량 ×0.8, 스트레스 1.55) | 52.5% | 94.9% | 62.5% | 83.3% |
+
+한 근무조만 있는 시간은 콜량을 줄여도 거의 오르지 않는다(×0.7에서도 54% / 67%). 그 시간대의 휴식이 고객사 인원을 2명에서 1명으로 만들기 때문이다. 하루 전체 달성률은 v1.5보다 낮고, 이것이 이번 버전의 "현실 난이도"다.
+
+#### 시도한 네 가지 방법
+
+| 방법 | autoplay 통과 | 남은 실패 |
+|---|---|---|
+| 콜량만 줄이기 (×0.8; ×0.70~0.95를 훑음) | 15/19 | 방치 지침 5/10, 방치가 매 시드 더 가난함 9/10, offers-S 0/10, 확장 가난하지 않음 7/10 |
+| 콜량 ×0.8 + 스트레스 (`STRESS.base` 1.45 → 1.55; 다른 스트레스 값도 훑음) | 16/19 | 계약금 전액 69.2%(기준 70), offers-S 0/10, 확장 가난하지 않음 6/10 |
+| 중간 조 추가 (10:00 또는 10:30 시작, 이른 3 / 중간 2 / 늦은 3; ×1, ×0.8, +1.55) | 최고 12/19 | 한 사람만 있는 시간이 아침·밤 끝으로 옮겨 갈 뿐 하루 전체는 그대로(약 76% / 83%). 되돌림 |
+| 콜량 ×0.8 + 스트레스 1.55 + 기준 세 가지 재설정 (최종) | **19/19** | 없음 |
+
+#### 점검 줄 (v1.5 → v1.6)
+
+v1.5 기준선은 `/tmp/autoplay-before-t3.txt`(19/19, 271.9초), v1.6은 최종 실행(19/19, 437.9초)이다. 바뀐 줄만 적었다. 나머지 줄(합리적 플레이 지침 0/10, 1년 생존 10/10, 첫 달 30일, 방치 S 0/10, 방치 퇴사 10/10, 이메일 방치 10/10, 이메일 1명 10/10)은 글자까지 같다.
+
+```diff
+- PASS  idle wears people down within 180 days: 9/10 seeds (burnouts>=2 or game over)
++ PASS  idle wears people down within 180 days: 10/10 seeds (burnouts>=2 or game over)
+- PASS  fees paid in full: sensible 75.0% of client-months (>= 70%), idle 33.6%
++ PASS  fees paid in full: sensible 69.2% of client-months (>= 65%), idle 15.8% (<= sensible - 15)
+- PASS  default staffing mostly meets target on ordinary days, not always: 81.0%
++ PASS  default staffing mostly meets target on ordinary days, not always: 75.5%
+- PASS  Mondays and heavy days strain it: Mon 72.0% vs Tue-Thu 81.5%, heavy 45.2% vs 89.8%
++ PASS  Mondays and heavy days strain it: Mon 72.2% vs Tue-Thu 75.6%, heavy 68.8% vs 83.7%
+- PASS  sensible cash after 12 months positive with growth: min 87600, mean 97760 (start 20000)
++ PASS  sensible cash after 12 months positive with growth: min 81200, mean 93320 (start 20000)
+- PASS  research helps someone (build-done with names): 2.0 per seed
++ PASS  research helps someone (build-done with names): 2.5 per seed
+- PASS  idle ends the year with less cash than sensible on every seed: 10/10 (idle 52800 22000 34000 -1200 41600 10000 39000 -1000 48800 75400)
++ PASS  idle ends the year with less cash than sensible on every seed: 10/10 (idle 82800 56000 45200 46800 41600 84600 29200 73000 62000 73600)
+- PASS  sensible play that takes client offers still reaches the S milestone (v1.2 offers-S guard): 3/10 seeds (>= 3)
++ PASS  sensible play that takes client offers still reaches the S milestone within two years (v1.2 offers-S guard, re-based v1.6): 10/10 seeds (>= 8)
+- PASS  sensible play over two years: fees in full year 1 75.0%, year 2 86.7% (each >= 65%), game over 0/10
++ PASS  sensible play over two years: fees in full year 1 69.2%, year 2 75.4% (each >= 65%), game over 0/10
+- PASS  sensible play that keeps service expands within 720 days on 10/10 seeds (>= 8), fees in full year 1 77.4%, year 2 89.3% (each >= 65%), not poorer than without on 9/10 (>= 8)
++ PASS  sensible play that keeps service expands within 720 days on 10/10 seeds (>= 8), fees in full year 1 67.3%, year 2 89.5% (each >= 65%), not poorer than without on 6/10 (>= 6)
+- PASS  keeping service with the chat and email clients (v1.3): both active at day 720 on 10/10 (>= 8), email backlog within two days of mail on 10/10, fees in full year 1 77.0%, year 2 68.9% (each >= 65%), mean cash 215733 vs keeping service without 207240 (>=; not poorer on 6/10, not a bar)
++ PASS  keeping service with the chat and email clients (v1.3): both active at day 720 on 10/10 (>= 8), email backlog within two days of mail on 10/10, fees in full year 1 68.8%, year 2 70.9% (each >= 65%), mean cash 188486 vs keeping service without 173727 (>=; not poorer on 8/10, not a bar)
+- PASS  two email agents assigned once, no daily stand-in, keep the email client (never lost) (v1.3): 10/10 seeds (>= 8)
++ PASS  two email agents assigned once, no daily stand-in, keep the email client (never lost) (v1.3): 9/10 seeds (>= 8)
+```
+
+#### 고정 파일
+
+- `tests/fixtures/weekday-golden.json`: 계획대로 한 번 다시 만들었다(`node tests/fixtures/weekday-scenario.js > tests/fixtures/weekday-golden.json`). 골든 테스트는 `tests/weekend.test.js`의 가짜 주말 고객사를 빼고 돈다(Task 3 판정).
+- `tests/fixtures/phone-only-ui.json`: 0일째 20:00 상태의 시뮬레이션 숫자만 바뀌었다. 고객사 표·상단 지표의 서비스 레벨 81→88% / 83→88%, 평균 대기 97→44초 / 135→59초, 포기 8→3건 / 10→5건, 만족도 70→71. 사람 카드의 피로 25→23, 스트레스 47→46, 사기 62→63. 문구·사람·업무 패널과 그리기 명령은 그대로다.
+
+#### 남은 걱정
+
+- 확장 "가난하지 않음" 기준 6/10에는 여유가 없다. 시드 4(162,100 대 162,800)와 5(160,900 대 160,000)가 거의 같다. 평균 현금은 확장 쪽이 높다(173,727 대 171,680). 앞으로 작은 변경에도 5/10으로 떨어질 수 있다.
+- 합리적 플레이는 v1.5처럼 1년 안에 10/10 S에 닿는다. S가 "드문" 것은 제안을 받아 고객사를 늘린 판과 방치한 판에서다.
+- 방치한 판은 2년이 지나면 4/10 시드에서 S에 닿는다(v1.5는 5/10). 점검은 1년만 보므로 v1.5와 같은 성격이다.

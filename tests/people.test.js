@@ -100,7 +100,7 @@ test('applyWork matches the formula', () => {
   const p = bare();
   applyWork(p, { minutes: 30, occupancy: 1 });
   assert.ok(Math.abs(p.fatigue - (10 + 4)) < 1e-9);
-  assert.ok(Math.abs(p.stress - (15 + 1.45 + 1.6 + 2)) < 1e-9); // base + occupancy + overload
+  assert.ok(Math.abs(p.stress - (15 + 1.55 + 1.6 + 2)) < 1e-9); // base + occupancy + overload
 });
 
 test('values stay within 0-100', () => {

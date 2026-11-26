@@ -46,7 +46,7 @@ export function planningOf(person) {
 // Stress per 30 minutes of work: a base for a working day with customers, more
 // the busier the queue keeps the person, and a steep extra once occupancy
 // passes overloadFrom (no breathing room between calls).
-const STRESS = { base: 1.45, perOccupancy: 1.6, overload: 2, overloadFrom: 0.7 };
+const STRESS = { base: 1.55, perOccupancy: 1.6, overload: 2, overloadFrom: 0.7 };
 // A night's sleep takes off a flat amount plus a share of what is left, so
 // stress settles where the week's strain and recovery balance instead of
 // drifting without end.

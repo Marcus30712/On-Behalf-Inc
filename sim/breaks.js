@@ -202,3 +202,89 @@ export function breakLookup(state, { keep }) {
     return made;
   };
 }
+
+// ---- v1.9: the player moves today's breaks ---------------------------------
+
+const BREAK_KINDS = ['am', 'lunch', 'pm'];
+
+// Whether `person` (working `shiftId` today) may take their `kind` break at
+// `start` instead of `current`: on the 15-minute grid, neither the current nor
+// the new start before now (state.minute; equal is allowed), inside the
+// shift's window. Returns a refusal reason or null.
+function moveRefusal(state, shiftId, kind, current, start) {
+  if (!Number.isInteger(start) || start % GRID !== 0) return 'bad-break';
+  if (current < state.minute || start < state.minute) return 'break-started';
+  const shift = SHIFTS[shiftId];
+  const w = windowsFor(shift.end - shift.start)[kind];
+  if (start < shift.start + w.from || start > shift.start + w.to) return 'break-window';
+  return null;
+}
+
+// moveBreak(state, { personId, kind, start }) -> { ok } | { ok: false, reason }.
+// Edits today's kept plan (state.breaks) and marks the entry edited (today
+// only: tomorrow's plan is made new). The interval reads the kept plan, so the
+// moved break takes effect from the next interval.
+export function moveBreak(state, { personId, kind, start } = {}) {
+  const person = state.people.find((p) => p.id === personId);
+  if (!person) return { ok: false, reason: 'unknown-person' };
+  const shiftId = workingShift(state, person, state.day);
+  if (!shiftId) return { ok: false, reason: 'not-working' };
+  if (!BREAK_KINDS.includes(kind)) return { ok: false, reason: 'bad-break' };
+  const entry = breakLookup(state, { keep: true })(person, shiftId);
+  if (!entry) return { ok: false, reason: 'not-working' };
+  const reason = moveRefusal(state, shiftId, kind, entry[kind], start);
+  if (reason) return { ok: false, reason };
+  state.breaks.plan[person.id] = { ...entry, [kind]: start, edited: true };
+  return { ok: true };
+}
+
+// The 휴식표 board for today (view.breakBoard): 30-minute slots over the
+// hours today's phone and chat clients open, each with the forecast calls
+// (unrounded), the agents on a break touching it, and busy (a top-25%
+// forecast slot with two or more away); a row per person working today with
+// each break's start and whether it can move 15 minutes earlier or later;
+// who planned (by, the lead's name). Reads the state and changes nothing.
+export function breakBoard(state) {
+  const day = state.day;
+  const lookup = breakLookup(state, { keep: false });
+  const rows = [];
+  const agentsAway = [];
+  let lead = null;
+  let by = 'auto';
+  for (const p of state.people) {
+    const shiftId = workingShift(state, p, day);
+    if (!shiftId) continue;
+    const entry = lookup(p, shiftId);
+    if (!entry) continue;
+    if (entry.by === 'lead') by = 'lead';
+    if (p.role === 'lead' && !lead) lead = p.name;
+    const breaks = {};
+    for (const kind of BREAK_KINDS) {
+      const at = entry[kind];
+      breaks[kind] = {
+        start: at,
+        earlier: moveRefusal(state, shiftId, kind, at, at - GRID) === null,
+        later: moveRefusal(state, shiftId, kind, at, at + GRID) === null,
+      };
+    }
+    rows.push({ personId: p.id, breaks, edited: entry.edited === true });
+    if (p.role === 'agent') agentsAway.push(entry);
+  }
+  const defs = state.clients.filter((c) => c.active)
+    .map((c) => CLIENTS.find((d) => d.id === c.id))
+    .filter((d) => d && d.channel !== 'email' && d.hours.days.includes(dateOf(day).weekday));
+  const slots = [];
+  if (defs.length > 0) {
+    const open = Math.min(...defs.map((d) => d.hours.open));
+    const close = Math.max(...defs.map((d) => d.hours.close));
+    for (let m = open - (open % INTERVAL); m < close; m += INTERVAL) {
+      const calls = defs.reduce((sum, d) => sum + (isOpen(d, day, m) ? expectedCalls(d, day, m, state) : 0), 0);
+      const away = agentsAway.filter((e) => BREAK_KINDS.some((k) => e[k] < m + INTERVAL && e[k] + BREAK_LENGTH[k] > m)).length;
+      slots.push({ minute: m, calls, away });
+    }
+  }
+  const sorted = slots.map((x) => x.calls).sort((a, b) => b - a);
+  const bar = sorted.length > 0 ? sorted[Math.ceil(sorted.length * 0.25) - 1] : Infinity;
+  for (const x of slots) x.busy = x.calls > 0 && x.calls >= bar && x.away >= 2;
+  return { slots, rows, by: lead ? by : 'auto', lead };
+}

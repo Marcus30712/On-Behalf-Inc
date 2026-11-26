@@ -311,7 +311,7 @@ export function start({ document, storage, now, requestFrame, seedSource: pickSe
   function draw(v, t) {
     if (!ctx) return;
     drawer.drawOffice(ctx, undefined, v.research, v.office);
-    drawer.drawActors(ctx, actors, v.people, t, v.clients);
+    drawer.drawActors(ctx, actors, v.people, t, v.clients, game ? clock.minuteNow : undefined);
     drawer.drawBubbles(ctx, actors, v.people, { sparkles, timeMs: t });
   }
 

@@ -394,3 +394,12 @@ test('v1.4 new UI_TEXT keys have the exact approved text; dropped keys are gone'
   assert.equal(UI_TEXT.office.tabTip, undefined);
   assert.equal(UI_TEXT.refuse['need-previous'], undefined);
 });
+
+// v1.8: three lines from the phone-only days now cover chat and email too.
+test('v1.8 channel-neutral copy', async () => {
+  const { ADVISOR: ADVICE } = await import('../world/advisor.js');
+  const { EVENTS } = await import('../world/events.js');
+  assert.equal(UI_TEXT.task.phone.tip, '고객사의 전화·채팅·메일을 맡아요.');
+  assert.equal(ADVICE['expansion-start'][0], '공사하는 동안에도 상담은 들어와요. 배치는 평소처럼 챙겨 주세요.');
+  assert.equal(EVENTS['game-over-clients'].text, '남은 고객사가 하나도 없어요. 맡을 상담이 없어 센터는 여기서 문을 닫아요. 함께한 {days}일, 고마웠어요.');
+});

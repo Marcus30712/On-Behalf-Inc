@@ -489,3 +489,15 @@ test('same seed, same day', () => {
   };
   assert.deepEqual(run(), run());
 });
+
+test('v1.7 a lead\'s resign notice is marked as a lead\'s', () => {
+  // Off the phone the breaking events are ['no-show', 'resign-notice'].
+  const pickAt = (i) => ({ ...never, chance: (p) => p === 0.08, pick: (a) => a[i] });
+  const s = makeState({ day: 4, nations: ['veltora'] });
+  const p = s.people[0];
+  p.role = 'lead';
+  s.assignment[p.id] = { kind: 'coaching' };
+  set(p, { stress: 100, fatigue: 100 });
+  endOfDay(s, pickAt(1));
+  assert.equal(ids(s, 'resign-notice')[0].data.lead, true);
+});

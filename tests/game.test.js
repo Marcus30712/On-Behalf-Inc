@@ -449,3 +449,20 @@ test('view gives each person the client they answer and each client whether it o
   crew.forEach((p, i) => assert.equal(mon.people.find((x) => x.id === p.id).answering, own[i], `${p.id} on Monday`));
   assert.deepEqual(open(mon), { 'gureum-travel': true, 'mulbit-telecom': true, [BARAM]: false });
 });
+
+test('v1.7 lead hiring through the game: action role, view flags', () => {
+  const s = createGame(42);
+  assert.deepEqual(act(s, { type: 'startHiring', role: 'lead' }), { ok: false, reason: 'no-need' });
+  assert.equal(view(s).needsLead, false);
+  assert.equal(view(s).leadLeaving, false);
+  const lead = s.people.find((p) => p.role === 'lead');
+  s.leaving.push({ personId: lead.id, day: s.day + 10 });
+  assert.equal(view(s).needsLead, true);
+  assert.equal(view(s).leadLeaving, true);
+  assert.deepEqual(act(s, { type: 'startHiring', role: 'lead' }), { ok: true });
+  assert.equal(view(s).hiring.role, 'lead');
+  s.people = s.people.filter((p) => p !== lead);
+  s.leaving = [];
+  assert.equal(view(s).needsLead, true);
+  assert.equal(view(s).leadLeaving, false);
+});

@@ -20,6 +20,9 @@ export const ADVISOR = {
   'churn-warning': ['아직 늦지 않았어요. 그 고객사에 사람을 더 붙이고 목표부터 맞춰요.'],
   'research-done': ['연구 끝! 공사만 끝나면 바로 효과가 나요.'],
   'build-done': ['보세요, {name} 씨 얼굴이 달라졌죠? 이게 센터장님이 한 일이에요.'],
+  // v1.7: lead-candidate, and resign-notice-lead in place of resign-notice when a lead hands in notice.
+  'lead-candidate': ['휴식표는 팀장 솜씨예요. 스케줄링이 높을수록 바쁜 시간을 잘 피해서 쉬게 해요.'],
+  'resign-notice-lead': ['팀장이 떠나면 휴식표를 짤 사람이 없어요. 채용 탭에서 새 팀장을 미리 찾아 둬요.'],
   candidate: ['기술은 가르치면 늘어요. 우리 팀과 잘 맞을 사람을 골라요.'],
   'game-over-cash': ['이번엔 여기까지예요. 그래도 많이 배웠잖아요. 다시 해 봐요, 센터장님.'],
   'game-over-clients': ['고객사가 떠난 건 아프지만, 무엇이 흔들렸는지 이제 알잖아요. 다시 시작해요.'],

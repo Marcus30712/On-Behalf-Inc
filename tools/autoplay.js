@@ -106,14 +106,19 @@ const mean = (xs) => (xs.length === 0 ? 0 : xs.reduce((s, x) => s + x, 0) / xs.l
 // `leadPlanning` (v1.6): the team lead's 스케줄링 (planning) skill, set before
 // the first day (no rng draw), so the same seed can be played with a skilled
 // and an unskilled lead; null keeps the value derived from the lead.
-export function runPolicy({ seed, days, policy, acceptOffers = false, expand = false, channels = false, leadPlanning = null }) {
+// v1.7: leadLeavesDay sends the lead away on that day (let go: no withdrawing);
+// hireLead false stops sensible play from hiring a new one.
+export function runPolicy({
+  seed, days, policy, acceptOffers = false, expand = false, channels = false, leadPlanning = null,
+  leadLeavesDay = null, hireLead = true,
+}) {
   const state = createGame(seed);
   if (leadPlanning !== null) {
     const lead = state.people.find((p) => p.role === 'lead');
     lead.skills = { ...lead.skills, planning: leadPlanning };
   }
   const sensible = policy === 'sensible';
-  const plan = sensible ? sensiblePlan(view(state), acceptOffers, expand, channels) : null;
+  const plan = sensible ? { ...sensiblePlan(view(state), acceptOffers, expand, channels), hireLead } : null;
   const tally = {
     seen: 0, sick: 0, sickDays: 0, burnouts: 0, burnoutLog: [], helped: 0, clinicHelped: 0, helpedNames: [], offers: 0, builtOn: {},
     levelDay: {}, rankSDay: null, sixDay: 0, weekendDays: 0,
@@ -123,6 +128,10 @@ export function runPolicy({ seed, days, policy, acceptOffers = false, expand = f
   let known = new Set(view(state).people.map((p) => p.id));
 
   for (let d = 0; d < days && !state.gameOver; d++) {
+    if (d === leadLeavesDay) {
+      const lead = state.people.find((p) => p.role === 'lead');
+      if (lead) state.leaving.push({ personId: lead.id, day: state.day });
+    }
     let v = view(state);
     collect(v, tally);
     if (sensible) decide(state, v, plan, tally);
@@ -313,6 +322,14 @@ export function leadSkillVerdict(high, low) {
   return { seeds, better };
 }
 
+// v1.7: seeds where the play that rehired a lead dropped fewer calls than the
+// same play without a lead (both lost their lead on the same day).
+export function leadHireVerdict(rehired, without) {
+  const abandoned = (r) => r.days.reduce((s, d) => s + Object.values(d.clients).reduce((t, c) => t + (c.abandoned ?? 0), 0), 0);
+  const seeds = rehired.map((r, i) => ({ rehired: abandoned(r), without: abandoned(without[i]) }));
+  return { seeds, better: seeds.filter((x) => x.rehired < x.without).length };
+}
+
 // v1.3: seeds where the email client was lost at least once.
 export const emailLost = (runs) => runs.filter((r) => r.email.lost > 0).length;
 
@@ -434,7 +451,10 @@ function decide(state, v, plan, tally) {
     const next = plan.research.find((id) => !v.research.done.includes(id));
     if (next) act(state, { type: 'startResearch', researchId: next });
   }
-  if (agentsOf(v).length < v.office.seats && !v.hiring) act(state, { type: 'startHiring' });
+  // v1.7: a missing lead comes first; the lead does the research hours (plan.leadId).
+  if (plan.hireLead && v.needsLead && !view(state).hiring) act(state, { type: 'startHiring', role: 'lead' });
+  plan.leadId = view(state).people.find((p) => p.role === 'lead')?.id;
+  if (agentsOf(v).length < v.office.seats && !view(state).hiring) act(state, { type: 'startHiring' });
 }
 
 // v1.2: build the next office level when the cash covers it with a reserve left.
@@ -631,6 +651,7 @@ function answerInbox(state, v, plan) {
     if (e.id === 'holiday-leave') choice = 'grant';
     else if (e.id === 'resign-notice') choice = 'keep-trying';
     else if (e.id === 'candidate') choice = 'pick-1';
+    else if (e.id === 'lead-candidate') choice = e.data.p1 >= e.data.p2 ? 'pick-1' : 'pick-2'; // v1.7: the better planner
     else if (e.id === 'client-offer') {
       choice = plan.acceptOffers || (plan.expand && canStaff(v, e.clientId, plan)) ? 'accept' : 'decline';
     }
@@ -799,6 +820,8 @@ function main() {
   // v1.6: the same sensible year with the lead's 스케줄링 (planning) at 8 and at 1.
   const skilled = SEEDS.map((seed) => runPolicy({ seed, days: 360, policy: 'sensible', leadPlanning: 8 }));
   const unskilled = SEEDS.map((seed) => runPolicy({ seed, days: 360, policy: 'sensible', leadPlanning: 1 }));
+  const rehired = SEEDS.map((seed) => runPolicy({ seed, days: 360, policy: 'sensible', leadLeavesDay: 30 }));
+  const leadless = SEEDS.map((seed) => runPolicy({ seed, days: 360, policy: 'sensible', leadLeavesDay: 30, hireLead: false }));
   printRuns('idle, 360 days', idleYear);
   printRuns('sensible, 360 days', sensible);
   printRuns('sensible taking client offers, 720 days', offers);
@@ -837,6 +860,8 @@ function main() {
   const kept = emailKept(pair);
   const dayList = (runs, key) => runs.map((r) => r[key] ?? '-').join(' ');
   const lead = leadSkillVerdict(skilled, unskilled);
+  const rehire = leadHireVerdict(rehired, leadless);
+  console.log('lead leaves day 30, rehired/without (v1.7): abandoned', rehire.seeds.map((x) => `${x.rehired}/${x.without}`).join(' '));
   const pair2 = (f) => lead.seeds.map((s) => `${f(s.high)}/${f(s.low)}`).join(' ');
 
   console.log('\nfirst month, default roster (idle): met-share by weekday Mon..Fri',
@@ -918,6 +943,8 @@ function main() {
     // dropped calls): same seeds, lead planning 8 against 1 (10/10 measured).
     check(lead.better >= 8,
       `a skilled lead (planning 8) has fewer abandoned calls and an equal or higher service level than an unskilled one (planning 1) on the same seeds (v1.6): ${lead.better}/10 seeds (>= 8)`),
+    check(rehire.better >= 8,
+      `after the lead leaves (day 30), rehiring a lead drops fewer calls than going without (v1.7): ${rehire.better}/10 seeds (>= 8)`),
   ];
   console.log(`\n${results.filter(Boolean).length}/${results.length} checks pass (${((Date.now() - t0) / 1000).toFixed(1)} s)`);
   if (!results.every(Boolean)) process.exitCode = 1;

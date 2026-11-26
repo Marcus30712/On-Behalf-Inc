@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   runPolicy, wornDown, idleYearVerdict, fullFeeShare, expansionVerdict, channelsVerdict, emailLost, emailStruggles, emailKept,
-  leadSkillVerdict,
+  leadSkillVerdict, leadHireVerdict,
 } from '../tools/autoplay.js';
 
 const SEEDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
@@ -211,4 +211,14 @@ test('two email agents assigned once keep the email client', () => {
   const n = emailKept(pair);
   const met = pair.map((r) => (r.email.met === null ? '-' : r.email.met.toFixed(2)));
   assert.ok(n >= 8, `never lost on ${n}/10: lost ${pair.map((r) => r.email.lost).join(' ')}, met ${met.join(' ')}`);
+});
+
+// v1.7: the lead leaves on day 30. Sensible play that hires a new lead (the
+// candidate with the higher planning) drops fewer calls over the year than the
+// same play without one, on the same seeds.
+test('rehiring a lead after the lead leaves drops fewer calls than going without (v1.7)', () => {
+  const rehired = SEEDS.map((seed) => runPolicy({ seed, days: 360, policy: 'sensible', leadLeavesDay: 30 }));
+  const without = SEEDS.map((seed) => runPolicy({ seed, days: 360, policy: 'sensible', leadLeavesDay: 30, hireLead: false }));
+  const v = leadHireVerdict(rehired, without);
+  assert.ok(v.better >= 8, `better on ${v.better}/10: abandoned ${v.seeds.map((x) => `${x.rehired}/${x.without}`).join(' ')}`);
 });

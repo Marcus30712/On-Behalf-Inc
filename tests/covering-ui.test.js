@@ -191,3 +191,20 @@ test('person card: the assigned client and the covered client are separated by "
   const text = [...c.querySelectorAll(`[data-card="${crew[0].id}"] dd`)].map((d) => d.textContent).find((t) => t.includes('돕는 중'));
   assert.equal(text, '상담 응대 · 구름다리 여행 · 바람개비 배달 돕는 중');
 });
+
+// v1.8.1: in a break interval's desk minutes a covering agent answers the
+// client they cover (deskAnswering), not their own closed one.
+test('v1.8.1 deskAnswering names the covered client during a break interval', () => {
+  const { s, crew } = weekendGame(SAT, 540);
+  let seen = false;
+  for (let m = 540; m < 1080 && !seen; m += 30) {
+    advance(s, m - s.minute);
+    const p = view(s).people.find((x) => x.id === crew[0].id);
+    if (p.activity !== 'lunch' && p.activity !== 'break') continue;
+    if (p.deskActivity !== 'phone') continue;
+    assert.equal(p.answering, p.task.clientId, 'on a break interval: the assigned client');
+    assert.equal(p.deskAnswering, BARAM, 'at the desk: the covered client');
+    seen = true;
+  }
+  assert.ok(seen, 'a break interval with desk minutes on the phone');
+});

@@ -225,7 +225,7 @@ export function start({ document, storage, now, requestFrame, seedSource: pickSe
     if (!tab) { roots.panel.replaceChildren(); return; }
     // v1.8: the people list follows break minutes (15-minute slots), so the
     // panel also redraws when the clock enters a new slot.
-    keepFocus(roots.panel, () => renderPanel(roots.panel, v, tab, onAct, { onClose: () => openTab(null), minuteNow: clock.minuteNow }), keyboardFocus);
+    keepFocus(roots.panel, () => renderPanel(roots.panel, v, tab, onAct, { onClose: () => openTab(null), minuteNow: () => clock.minuteNow }), keyboardFocus);
     keys.panel = panelKey(v);
   }
 

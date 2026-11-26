@@ -7,7 +7,7 @@
 import { MAP, tileAt } from './map.js';
 import { SPRITES, PALETTES, FACILITY_TILES, personLook, personSprite, personPhase } from './sprites.js';
 import { UI_TEXT } from '../ui/text.js';
-import { nowActivity } from '../sim/away.js';
+import { nowActivity, answeringAt } from '../sim/away.js';
 
 export const SCALE = 3;
 export const TILE_PX = 16 * SCALE;
@@ -354,7 +354,7 @@ export function createDrawer(makeCanvas = defaultMakeCanvas) {
       if (name === 'sitBack') blit(ctx, 'chairRest', px, py + PERSON_LIFT); // the chair back is nearer than they are
       if (p.role === 'qa' && !back) blit(ctx, 'lanyard', px, py);
       if (p.role !== 'agent' || nowActivity(p, minute) !== 'phone') continue;
-      const mark = CHANNEL_MARKS[channelOf.get(p.answering ?? p.task?.clientId)];
+      const mark = CHANNEL_MARKS[channelOf.get(answeringAt(p, minute) ?? p.task?.clientId)];
       if (mark) marks.set(p.id, mark);
       else blit(ctx, back ? 'headsetBack' : 'headset', px, py);
     }

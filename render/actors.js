@@ -99,6 +99,12 @@ export function planTargets(people, map = MAP, seats = baseSeats(map), { minute,
     }
     const spot = !offSite(p) && p.activity === 'task' && TABLE_TASKS.has(p.task?.kind) ? tableIdx++ : 0;
     const t = targetFor(p, slot, spot, map, seats);
+    // v1.8.1: the lead and QA desks seat one; a second lead (working out
+    // notice next to the new one) waits on the floor nearby.
+    if (t && p.role !== 'agent' && taken.has(key(t))) {
+      overflow.push([p.id, t]);
+      continue;
+    }
     if (t) {
       targets.set(p.id, t);
       taken.add(key(t));

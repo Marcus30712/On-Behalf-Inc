@@ -409,3 +409,35 @@ test('v1.8 the people list follows break minutes inside a break interval', () =>
   renderPanel(root, { ...v, people: [noPlan] }, 'people', () => ({ ok: true }), { minuteNow: 725 });
   assert.ok(root.textContent.includes(UI_TEXT.activity.lunch), 'no plan (old save): as the sim says');
 });
+
+// v1.8.1: desk minutes of a break interval show the covered client's channel.
+test('v1.8.1 the people list names the covered channel in desk minutes', () => {
+  const base = view(createGame(11));
+  const chat = { id: 'bandi-chat', satisfaction: 70, active: true, channel: 'chat' };
+  const p = {
+    ...base.people.find((x) => x.role === 'agent'), activity: 'lunch', deskActivity: 'phone',
+    task: { kind: 'phone', clientId: base.clients[0].id }, answering: base.clients[0].id, deskAnswering: chat.id,
+    breaks: { am: 600, lunch: 735, pm: 900 },
+  };
+  const v = { ...base, minute: 720, people: [p], clients: [...base.clients, chat] };
+  const root = makeRoot();
+  renderPanel(root, v, 'people', () => ({ ok: true }), { minuteNow: 725 });
+  assert.ok(root.querySelector(`[data-person="${p.id}"]`).textContent.includes(UI_TEXT.channel.chat));
+});
+
+// v1.8.1: minuteNow may be a function, read on every render, so a rerender
+// after a click shows the clock's minute then, not the first render's.
+test('v1.8.1 a rerender after a click reads the clock again', () => {
+  const base = view(createGame(11));
+  const p = { ...base.people.find((x) => x.role === 'agent'), activity: 'lunch', deskActivity: 'phone', breaks: { am: 600, lunch: 735, pm: 900 } };
+  const other = base.people.find((x) => x.role === 'lead');
+  const v = { ...base, minute: 720, people: [p, other] };
+  let clock = 725;
+  const root = makeRoot();
+  renderPanel(root, v, 'people', () => ({ ok: true }), { minuteNow: () => clock });
+  assert.ok(root.querySelector(`[data-person="${p.id}"]`).textContent.includes(UI_TEXT.activity.phone));
+  click(root.querySelector(`[data-person="${other.id}"]`)); // opens the card (a rerender)
+  clock = 740;
+  click(root.querySelector('button.back')); // back to the list (a rerender): lunch has begun
+  assert.ok(root.querySelector(`[data-person="${p.id}"]`).textContent.includes(UI_TEXT.activity.lunch));
+});

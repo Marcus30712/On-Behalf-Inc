@@ -291,6 +291,9 @@ function personView(state, p, weekday, breaksOf) {
     shiftToday: shiftToday(state, p, rosterShift),
     activity: personActivity,
     deskActivity: activity(state, p, rosterShift, null),
+    // v1.8.1: the client answered in a break interval's desk minutes (a
+    // covered open client, like answering for someone on the phone now).
+    deskAnswering: answeringNow(state, p, activity(state, p, rosterShift, null)),
     breaks,
     task: state.assignment[p.id] ?? null,
     // The client the person answers now: their own, or an open one they cover
@@ -330,6 +333,7 @@ function inboxRank(e) {
 // A frozen copy of what the screen shows. Text is left to the screen.
 export function view(state) {
   const date = dateOf(state.day);
+  const leadNeeded = needsLead(state); // v1.7; computed once (v1.8.1)
   const current = RESEARCH.find((r) => r.id === state.research.current);
   const inbox = state.inbox
     .map((e, index) => ({ ...e, index }))
@@ -354,8 +358,8 @@ export function view(state) {
     },
     hiring: state.hiring,
     // v1.7: needsLead opens lead hiring; leadLeaving says why while a lead still works.
-    needsLead: needsLead(state),
-    leadLeaving: needsLead(state) && state.people.some((p) => p.role === 'lead'),
+    needsLead: leadNeeded,
+    leadLeaving: leadNeeded && state.people.some((p) => p.role === 'lead'),
     office: officeView(state),
     // weekend: an active client opens on Saturday or Sunday (roster shows those days).
     flags: { weekend: isCenterOpenWeekday(state, 5) || isCenterOpenWeekday(state, 6) },

@@ -15,7 +15,6 @@ export const CANVAS_H = MAP.height * TILE_PX; // 576
 
 const U = SCALE; // one sprite pixel on screen
 const OUTLINE = PALETTES.office.O;
-const WALK_FRAME_MS = 160;
 const SPARKLE_MS = 3000;
 const STRESS_ALERT = 80;
 const CHANNEL_MARKS = { chat: '💬', email: '✉️' }; // phone keeps the headset sprite
@@ -310,7 +309,8 @@ export function createDrawer(makeCanvas = defaultMakeCanvas) {
     const tx = Math.round(a.x);
     const ty = Math.round(a.y);
     if (moving) {
-      const frame = Math.floor((timeMs + personPhase(p.id)) / WALK_FRAME_MS) % 2;
+      // One leg swap per tile walked (not per clock tick): fast walks do not slide.
+      const frame = (Math.floor(a.x + a.y) + personPhase(p.id)) % 2;
       return { name: frame ? 'walkB' : 'walkA', back: false };
     }
     if (tileAt(MAP, tx, ty) === 'C') {

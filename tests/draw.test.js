@@ -162,6 +162,27 @@ test('a person in a lower row is drawn after a person in the row above', () => {
   assert.ok(ids.findIndex((i) => aa.includes(i)) > ids.findIndex((i) => za.includes(i)), JSON.stringify(ids));
 });
 
+// v1.6 fix: the walk frame follows the distance walked, one swap per tile, so
+// a fast walk does not slide (and a standing-still clock never changes it).
+test('the walking frame depends on distance travelled, not on time', () => {
+  const { drawer, ctx } = setup();
+  const people = [person('p1', 'agent', 'idle')];
+  const frameAt = (x, timeMs) => {
+    ctx.ops.length = 0;
+    drawer.drawActors(ctx, [{ id: 'p1', x, y: 5, path: [[x + 3, 5]], target: [x + 3, 5], gone: false }], people, timeMs, []);
+    const drawn = ctx.ops.filter((o) => o[0] === 'drawImage').map((o) => o[1]);
+    return ['walkA', 'walkB'].findIndex((pose) => drawn.includes(drawer.personCanvas(people[0], pose).id));
+  };
+  const same = frameAt(4.1, 0);
+  assert.ok(same >= 0, 'a walking pose is drawn');
+  for (const t of [160, 320, 1000, 5000]) assert.equal(frameAt(4.1, t), same, `time ${t}`);
+  assert.equal(frameAt(4.9, 777), same, 'same tile, same frame');
+  const next = frameAt(5.1, 0);
+  assert.notEqual(next, same, 'one tile on: the other frame');
+  assert.equal(frameAt(5.1, 9999), next);
+  assert.equal(frameAt(6.1, 0), same, 'two tiles on: back again');
+});
+
 test('a click on the head (above the tile) picks the person; above the head does not', () => {
   const actors = [seated('back', [3, 5]), seated('front', [3, 6])];
   const x = 3 * TILE_PX + 8 * U;

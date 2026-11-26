@@ -105,6 +105,27 @@ test('a re-plan for someone who was moved is made once per day, not on every loo
   assert.notEqual(breakLookup(s, { keep: false })(s.people[0], 'late'), again);
 });
 
+// The cache key must name each person: swapping one agent for another with the
+// same shift and client (as a replaced hire would) must not serve the old plan.
+test('a plan cached for one person is not served after a same-position swap', () => {
+  const s = createGame(5);
+  advance(s, 30);
+  const i = s.people.findIndex((p) => p.role === 'agent' && shiftOf(s, p.id));
+  const old = s.people[i];
+  const shiftId = shiftOf(s, old.id);
+  // Both carry a (kept) plan entry that does not fit, so the lookup plans afresh.
+  act(s, { type: 'setRoster', personId: old.id, weekday: 0, shift: shiftId === 'late' ? 'early' : 'late' });
+  const lookup = () => breakLookup(s, { keep: false });
+  const first = lookup()(old, shiftId === 'late' ? 'early' : 'late');
+  assert.ok(first, 'planned for the old person');
+  const fresh = { ...old, id: 'swap1' };
+  s.people[i] = fresh;
+  s.roster.swap1 = s.roster[old.id];
+  s.assignment.swap1 = s.assignment[old.id];
+  const entry = lookup()(fresh, shiftId === 'late' ? 'early' : 'late');
+  assert.ok(entry, 'the new person gets an entry of their own');
+});
+
 test('breaks move only work shares, never the game rng: a day of intervals draws the same with any plan', () => {
   const run = (shift) => {
     const s = createGame(5);
@@ -160,6 +181,31 @@ test('lead away on weekdays: breaks by auto and one breaks-auto event a weekday,
   }
   assert.deepEqual(autoEvents(s).map((e) => e.day), [0, 1, 2, 3, 4, 7, 8]);
   assert.equal(autoEvents(s)[0].personId, undefined);
+});
+
+test('I1: a lead who is away on a weekday gives exactly one notice that day', () => {
+  const s = createGame(5);
+  leadOf(s).health = { kind: 'sick', daysLeft: 1 };
+  for (let k = 0; k < 20; k++) { advance(s, 30); view(s); }
+  assert.equal(s.day, 0);
+  assert.equal(autoEvents(s).length, 1);
+  assert.equal(autoEvents(s)[0].day, 0);
+  for (const e of Object.values(s.breaks.plan)) assert.equal(e.by, 'auto');
+});
+
+test('I1: with no lead at all breaks are still planned by auto, but no notice comes on any day', () => {
+  const s = createGame(5);
+  const lead = leadOf(s);
+  s.people = s.people.filter((p) => p !== lead);
+  delete s.roster[lead.id];
+  delete s.assignment[lead.id];
+  for (let d = 0; d < 8; d++) {
+    for (let k = 0; k < 48; k++) { advance(s, 30); view(s); }
+    const entries = Object.values(s.breaks.plan);
+    if (dateOf(s.breaks.day).weekday < 5) assert.ok(entries.length > 0, `day ${s.breaks.day} has a plan`);
+    for (const e of entries) assert.equal(e.by, 'auto', `day ${s.breaks.day}`);
+  }
+  assert.deepEqual(autoEvents(s), []);
 });
 
 test('lead present: by lead and no event; a lead back from sick leave plans again', () => {

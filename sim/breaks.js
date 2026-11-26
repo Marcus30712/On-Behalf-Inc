@@ -176,7 +176,7 @@ export function ensureBreakPlan(state) {
 // skill.
 const freshPlans = new WeakMap();
 function freshPlan(state) {
-  const key = `${state.day}|${state.clients.filter((c) => c.active).map((c) => c.id).join()}|${state.people.map((p) => `${workingShift(state, p, state.day) ?? '-'}:${JSON.stringify(state.assignment[p.id] ?? null)}:${p.role === 'lead' ? planningOf(p) : ''}`).join()}`;
+  const key = `${state.day}|${state.clients.filter((c) => c.active).map((c) => c.id).join()}|${state.people.map((p) => `${p.id}=${workingShift(state, p, state.day) ?? '-'}:${JSON.stringify(state.assignment[p.id] ?? null)}:${p.role === 'lead' ? planningOf(p) : ''}`).join()}`;
   const cached = freshPlans.get(state);
   if (cached?.key === key) return cached.plan;
   const plan = planBreaks(state, state.day);

@@ -241,15 +241,18 @@ function planSpikes(state, rng) {
 
 // v1.6 start of a day: today's break plan (sim/breaks.js), made after the
 // night's health, absence and leave updates (endOfDay), or lazily for a new
-// game or a save without one. On a weekday with no lead at work the breaks
-// fall at random (by 'auto'): one breaks-auto notice that day. Never at the
-// weekend, and nothing when the day already has its plan.
+// game or a save without one. On a weekday when the team has a lead who is
+// away (sick, absent, on leave or off) the breaks fall at random (by 'auto'):
+// one breaks-auto notice that day. With no lead at all the breaks are random
+// too, but there is no notice: it would repeat for ever with nothing to do
+// about it. Never at the weekend, and nothing when the day already has its plan.
 const BREAKS_AUTO = 'breaks-auto';
 export function startDay(state) {
   if (state.gameOver || !ensureBreakPlan(state)) return;
   const entries = Object.values(state.breaks.plan);
   if (dateOf(state.day).weekday >= 5 || entries.length === 0) return;
   if (!entries.every((e) => e.by === 'auto')) return;
+  if (!state.people.some((p) => p.role === 'lead')) return;
   if ((state.inbox ?? []).some((e) => e.id === BREAKS_AUTO && e.day === state.day)) return;
   pushEvent(state, { id: BREAKS_AUTO });
 }

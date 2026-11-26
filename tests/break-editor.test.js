@@ -132,3 +132,20 @@ test('v1.9 through the game: the action, the view, and a v1.8 save', () => {
   assert.ok(loaded, 'a v1.8 save (no edited) loads');
   assert.equal(view(loaded).breakBoard.rows.length, breakBoard(s).rows.length);
 });
+
+// v1.9 (final review): "now" is the screen clock (state.minute + pendingMinutes):
+// a break the player already sees as started, or a start already past on
+// screen, cannot be chosen.
+test('v1.9 now is the screen minute, pending minutes included', () => {
+  const { s, agent } = game();
+  const { first } = winOf(s, agent, 'am'); // 10:00 for the early shift
+  assert.deepEqual(moveBreak(s, { personId: agent.id, kind: 'am', start: first + 15 }), { ok: true }); // am at 10:15
+  advance(s, first + 20 - s.minute); // 10:20 on screen
+  assert.equal(s.minute + (s.pendingMinutes ?? 0), first + 20);
+  assert.ok((s.pendingMinutes ?? 0) > 0, 'the sim minute is behind the screen inside an interval');
+  assert.deepEqual(moveBreak(s, { personId: agent.id, kind: 'am', start: first + 90 }), { ok: false, reason: 'break-started' }, 'already away on screen');
+  const other = s.people.find((p) => p.role === 'agent' && p.id !== agent.id && workingShift(s, p, s.day) === 'early'
+    && s.breaks.plan[p.id]?.am > first + 30);
+  assert.deepEqual(moveBreak(s, { personId: other.id, kind: 'am', start: first + 15 }), { ok: false, reason: 'break-started' }, 'a start already past on screen');
+  assert.deepEqual(moveBreak(s, { personId: other.id, kind: 'am', start: first + 30 }), { ok: true }, 'the next quarter-hour is fine');
+});

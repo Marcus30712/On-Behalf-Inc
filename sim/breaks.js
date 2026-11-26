@@ -210,10 +210,15 @@ const BREAK_KINDS = ['am', 'lunch', 'pm'];
 // Whether `person` (working `shiftId` today) may take their `kind` break at
 // `start` instead of `current`: on the 15-minute grid, neither the current nor
 // the new start before now (state.minute; equal is allowed), inside the
-// shift's window. Returns a refusal reason or null.
+// shift's window. Returns a refusal reason or null. Now is state.minute plus
+// state.pendingMinutes (what the clock shows).
 function moveRefusal(state, shiftId, kind, current, start) {
   if (!Number.isInteger(start) || start % GRID !== 0) return 'bad-break';
-  if (current < state.minute || start < state.minute) return 'break-started';
+  // "Now" is the screen clock: the sim minute plus the minutes of the running
+  // interval already shown (v1.9 final review), so nothing started or past on
+  // screen moves.
+  const now = state.minute + (state.pendingMinutes ?? 0);
+  if (current < now || start < now) return 'break-started';
   const shift = SHIFTS[shiftId];
   const w = windowsFor(shift.end - shift.start)[kind];
   if (start < shift.start + w.from || start > shift.start + w.to) return 'break-window';

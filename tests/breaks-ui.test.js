@@ -109,7 +109,8 @@ test('the people list shows 점심 중 for someone at lunch', () => {
   const p = v.people[0];
   p.activity = 'lunch';
   const root = makeRoot();
-  renderPanel(root, v, 'people', () => ({ ok: true }));
+  // v1.8: 점심 중 during the person's own lunch minutes (sim/away.js).
+  renderPanel(root, v, 'people', () => ({ ok: true }), { minuteNow: p.breaks?.lunch ?? v.minute });
   const row = root.querySelector(`[data-person="${p.id}"]`);
   assert.ok(row.textContent.includes('점심 중'), row.textContent);
 });

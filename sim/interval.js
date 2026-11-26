@@ -12,6 +12,7 @@ import { stepBacklog, newBacklog } from './backlog.js';
 import { dateOf, holidaysOn } from './calendar.js';
 import { ahtFor, applyWork, applyRest, traitMul, traitAdd } from './people.js';
 import { onShift, workShare, rosteredDays } from './schedule.js';
+import { breakLookup } from './breaks.js';
 import { CLIENTS } from '../world/clients.js';
 import { NATIONS } from '../world/nations.js';
 
@@ -29,7 +30,8 @@ const PROGRESS_KINDS = ['coaching', 'qa', 'research', 'training'];
 // A morning rise to 0.037 at 10:30-11:00, a lunch dip at 12:30 (0.035), the day's
 // peak at 15:00 (0.067) and a second one at 17:00 (0.065) while both shifts
 // are on, then an evening tail. Shaped to the default roster: one shift alone
-// before 12:00 and after 18:00, breaks staggered over 12:00-18:00.
+// before 12:00 and after 18:00, breaks staggered over 12:00-18:00 (the fixed
+// break groups before v1.6; since then the lead's day plan, sim/breaks.js).
 export const CURVE = [
   28, 33, 35, 37, 37, 35, // 09:00-12:00
   48, 35, 42, 44,         // 12:00-14:00
@@ -175,24 +177,6 @@ export function answeringClient(state, assignment, day, minute) {
   return state.clients.find((c) => openNow(c.id))?.id;
 }
 
-// Break group (0 or 1) per person: phone agents of the same client and shift
-// alternate in state.people order, so a pair never breaks together. Everyone
-// else is group 0 (missing from the map). shiftOf(person) gives today's shift;
-// clientOf(person) the client answered now (default: the assigned client).
-export function breakGroups(state, shiftOf, clientOf) {
-  const seen = new Map();
-  const groups = new Map();
-  for (const p of state.people) {
-    const a = state.assignment[p.id];
-    if (a?.kind !== 'phone') continue;
-    const key = `${(clientOf && clientOf(p)) ?? a.clientId}/${shiftOf(p)}`;
-    const n = seen.get(key) ?? 0;
-    seen.set(key, n + 1);
-    groups.set(p.id, n % 2);
-  }
-  return groups;
-}
-
 function todayEntry(state, id) {
   state.today ??= { clients: {} };
   state.today.clients ??= {};
@@ -217,8 +201,10 @@ export function stepInterval(state, rng) {
     const shiftOf = (p) => state.roster[p.id]?.[dateOf(day).weekday];
     // The client each phone agent answers now (their own, or a stand-in while theirs is closed).
     const answering = new Map(state.people.map((p) => [p.id, answeringClient(state, state.assignment[p.id], day, minute)]));
-    const groups = breakGroups(state, shiftOf, (p) => answering.get(p.id));
-    const shareOf = (p) => workShare(minute, shiftOf(p), groups.get(p.id) ?? 0);
+    // v1.6: each person's breaks from today's plan (sim/breaks.js), made and
+    // kept here if the day has none yet. Only asked for people on shift.
+    const breaksOf = breakLookup(state, { keep: true });
+    const shareOf = (p) => workShare(minute, shiftOf(p), breaksOf(p, shiftOf(p)));
 
     // Phone staff per open client.
     const staff = new Map(open.map((o) => [o.def.id, []]));

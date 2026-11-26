@@ -13,6 +13,33 @@ const A = CLIENTS[0]; // veltora
 const B = CLIENTS[1]; // kamuen
 const flat = { next: () => 0.5 }; // wobble exactly 1
 
+// v1.6: breaks come from the day plan (state.breaks). These tests keep the
+// pre-v1.6 fixed break times as an explicit plan: group 0 or 1 by client and
+// shift in people order (phone agents alternate), everyone else group 0.
+const OLD_BREAKS = {
+  early: [[H(12), H(13), H(16)], [H(12, 30), H(14), H(16, 30)]],
+  late: [[H(13), H(16), H(17, 30)], [H(13, 30), H(15), H(17)]],
+};
+function oldPlan(s) {
+  const seen = new Map();
+  const plan = {};
+  const weekday = dateOf(s.day).weekday;
+  for (const p of s.people) {
+    const shift = s.roster[p.id]?.[weekday];
+    if (!OLD_BREAKS[shift]) continue;
+    const a = s.assignment[p.id];
+    let group = 0;
+    if (a?.kind === 'phone') {
+      const key = `${a.clientId}/${shift}`;
+      group = (seen.get(key) ?? 0) % 2;
+      seen.set(key, (seen.get(key) ?? 0) + 1);
+    }
+    const [am, lunch, pm] = OLD_BREAKS[shift][group];
+    plan[p.id] = { am, lunch, pm, by: 'lead' };
+  }
+  return { day: s.day, plan };
+}
+
 // Roster: agents alternate early/late; a0..a3 are 4 phone agents on client A.
 function makeState({ day = 0, minute = H(12), phoneA = 4, phoneB = 0 } = {}) {
   const rng = createRng(7);
@@ -26,12 +53,14 @@ function makeState({ day = 0, minute = H(12), phoneA = 4, phoneB = 0 } = {}) {
     if (i < phoneA) assignment[p.id] = { kind: 'phone', clientId: A.id };
     else if (i < phoneA + phoneB) assignment[p.id] = { kind: 'phone', clientId: B.id };
   });
-  return {
+  const s = {
     day, minute, people, roster: defaultRoster(people), absences: [], assignment,
     clients: [A, B].map((c) => ({ id: c.id, satisfaction: 70, active: true })),
     mods: {}, progress: { coaching: 0, qa: 0, research: 0, training: 0 },
     today: { clients: {} }, spikes: [], inbox: [],
   };
+  s.breaks = oldPlan(s);
+  return s;
 }
 
 test('curve has 24 weights summing to 1 with a morning and an afternoon peak', () => {
@@ -220,8 +249,8 @@ test('client satisfaction moves over days, not single intervals', () => {
   assert.ok(70 - afterDay[4] >= 25, `one bad week: ${afterDay[4]}`);
 });
 
-test('two agents on the same client and shift take their breaks at different times', () => {
-  // Client A: a0 (group 0) and a2 (group 1) early, a1 (group 0) and a3 (group 1) late.
+test('two agents on the same client and shift with different plans break at different times', () => {
+  // Client A: a0 (old group 0) and a2 (group 1) early, a1 (group 0) and a3 (group 1) late.
   const at = (minute) => {
     const s = makeState({ day: 1, minute, phoneA: 4 });
     return stepInterval(s, flat).clients[A.id].agents;

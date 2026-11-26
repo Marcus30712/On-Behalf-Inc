@@ -4,6 +4,8 @@ import { findPath, tilesByDistance } from './path.js';
 export const WALK_SPEED = 3; // tiles per second
 
 const TABLE_TASKS = new Set(['coaching', 'research', 'training']);
+// v1.6: lunch is spent in the break room too.
+const BREAK_ROOM = new Set(['break', 'lunch']);
 const key = (p) => `${p[0]},${p[1]}`;
 
 function offSite(person) {
@@ -21,7 +23,7 @@ export function targetFor(person, slotIndex = 0, spotIndex = 0, map = MAP, seats
   const home = person.role === 'lead' ? s.leadDesk
     : person.role === 'qa' ? s.qaDesk
     : slotIndex < seats ? s.seats[slotIndex] ?? null : null;
-  if (person.activity === 'break') return s.breakRoom[spotIndex] ?? null;
+  if (BREAK_ROOM.has(person.activity)) return s.breakRoom[spotIndex] ?? null;
   if (person.activity === 'task') {
     const kind = person.task?.kind;
     if (TABLE_TASKS.has(kind)) return s.taskTable[spotIndex] ?? null;
@@ -48,7 +50,7 @@ export function planTargets(people, map = MAP, seats = baseSeats(map)) {
     const slot = p.role === 'agent' ? seat++ : 0;
     let spot = 0;
     if (!offSite(p)) {
-      if (p.activity === 'break') spot = breakIdx++;
+      if (BREAK_ROOM.has(p.activity)) spot = breakIdx++;
       else if (p.activity === 'task' && TABLE_TASKS.has(p.task?.kind)) spot = tableIdx++;
     }
     const t = targetFor(p, slot, spot, map, seats);
@@ -56,7 +58,7 @@ export function planTargets(people, map = MAP, seats = baseSeats(map)) {
       targets.set(p.id, t);
       taken.add(key(t));
     } else {
-      const area = p.activity === 'break' ? s.breakRoom[0]
+      const area = BREAK_ROOM.has(p.activity) ? s.breakRoom[0]
         : p.activity === 'task' && TABLE_TASKS.has(p.task?.kind) ? s.taskTable[0]
         : s.seats[0];
       overflow.push([p.id, area]);

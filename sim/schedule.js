@@ -42,21 +42,6 @@ export function rosteredDays(state, personId) {
 }
 
 const INTERVAL = 30;
-// Automatic breaks as [offset from shift start, length], in minutes, per shift
-// and break group. All breaks fall in 12:00-18:00, while both shifts are on,
-// so the hours one shift covers alone (09:00-12:00, 18:00-21:00) keep every
-// person. Two people on the same shift and client are put in different groups
-// (sim/interval.js), so they never break at the same time.
-//   early group 0: 12:00 (15), lunch 13:00, 16:00 (15)
-//   early group 1: 12:30 (15), lunch 14:00, 16:30 (15)
-//   late group 0:  13:00 (15), lunch 16:00, 17:30 (15)
-//   late group 1:  13:30 (15), lunch 15:00, 17:00 (15)
-const BREAKS = {
-  early: [[[180, 15], [240, 60], [420, 15]], [[210, 15], [300, 60], [450, 15]]],
-  late: [[[60, 15], [240, 60], [330, 15]], [[90, 15], [180, 60], [300, 15]]],
-};
-// The weekend shift has the early shift's hours, so the same breaks.
-BREAKS.weekend = BREAKS.early;
 
 const overlap = (a0, a1, b0, b1) => Math.max(0, Math.min(a1, b1) - Math.max(a0, b0));
 
@@ -79,41 +64,43 @@ export function defaultRoster(people) {
 // v1.6 break lengths, in minutes (sim/breaks.js places them).
 export const BREAK_LENGTH = { am: 15, lunch: 60, pm: 15 };
 
-// The person's breaks as [start, length] in minutes since midnight: from a
-// day plan `{ am, lunch, pm }` (sim/breaks.js), or else from the fixed break
-// group (0 or 1), kept until the plan is wired in (v1.6 Task 3).
-function breaksOf(shiftId, planOrGroup) {
-  if (planOrGroup && typeof planOrGroup === 'object') {
-    return Object.entries(BREAK_LENGTH).map(([kind, length]) => {
-      const start = planOrGroup[kind];
-      // A missing or bad break would quietly turn the work share into NaN.
-      if (!Number.isFinite(start)) throw new TypeError(`break plan: ${kind} is ${start}`);
-      return [start, length];
-    });
-  }
-  const start = SHIFTS[shiftId].start;
-  const plans = BREAKS[shiftId];
-  return (plans[planOrGroup ?? 0] ?? plans[0]).map(([offset, length]) => [start + offset, length]);
+// The person's breaks as [start, length] in minutes since midnight, from
+// their day plan `{ am, lunch, pm }` (sim/breaks.js; v1.6 removed the fixed
+// break groups). A missing plan or break throws instead of quietly turning the
+// work share into NaN.
+function breaksOf(plan) {
+  if (!plan || typeof plan !== 'object') throw new TypeError(`break plan: ${plan}`);
+  return Object.entries(BREAK_LENGTH).map(([kind, length]) => {
+    const start = plan[kind];
+    if (!Number.isFinite(start)) throw new TypeError(`break plan: ${kind} is ${start}`);
+    return [start, length];
+  });
 }
 
 // Share (0, 0.5 or 1) of the 30-minute interval starting at `minute` actually
-// worked, given the person's day plan `{ am, lunch, pm }`, or else break
-// group 0 (default) or 1.
-export function workShare(minute, shiftId, plan = 0) {
+// worked on `shiftId`, given the person's day plan `{ am, lunch, pm }`.
+export function workShare(minute, shiftId, plan) {
   const shift = SHIFTS[shiftId];
   if (!shift) return 0;
   const end = minute + INTERVAL;
   let worked = overlap(minute, end, shift.start, shift.end);
-  for (const [b0, length] of breaksOf(shiftId, plan)) {
+  for (const [b0, length] of breaksOf(plan)) {
     worked -= overlap(minute, end, b0, b0 + length);
   }
   return Math.max(0, worked) / INTERVAL;
 }
 
-export function onBreak(minute, shiftId, plan = 0) {
+// On a break (short or lunch) in the interval starting at `minute`, inside the shift.
+export function onBreak(minute, shiftId, plan) {
   const shift = SHIFTS[shiftId];
   if (!shift || minute < shift.start || minute >= shift.end) return false;
   return workShare(minute, shiftId, plan) < 1;
+}
+
+// The interval starting at `minute` overlaps the plan's lunch hour.
+export function atLunch(minute, plan) {
+  return Number.isFinite(plan?.lunch)
+    && overlap(minute, minute + INTERVAL, plan.lunch, plan.lunch + BREAK_LENGTH.lunch) > 0;
 }
 
 // On shift: the center opens that day, the person is well and not absent, and

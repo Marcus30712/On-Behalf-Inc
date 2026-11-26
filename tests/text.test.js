@@ -31,6 +31,7 @@ const REPRESENTATIVE = {
   'backlog-warning': { clientId: 'solbang-books', data: { n: 120 } },
   'expansion-start': { data: { level: 1, days: 10 } },
   'expansion-done': { data: { level: 2, seats: 16 } },
+  'breaks-auto': {},
 };
 
 test('every event id in EVENTS renders without leftover braces', () => {

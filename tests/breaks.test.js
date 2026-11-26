@@ -141,9 +141,8 @@ test('workShare with a plan: a 15-minute break halves its own interval only, lun
   assert.equal(workShare(H(15) + 30, 'early', plan), 0.5);
   assert.equal(workShare(H(16), 'early', plan), 1);
   assert.equal(workShare(H(18), 'early', plan), 0, 'outside the shift');
-  // Without a plan, the old fixed groups (kept until Task 3).
-  assert.equal(workShare(H(12), 'early'), 0.5);
-  assert.equal(workShare(H(12) + 30, 'early', 1), 0.5);
+  // Without a plan there are no fixed groups any more (v1.6 Task 3).
+  assert.throws(() => workShare(H(12), 'early'), TypeError);
 });
 
 test('the plan is deterministic for a state and day, and leaves the game rng alone', () => {

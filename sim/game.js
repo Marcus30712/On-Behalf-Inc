@@ -4,8 +4,9 @@
 import { newGame, serialize, deserialize } from './state.js';
 import { restoreRng } from './rng.js';
 import { dateOf, upcomingHolidays, holidaysOn, DAYS_PER_MONTH, isCompanyWorkday } from './calendar.js';
-import { stepInterval, breakGroups, answeringClient, channelOf } from './interval.js';
-import { endOfDay } from './day.js';
+import { stepInterval, answeringClient, channelOf } from './interval.js';
+import { endOfDay, startDay } from './day.js';
+import { breakLookup, workingShift } from './breaks.js';
 import { backlogCount } from './backlog.js';
 import { advanceResearch, advanceBuild, startResearch } from './research.js';
 import { dailyEconomy, monthEnd, reputation } from './economy.js';
@@ -13,7 +14,7 @@ import { advanceHiring, startHiring } from './hiring.js';
 import { advanceExpansion, startExpansion, officeView } from './office.js';
 import { resolveEvent } from './events.js';
 import {
-  SHIFTS, isAbsent, onShift, onBreak, isCenterOpen, isCenterOpenWeekday, shiftRunsOn,
+  SHIFTS, isAbsent, onShift, onBreak, atLunch, isCenterOpen, isCenterOpenWeekday, shiftRunsOn,
 } from './schedule.js';
 import { EVENTS } from '../world/events.js';
 import { CLIENTS } from '../world/clients.js';
@@ -40,12 +41,14 @@ export function createGame(seed) {
 // Moves the clock on by `minutes` in 30-minute steps; a remainder under 30 is
 // kept in state.pendingMinutes and added to the next call, so many small calls
 // add up. Returns the minutes actually simulated (a multiple of 30).
-// Each step: interval, research, build. At midnight: end of day; on a day the
-// center opened (Mon-Fri, and Sat-Sun with an active weekend client) then the
-// daily economy, and on Mon-Fri hiring and expansion (v1.4: company timers
-// skip the weekend); on a month's last day the month end.
+// Each step: the day's start if it has not run (v1.6 break plan: a new game
+// or a save without one), interval, research, build. At midnight: end of day;
+// on a day the center opened (Mon-Fri, and Sat-Sun with an active weekend
+// client) then the daily economy, and on Mon-Fri hiring and expansion (v1.4:
+// company timers skip the weekend); on a month's last day the month end.
 // Nothing moves once the game is over; a game that ends at midnight stays on
-// its last day (minute 1440).
+// its last day (minute 1440). After midnight the next day starts (its break
+// plan), so the plan sees the night's health, absence and leave updates.
 export function advance(state, minutes) {
   if (state.gameOver) return 0;
   const asked = Number.isFinite(minutes) && minutes > 0 ? minutes : 0;
@@ -56,6 +59,7 @@ export function advance(state, minutes) {
   let done = 0;
   for (; done < steps; done++) {
     if (state.gameOver) break; // the game is frozen (builds too)
+    startDay(state);
     stepInterval(state, rng);
     advanceResearch(state);
     advanceBuild(state, INTERVAL);
@@ -75,6 +79,7 @@ export function advance(state, minutes) {
     if (state.gameOver) { done++; break; }
     state.day += 1;
     state.minute = 0;
+    startDay(state);
   }
   if (state.gameOver) state.pendingMinutes = 0;
   state.rngState = rng.state();
@@ -141,10 +146,14 @@ export function save(state, storage) {
   }
 }
 
+// A save without today's break plan (v1.5 and older, or a bad one) gets it
+// here, as at the start of its day.
 export function load(storage) {
   try {
     const text = storage.getItem(SAVE_KEY);
-    return text === null ? null : deserialize(text);
+    const state = text === null ? null : deserialize(text);
+    if (state) startDay(state);
+    return state;
   } catch {
     return null;
   }
@@ -218,11 +227,13 @@ function shiftToday(state, p, rosterShift) {
 }
 
 // What the person does in the interval starting now: 'phone' (answering
-// calls), 'task' (coaching, QA, research or training), 'break', 'idle' (on
-// shift with nothing to do) or 'off' (not at work).
-function activity(state, p, rosterShift, group) {
+// calls), 'task' (coaching, QA, research or training), 'lunch' (the interval
+// touches their lunch hour, v1.6), 'break' (a short break), 'idle' (on shift
+// with nothing to do) or 'off' (not at work). `breaks` is their plan today.
+function activity(state, p, rosterShift, breaks) {
   if (!onShift(state, p, state.day, state.minute)) return 'off';
-  if (onBreak(state.minute, rosterShift, group)) return 'break';
+  if (breaks && atLunch(state.minute, breaks)) return 'lunch';
+  if (breaks && onBreak(state.minute, rosterShift, breaks)) return 'break';
   const a = state.assignment[p.id];
   if (a?.kind === 'phone') {
     // Their own client, or an open one while theirs is closed (sim/interval.js).
@@ -249,10 +260,13 @@ function answeringNow(state, p, activityNow) {
   return answeringClient(state, a, state.day, state.minute) ?? a.clientId;
 }
 
-function personView(state, p, weekday, groups) {
+function personView(state, p, weekday, breaksOf) {
   const rosterShift = state.roster[p.id]?.[weekday] ?? 'off';
-  const breakGroup = groups.get(p.id) ?? 0;
-  const personActivity = activity(state, p, rosterShift, breakGroup);
+  // v1.6: today's breaks { am, lunch, pm, by } (minutes since midnight) for
+  // someone who works today; null when they do not.
+  const working = workingShift(state, p, state.day);
+  const breaks = working ? breaksOf(p, working) ?? null : null;
+  const personActivity = activity(state, p, rosterShift, breaks);
   return {
     id: p.id,
     name: p.name,
@@ -270,7 +284,7 @@ function personView(state, p, weekday, groups) {
     week: Array.from({ length: WEEKDAYS }, (_, w) => state.roster[p.id]?.[w] ?? 'off'),
     shiftToday: shiftToday(state, p, rosterShift),
     activity: personActivity,
-    breakGroup,
+    breaks,
     task: state.assignment[p.id] ?? null,
     // The client the person answers now: their own, or an open one they cover
     // while theirs is closed (sim/interval.js), only while they are on the
@@ -313,14 +327,14 @@ export function view(state) {
   const inbox = state.inbox
     .map((e, index) => ({ ...e, index }))
     .sort((a, b) => inboxRank(a) - inboxRank(b) || b.index - a.index);
-  const groups = breakGroups(state, (p) => state.roster[p.id]?.[date.weekday],
-    (p) => answeringClient(state, state.assignment[p.id], state.day, state.minute));
+  // Today's kept plan, or one planned for the view alone (nothing is changed).
+  const breaksOf = breakLookup(state, { keep: false });
   return freeze(structuredClone({
     day: state.day,
     minute: state.minute,
     date: { ...date, weekdayLabel: PLANET.weekdays[date.weekday] },
     clients: state.clients.map((c) => clientView(state, c)),
-    people: state.people.map((p) => personView(state, p, date.weekday, groups)),
+    people: state.people.map((p) => personView(state, p, date.weekday, breaksOf)),
     inbox,
     cash: state.cash,
     reputation: reputation(state),

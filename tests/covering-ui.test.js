@@ -151,7 +151,7 @@ test('metrics: a weekday client shows 오늘 휴무 on Saturday and the 아직 f
 // v1.4 final fix I1: the per-client count in the tasks panel is "now": people on the
 // phone count under the client they answer, the others under their assignment.
 test('tasks header: on Saturday the weekend client count equals its 돕는 중 rows', () => {
-  const { s } = weekendGame(SAT, 600);
+  const { s } = weekendGame(SAT, 540); // 09:00: v1.6 breaks start at 10:00 at the earliest
   const v = view(s);
   const r = makeRoot();
   renderPanel(r, v, 'tasks', () => ({ ok: true }));

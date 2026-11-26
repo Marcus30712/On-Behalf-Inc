@@ -165,6 +165,7 @@ export const UI_TEXT = {
     "phone": "전화 중",
     "task": "업무 중",
     "break": "쉬는 중",
+    "lunch": "점심 중",
     "idle": "대기",
     "off": "퇴근"
   },

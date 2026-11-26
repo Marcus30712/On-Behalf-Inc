@@ -17,6 +17,16 @@
 // comes from a day-seeded rng of its own, so planning never moves the game
 // rng. With no lead on shift that day q = 0 (breaks fall at random) and `by`
 // is 'auto'.
+//
+// v1.6 Task 3: the game keeps only today's plan, state.breaks = { day, plan },
+// made at the start of each day (sim/day.js startDay, after the night's
+// health, absence and leave updates), or lazily by the first interval or view
+// of a new game or of a save without one. Someone put on a shift after the
+// plan was made (a roster change during the day) gets their breaks planned
+// when first needed.
+//
+// Import cycle: sim/interval.js imports breakLookup from here and this file
+// imports the forecast from there; both only call each other at run time.
 import { createRng } from './rng.js';
 import { dateOf } from './calendar.js';
 import { SHIFTS, BREAK_LENGTH, onShift, shiftRunsOn } from './schedule.js';
@@ -56,7 +66,7 @@ export function dayRng(state, day) {
 // at their own shift start). For the lead this is "present" (ruling): the plan
 // is made at day start whatever the lead's shift, so a late-shift lead also
 // plans the morning (as if made the day before).
-function shiftToday(state, person, day) {
+export function workingShift(state, person, day) {
   const { weekday } = dateOf(day);
   const shiftId = state.roster[person.id]?.[weekday];
   if (!shiftRunsOn(shiftId, weekday)) return undefined;
@@ -69,7 +79,7 @@ function shiftToday(state, person, day) {
 export function planBreaks(state, day, rngForDay = dayRng(state, day)) {
   const working = [];
   for (const p of state.people) {
-    const shiftId = shiftToday(state, p, day);
+    const shiftId = workingShift(state, p, day);
     if (shiftId) working.push({ person: p, shift: SHIFTS[shiftId] });
   }
   const lead = working.find((w) => w.person.role === 'lead')?.person;
@@ -135,4 +145,44 @@ export function planBreaks(state, day, rngForDay = dayRng(state, day)) {
     plan[person.id] = { ...entry, by };
   }
   return plan;
+}
+
+// True when `entry` is a well-formed plan entry whose breaks all lie inside
+// the hours of `shiftId`, so a plan made before a shift change (early to late
+// or back: the am break or the pm break falls outside) is not reused.
+export function fitsShift(entry, shiftId) {
+  const shift = SHIFTS[shiftId];
+  if (!shift || !entry || typeof entry !== 'object') return false;
+  return Object.entries(BREAK_LENGTH).every(([kind, length]) => Number.isFinite(entry[kind])
+    && entry[kind] >= shift.start && entry[kind] + length <= shift.end);
+}
+
+// Today's stored plan, or undefined when state.breaks is missing or for another day.
+const storedPlan = (state) => (state.breaks?.day === state.day ? state.breaks.plan : undefined);
+
+// Makes and keeps today's plan when none is kept for state.day (only today's
+// is kept). Returns true when it made one.
+export function ensureBreakPlan(state) {
+  if (storedPlan(state)) return false;
+  state.breaks = { day: state.day, plan: planBreaks(state, state.day) };
+  return true;
+}
+
+// (person, shiftId) => today's { am, lunch, pm, by } for someone working
+// `shiftId` today. The kept entry when it fits the shift; otherwise planned
+// now (planBreaks once per lookup). keep: true (the interval) keeps today's
+// plan and any entry planned now in state.breaks; keep: false (the view)
+// changes nothing.
+export function breakLookup(state, { keep }) {
+  if (keep) ensureBreakPlan(state);
+  const plan = storedPlan(state);
+  let now;
+  return (person, shiftId) => {
+    const entry = plan?.[person.id];
+    if (fitsShift(entry, shiftId)) return entry;
+    now ??= planBreaks(state, state.day);
+    const made = now[person.id];
+    if (keep && made) plan[person.id] = made;
+    return made;
+  };
 }

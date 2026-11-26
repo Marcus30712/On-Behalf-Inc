@@ -4,7 +4,9 @@
 // all of it: R9 fields, Task 9 (absences, spikes, leaving, lastEndedDay,
 // reputationPenalty, history), Task 10 (research, mods, flags) and Task 11
 // (cash, hiring, nextId, churn, offerStreak, offered, milestones, gameOver),
-// and the game's pendingMinutes.
+// and the game's pendingMinutes. v1.6 state.breaks = { day, plan } (today's
+// break plan, sim/breaks.js) is the exception: a new game has none until its
+// first interval or load makes it (sim/game.js), and saves without it load.
 import { createRng } from './rng.js';
 import { createPerson } from './people.js';
 import { defaultRoster } from './schedule.js';
@@ -101,6 +103,13 @@ function hasShape(value, type) {
   return typeof value === type;
 }
 
+// A saved break plan (v1.6): { day, plan: { [id]: { am, lunch, pm, by } } }.
+const BREAK_KINDS = ['am', 'lunch', 'pm'];
+const isBreakEntry = (e) => hasShape(e, 'object') && BREAK_KINDS.every((k) => Number.isFinite(e[k]))
+  && (e.by === 'lead' || e.by === 'auto');
+const isBreakPlan = (b) => hasShape(b, 'object') && Number.isFinite(b.day) && hasShape(b.plan, 'object')
+  && Object.values(b.plan).every(isBreakEntry);
+
 const knownResearch = (id) => RESEARCH.some((r) => r.id === id);
 const knownClient = (id) => CLIENTS.some((c) => c.id === id);
 const isPerson = (p) => hasShape(p, 'object') && typeof p.id === 'string' && ROLES.includes(p.role)
@@ -137,6 +146,8 @@ export function deserialize(text) {
       if (!Number.isFinite(e.openMin)) e.openMin = 0;
       if (!Number.isFinite(e.carry)) e.carry = 0;
     }
+    // v1.6: a malformed break plan is dropped; the game makes today's again on load.
+    if ('breaks' in s && !isBreakPlan(s.breaks)) delete s.breaks;
     // v1.1 saves: offered held bare ids; they count as offered on the day the save is loaded.
     s.offered = s.offered.map((o) => (typeof o === 'string' ? { id: o, day: s.day } : o));
     return s;

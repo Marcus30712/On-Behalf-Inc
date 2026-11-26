@@ -150,3 +150,14 @@ test('stepActors walks a 12th agent to its expansion seat when 12 seats are open
   for (let t = 0; t < 20000; t += 100) closed = stepActors(closed, people, 100);
   assert.ok(!at(closed[11], s.seats[11]));
 });
+
+test('v1.6: lunch goes to the break room too, sharing its spots with breaks', () => {
+  assert.deepEqual(targetFor(person({ activity: 'lunch' }), 0, 1), s.breakRoom[1]);
+  const people = [person({ activity: 'lunch' }), person({ activity: 'break' }), person({ activity: 'lunch' })];
+  const targets = planTargets(people);
+  people.forEach((p, i) => assert.deepEqual(targets.get(p.id), s.breakRoom[i]));
+  const crowd = Array.from({ length: 6 }, (_, i) => person({ activity: i % 2 ? 'lunch' : 'break' }));
+  const overflow = planTargets(crowd);
+  const inRoom = crowd.filter((p) => s.breakRoom.some((b) => b[0] === overflow.get(p.id)[0] && b[1] === overflow.get(p.id)[1]));
+  assert.equal(inRoom.length, 4);
+});

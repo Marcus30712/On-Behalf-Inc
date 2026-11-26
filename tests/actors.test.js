@@ -284,3 +284,12 @@ test('v1.8.1 desk minutes of a break interval: a table task goes to the task tab
   const away = planTargets([p], MAP, undefined, { minute: 740 }).get('l1');
   assert.ok(MAP.spots.breakRoom.some(([x, y]) => x === away[0] && y === away[1]), `in the break room: ${away}`);
 });
+
+// v1.8.1 (regression guard): only the lead and QA desks seat one; people
+// heading out (the door) may share their target.
+test('v1.8.1 two people going home both head for the door', () => {
+  const off = (id, role) => ({ id, role, activity: 'off', task: null, health: { kind: 'well', daysLeft: 0 } });
+  const t = planTargets([off('l1', 'lead'), off('q1', 'qa')]);
+  const door = `${MAP.spots.door[0]},${MAP.spots.door[1]}`;
+  assert.deepEqual([t.get('l1'), t.get('q1')].map((x) => x && `${x[0]},${x[1]}`), [door, door]);
+});

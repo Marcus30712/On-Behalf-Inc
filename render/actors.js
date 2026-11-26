@@ -101,7 +101,8 @@ export function planTargets(people, map = MAP, seats = baseSeats(map), { minute,
     const t = targetFor(p, slot, spot, map, seats);
     // v1.8.1: the lead and QA desks seat one; a second lead (working out
     // notice next to the new one) waits on the floor nearby.
-    if (t && p.role !== 'agent' && taken.has(key(t))) {
+    const singleDesk = t && [s.leadDesk, s.qaDesk].some((d) => key(d) === key(t));
+    if (singleDesk && taken.has(key(t))) {
       overflow.push([p.id, t]);
       continue;
     }

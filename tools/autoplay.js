@@ -52,7 +52,8 @@
 // client; also the v1.2 brief's offers-S guard, two years since v1.6), both
 // expanding policies over 720 days, and
 // keeping service with channels, staffed, unstaffed, with one uncovered
-// email agent and with two email agents assigned once, over 720 days (v1.3).
+// email agent and with two email agents assigned once, over 720 days (v1.3),
+// and sensible play for a year with the lead's planning at 8 and at 1 (v1.6).
 import { pathToFileURL } from 'node:url';
 import { createGame, advance, act, view, SHIFTS } from '../sim/game.js';
 import { CLIENTS } from '../world/clients.js';
@@ -102,8 +103,15 @@ const mean = (xs) => (xs.length === 0 ? 0 : xs.reduce((s, x) => s + x, 0) / xs.l
 // 'pair', also research the chat and mail desks and take both channel
 // clients; 'nostaff' leaves the email client without anyone, 'single' gives
 // it one uncovered agent, 'pair' two (see the policy notes above).
-export function runPolicy({ seed, days, policy, acceptOffers = false, expand = false, channels = false }) {
+// `leadPlanning` (v1.6): the team lead's 스케줄링 (planning) skill, set before
+// the first day (no rng draw), so the same seed can be played with a skilled
+// and an unskilled lead; null keeps the value derived from the lead.
+export function runPolicy({ seed, days, policy, acceptOffers = false, expand = false, channels = false, leadPlanning = null }) {
   const state = createGame(seed);
+  if (leadPlanning !== null) {
+    const lead = state.people.find((p) => p.role === 'lead');
+    lead.skills = { ...lead.skills, planning: leadPlanning };
+  }
   const sensible = policy === 'sensible';
   const plan = sensible ? sensiblePlan(view(state), acceptOffers, expand, channels) : null;
   const tally = {
@@ -284,6 +292,27 @@ export function channelsVerdict(runs, keep) {
   };
 }
 
+// v1.6 lead skill: the same seeds played with a skilled lead (`high`) and an
+// unskilled one (`low`), seed by seed. Per run: abandoned calls, the service
+// level (calls answered within the target over calls offered, all clients and
+// days) and the share of ended client-months paid in full. `better`: seeds
+// where the skilled lead has fewer abandoned calls and an equal or higher
+// service level.
+export function leadSkillVerdict(high, low) {
+  const total = (r, key) => r.days.reduce((s, d) => s + Object.values(d.clients).reduce((t, c) => t + (c[key] ?? 0), 0), 0);
+  const of = (r) => {
+    const offered = total(r, 'offered');
+    return {
+      abandoned: total(r, 'abandoned'),
+      sl: offered > 0 ? total(r, 'inTarget') / offered : 0,
+      fees: r.feeMonths.total > 0 ? r.feeMonths.full / r.feeMonths.total : 0,
+    };
+  };
+  const seeds = high.map((r, i) => ({ high: of(r), low: of(low[i]) }));
+  const better = seeds.filter((s) => s.high.abandoned < s.low.abandoned && s.high.sl >= s.low.sl).length;
+  return { seeds, better };
+}
+
 // v1.3: seeds where the email client was lost at least once.
 export const emailLost = (runs) => runs.filter((r) => r.email.lost > 0).length;
 
@@ -326,6 +355,8 @@ function recordDay(v, tally) {
     if (c.today.intervalsMetRate === null) continue;
     clients[c.id] = {
       met: c.today.intervalsMetRate, offered: c.today.offered, abandoned: c.today.abandoned,
+      // v1.6: calls answered within the target (service level x offered).
+      inTarget: (c.today.serviceLevel ?? 0) * c.today.offered,
       agents: c.today.agents, satisfaction: c.satisfaction,
       ...(c.channel === 'email' ? { backlog: c.backlog } : {}),
     };
@@ -765,6 +796,9 @@ function main() {
   const noStaff = SEEDS.map((seed) => runPolicy({ seed, days: 720, policy: 'sensible', expand: 'keep', channels: 'nostaff' }));
   const single = SEEDS.map((seed) => runPolicy({ seed, days: 720, policy: 'sensible', expand: 'keep', channels: 'single' }));
   const pair = SEEDS.map((seed) => runPolicy({ seed, days: 720, policy: 'sensible', expand: 'keep', channels: 'pair' }));
+  // v1.6: the same sensible year with the lead's 스케줄링 (planning) at 8 and at 1.
+  const skilled = SEEDS.map((seed) => runPolicy({ seed, days: 360, policy: 'sensible', leadPlanning: 8 }));
+  const unskilled = SEEDS.map((seed) => runPolicy({ seed, days: 360, policy: 'sensible', leadPlanning: 1 }));
   printRuns('idle, 360 days', idleYear);
   printRuns('sensible, 360 days', sensible);
   printRuns('sensible taking client offers, 720 days', offers);
@@ -775,6 +809,8 @@ function main() {
   printRuns('keeping service with the chat and email clients, nobody on the email, 720 days (v1.3)', noStaff);
   printRuns('keeping service with the chat and email clients, one email agent and no cover, 720 days (v1.3)', single);
   printRuns('keeping service with the chat and email clients, two email agents assigned once, no cover, 720 days (v1.3)', pair);
+  printRuns('sensible, lead planning 8, 360 days (v1.6)', skilled);
+  printRuns('sensible, lead planning 1, 360 days (v1.6)', unskilled);
 
   const target = 0.8;
   const worn = idle.filter((r) => wornDown(r, 180)).length;
@@ -800,6 +836,8 @@ function main() {
   const strained = emailStruggles(single);
   const kept = emailKept(pair);
   const dayList = (runs, key) => runs.map((r) => r[key] ?? '-').join(' ');
+  const lead = leadSkillVerdict(skilled, unskilled);
+  const pair2 = (f) => lead.seeds.map((s) => `${f(s.high)}/${f(s.low)}`).join(' ');
 
   console.log('\nfirst month, default roster (idle): met-share by weekday Mon..Fri',
     start.byWeekday.map(pct).join(' '), `| heavy days ${pct(start.heavy)} (${start.heavyDays}) vs ordinary ${pct(start.normal)}`);
@@ -825,6 +863,8 @@ function main() {
       '| largest email backlog / mails a day', runs.map((r) => `${Math.round(r.email.maxBacklog)}/${Math.round(r.email.perDay)}`).join(' '),
       '| fees in full year 1', pct(fullFeeShare(runs, 0, 360)), 'year 2', pct(fullFeeShare(runs, 360, 720)));
   }
+  console.log('lead planning 8/1 (v1.6): abandoned', pair2((x) => x.abandoned), '| service level', pair2((x) => pct(x.sl)),
+    '| fees in full', pair2((x) => pct(x.fees)));
   console.log('');
 
   const results = [
@@ -874,6 +914,10 @@ function main() {
     check(lostEmail >= 8, `an email client nobody answers is lost (v1.3): ${lostEmail}/10 seeds (>= 8)`),
     check(strained >= 8, `one email agent with no cover struggles (lost, or email met under 90%) (v1.3): ${strained}/10 seeds (>= 8)`),
     check(kept >= 8, `two email agents assigned once, no daily stand-in, keep the email client (never lost) (v1.3): ${kept}/10 seeds (>= 8)`),
+    // Added in v1.6 (design: a lead who schedules breaks badly costs SLA and
+    // dropped calls): same seeds, lead planning 8 against 1 (10/10 measured).
+    check(lead.better >= 8,
+      `a skilled lead (planning 8) has fewer abandoned calls and an equal or higher service level than an unskilled one (planning 1) on the same seeds (v1.6): ${lead.better}/10 seeds (>= 8)`),
   ];
   console.log(`\n${results.filter(Boolean).length}/${results.length} checks pass (${((Date.now() - t0) / 1000).toFixed(1)} s)`);
   if (!results.every(Boolean)) process.exitCode = 1;

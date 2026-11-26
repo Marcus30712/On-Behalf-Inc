@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   runPolicy, wornDown, idleYearVerdict, fullFeeShare, expansionVerdict, channelsVerdict, emailLost, emailStruggles, emailKept,
+  leadSkillVerdict,
 } from '../tools/autoplay.js';
 
 const SEEDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
@@ -73,6 +74,18 @@ test('hands-off play rarely reaches S even in two years', () => {
   const runs = SEEDS.map((seed) => runPolicy({ seed, days: 720, policy: 'idle' }));
   const n = runs.filter((r) => r.rankS).length;
   assert.ok(n <= 4, `idle reached the S milestone within 720 days on ${n}/10 seeds`);
+});
+
+// v1.6 (design: a lead who schedules breaks badly costs SLA and dropped calls):
+// the same seeds of sensible play for a year with the lead's 스케줄링 (planning)
+// set to 8 and to 1. The skilled lead has fewer abandoned calls and an equal or
+// higher service level on at least 8 of 10 seeds (10/10 measured).
+test('a skilled lead loses fewer calls than an unskilled one on the same seeds', () => {
+  const high = SEEDS.map((seed) => runPolicy({ seed, days: 360, policy: 'sensible', leadPlanning: 8 }));
+  const low = SEEDS.map((seed) => runPolicy({ seed, days: 360, policy: 'sensible', leadPlanning: 1 }));
+  const v = leadSkillVerdict(high, low);
+  const show = (k) => v.seeds.map((s) => `${k === 'sl' ? (s.high.sl * 100).toFixed(2) : s.high[k]}/${k === 'sl' ? (s.low.sl * 100).toFixed(2) : s.low[k]}`).join(' ');
+  assert.ok(v.better >= 8, `better on ${v.better}/10: abandoned ${show('abandoned')}, SL ${show('sl')}`);
 });
 
 // The brief's offers-S guard for v1.2 ("제안 수락 sensible의 S 이정표가 v1.1(3/10)보다

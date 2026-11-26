@@ -30,8 +30,8 @@ function withWeekendClient(seed = 11) {
 
 // ---- office section in the hiring tab ----------------------------------------
 
-test('the office section lives in the hiring tab; there are still seven tabs', () => {
-  assert.equal(TABS.length, 7);
+test('the office section lives in the hiring tab; no office tab (v1.9: eight tabs with 휴식표)', () => {
+  assert.equal(TABS.length, 8); // v1.9 adds 'breaks'
   assert.ok(!TABS.includes('office'));
   const state = createGame(11);
   const root = makeRoot();

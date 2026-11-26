@@ -3,7 +3,7 @@
 import { HIRE_COST, SHIFTS } from '../sim/game.js';
 import { CLIENTS } from '../world/clients.js';
 import { UI_TEXT, fill } from './text.js';
-import { formatDate, formatTime, formatMoney, formatPct, formatSec, formatTarget, hasChannels, channelLabel } from './format.js';
+import { formatDate, formatTime, formatMoney, formatDecimal, formatPct, formatSec, formatTarget, hasChannels, channelLabel } from './format.js';
 import { SPEEDS } from './clock.js';
 import { builder } from './dom.js';
 import { EVENTS } from '../world/events.js';
@@ -99,7 +99,7 @@ export function renderMetrics(root, v) {
     const share = email ? c.onTime ?? null : t.serviceLevel;
     const below = share !== null && share * 100 < c.slTarget.pct;
     const abandoned = t.offered > 0 ? fill(M.abandonedUnit, { n: t.abandoned }) : M.none;
-    const target = h('small', { class: 'target' }, `(${M.target} ${c.slTarget.pct}%)`);
+    const target = h('small', { class: 'target' }, `(${M.target} ${formatDecimal(c.slTarget.pct)}%)`);
     const numbers = email
       ? [h('span', {}, `${M.backlog} ${fill(M.backlogUnit, { n: Math.round(c.backlog ?? 0) })}`),
         h('span', {}, `${M.onTime} ${formatPct(share)} `, target)]
@@ -114,7 +114,7 @@ export function renderMetrics(root, v) {
     h('strong', {}, c.name),
     label,
     numbers,
-    h('span', {}, `${M.satisfaction} ${Math.round(c.satisfaction)}`),
+    h('span', {}, `${M.satisfaction} ${formatDecimal(c.satisfaction)}`),
     below && h('span', { class: 'warn' }, M.belowTarget));
   });
   // From five clients on the chips use the compact form (smaller type, tighter

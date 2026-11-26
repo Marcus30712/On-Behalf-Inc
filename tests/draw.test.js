@@ -38,9 +38,6 @@ function setup() {
 
 const draws = (ctx, canvasId) => ctx.ops.filter((o) => o[0] === 'drawImage' && o[1] === canvasId);
 
-// The pre-v1.5 drawer put a 16x16 sprite's top 3 sprite pixels above the tile.
-const OLD_TOP = (ty) => ty * TILE_PX - 3 * U;
-
 test('a seated agent is drawn 16x24 with its top 8 sprite pixels above the tile', () => {
   const front = MAP.spots.seats[0]; // [3,2]: desk below, faces the viewer
   const back = MAP.spots.seats[4]; // [3,5]: desk above, back to the viewer
@@ -100,7 +97,11 @@ test('headset and lanyard overlays line up with the taller sprite; the lead wear
   assert.deepEqual(at([lanyard]), [top(MAP.spots.qaDesk)], 'only QA wears the lanyard');
 });
 
-test('the 💬/✉️ channel marker sits 8 sprite pixels higher than before', () => {
+// v1.6 Task 4: the marker and the bubble moved up again, above the role tag
+// (tag: 5 sprite pixels tall, 1 above the sprite's top; 1 more clear above it).
+const SPRITE_TOP = (ty) => ty * TILE_PX - 8 * U;
+
+test('the 💬/✉️ channel marker sits above the role tag, right of the bubble', () => {
   const { drawer, ctx } = setup();
   const seat = MAP.spots.seats[4]; // [3,5]
   const people = [person('a1', 'agent', 'phone', { task: { kind: 'phone', clientId: 'chat' }, answering: 'chat' })];
@@ -109,21 +110,21 @@ test('the 💬/✉️ channel marker sits 8 sprite pixels higher than before', (
   assert.equal(marks.length, 1);
   const [, text, x, y] = marks[0];
   assert.equal(text, '💬');
-  assert.equal(x, seat[0] * TILE_PX + 14 * U);
-  assert.equal(y, OLD_TOP(seat[1]) + 2 * U - 8 * U);
+  assert.equal(x, seat[0] * TILE_PX + 16 * U);
+  assert.equal(y, SPRITE_TOP(seat[1]) - 7 * U - 3.5 * U);
 });
 
-test('the status bubble sits 8 sprite pixels higher than before', () => {
+test('the status bubble sits above the role tag', () => {
   const { drawer, ctx } = setup();
   const seat = MAP.spots.seats[4]; // [3,5]
   const people = [person('a1', 'agent', 'idle', { stress: 95 })];
   drawer.drawBubbles(ctx, [seated('a1', seat)], people, {});
   const rects = ctx.ops.filter((o) => o[0] === 'fillRect');
   const top = Math.min(...rects.map((o) => o[2]));
-  assert.equal(top, OLD_TOP(seat[1]) - 11 * U - 8 * U);
+  assert.equal(top, SPRITE_TOP(seat[1]) - 7 * U - 12 * U);
   const icon = drawer.spriteCanvas('iconStress').id;
   const [iconOp] = draws(ctx, icon);
-  assert.equal(iconOp[3], OLD_TOP(seat[1]) - 10 * U - 8 * U);
+  assert.equal(iconOp[3], SPRITE_TOP(seat[1]) - 7 * U - 11 * U);
 });
 
 test('a bubble near the top wall stays on the canvas', () => {
@@ -159,6 +160,27 @@ test('a person in a lower row is drawn after a person in the row above', () => {
   const za = ['walkA', 'walkB'].map((pose) => d2.personCanvas(people[0], pose).id);
   const aa = ['walkA', 'walkB'].map((pose) => d2.personCanvas(people[1], pose).id);
   assert.ok(ids.findIndex((i) => aa.includes(i)) > ids.findIndex((i) => za.includes(i)), JSON.stringify(ids));
+});
+
+// v1.6 fix: the walk frame follows the distance walked, one swap per tile, so
+// a fast walk does not slide (and a standing-still clock never changes it).
+test('the walking frame depends on distance travelled, not on time', () => {
+  const { drawer, ctx } = setup();
+  const people = [person('p1', 'agent', 'idle')];
+  const frameAt = (x, timeMs) => {
+    ctx.ops.length = 0;
+    drawer.drawActors(ctx, [{ id: 'p1', x, y: 5, path: [[x + 3, 5]], target: [x + 3, 5], gone: false }], people, timeMs, []);
+    const drawn = ctx.ops.filter((o) => o[0] === 'drawImage').map((o) => o[1]);
+    return ['walkA', 'walkB'].findIndex((pose) => drawn.includes(drawer.personCanvas(people[0], pose).id));
+  };
+  const same = frameAt(4.1, 0);
+  assert.ok(same >= 0, 'a walking pose is drawn');
+  for (const t of [160, 320, 1000, 5000]) assert.equal(frameAt(4.1, t), same, `time ${t}`);
+  assert.equal(frameAt(4.9, 777), same, 'same tile, same frame');
+  const next = frameAt(5.1, 0);
+  assert.notEqual(next, same, 'one tile on: the other frame');
+  assert.equal(frameAt(5.1, 9999), next);
+  assert.equal(frameAt(6.1, 0), same, 'two tiles on: back again');
 });
 
 test('a click on the head (above the tile) picks the person; above the head does not', () => {

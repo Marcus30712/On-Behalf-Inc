@@ -340,7 +340,7 @@ test('view shows what each person is doing now and why someone is not in', () =>
   s.people.find((p) => p.id === 'p2').health = { kind: 'sick', daysLeft: 2 };
   s.people.find((p) => p.id === 'p4').health = { kind: 'leave', daysLeft: 2 };
   s.absences.push({ personId: 'p6', day: 0 });
-  let v = at(600); // Monday 10:00
+  let v = at(540); // Monday 09:00 (v1.6: no break starts before 10:00)
   assert.equal(v.p0.shiftToday, 'early');
   assert.equal(v.p0.rosterShift, 'early');
   assert.equal(v.p0.activity, 'phone');
@@ -351,14 +351,12 @@ test('view shows what each person is doing now and why someone is not in', () =>
   assert.equal(v.p4.shiftToday, 'leave');
   assert.equal(v.p6.shiftToday, 'absent');
   assert.equal(v.p8.activity, 'task'); // the lead coaches
-  // Break groups: p0 and p4, the early agents of one client, break at different times.
-  assert.deepEqual([v.p0.task.clientId, v.p0.rosterShift], [v.p4.task.clientId, v.p4.rosterShift]);
-  assert.deepEqual([v.p0.breakGroup, v.p4.breakGroup], [0, 1]);
-  v = at(720); // 12:00: early group 0 takes its first break
+  // v1.6: breaks follow today's plan; p0's first break (lunch is 'lunch').
+  v = at(v.p0.breaks.am - (v.p0.breaks.am % 30));
   assert.equal(v.p0.activity, 'break');
   assert.equal(v.p2.activity, 'off'); // sick
   delete s.assignment.p0;
-  assert.equal(at(600).p0.activity, 'idle'); // on shift with nothing to do
+  assert.equal(at(540).p0.activity, 'idle'); // on shift with nothing to do
   s.day = 5; // Saturday
   assert.equal(at(600).p1.shiftToday, 'off');
   assert.equal(at(600).p1.activity, 'off');
@@ -440,13 +438,13 @@ test('view gives each person the client they answer and each client whether it o
   assert.ok(other, 'someone is not on phones');
   const open = (v) => Object.fromEntries(v.clients.map((c) => [c.id, c.openToday]));
 
-  advance(s, 5 * DAY + 600 - s.minute); // Saturday 10:00
+  advance(s, 5 * DAY + 540 - s.minute); // Saturday 09:00 (v1.6: no break starts before 10:00)
   const sat = view(s);
   for (const p of crew) assert.equal(sat.people.find((x) => x.id === p.id).answering, BARAM, `${p.id} covers on Saturday`);
   assert.equal(sat.people.find((x) => x.id === other.id).answering, null);
   assert.deepEqual(open(sat), { 'gureum-travel': false, 'mulbit-telecom': false, [BARAM]: true });
 
-  advance(s, 2 * DAY); // Monday 10:00
+  advance(s, 2 * DAY); // Monday 09:00
   const mon = view(s);
   crew.forEach((p, i) => assert.equal(mon.people.find((x) => x.id === p.id).answering, own[i], `${p.id} on Monday`));
   assert.deepEqual(open(mon), { 'gureum-travel': true, 'mulbit-telecom': true, [BARAM]: false });

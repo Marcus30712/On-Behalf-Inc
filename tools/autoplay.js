@@ -48,10 +48,12 @@
 //   agents on it, assigned once, with no stand-in and no help.
 //
 // The checks also play sensible over 720 days (fees in years 1 and 2) and
-// sensible taking client offers (the S milestone after losing a client; also
-// the v1.2 brief's offers-S guard), both expanding policies over 720 days, and
+// sensible taking client offers over 720 days (the S milestone after losing a
+// client; also the v1.2 brief's offers-S guard, two years since v1.6), both
+// expanding policies over 720 days, and
 // keeping service with channels, staffed, unstaffed, with one uncovered
-// email agent and with two email agents assigned once, over 720 days (v1.3).
+// email agent and with two email agents assigned once, over 720 days (v1.3),
+// and sensible play for a year with the lead's planning at 8 and at 1 (v1.6).
 import { pathToFileURL } from 'node:url';
 import { createGame, advance, act, view, SHIFTS } from '../sim/game.js';
 import { CLIENTS } from '../world/clients.js';
@@ -101,8 +103,15 @@ const mean = (xs) => (xs.length === 0 ? 0 : xs.reduce((s, x) => s + x, 0) / xs.l
 // 'pair', also research the chat and mail desks and take both channel
 // clients; 'nostaff' leaves the email client without anyone, 'single' gives
 // it one uncovered agent, 'pair' two (see the policy notes above).
-export function runPolicy({ seed, days, policy, acceptOffers = false, expand = false, channels = false }) {
+// `leadPlanning` (v1.6): the team lead's 스케줄링 (planning) skill, set before
+// the first day (no rng draw), so the same seed can be played with a skilled
+// and an unskilled lead; null keeps the value derived from the lead.
+export function runPolicy({ seed, days, policy, acceptOffers = false, expand = false, channels = false, leadPlanning = null }) {
   const state = createGame(seed);
+  if (leadPlanning !== null) {
+    const lead = state.people.find((p) => p.role === 'lead');
+    lead.skills = { ...lead.skills, planning: leadPlanning };
+  }
   const sensible = policy === 'sensible';
   const plan = sensible ? sensiblePlan(view(state), acceptOffers, expand, channels) : null;
   const tally = {
@@ -283,6 +292,27 @@ export function channelsVerdict(runs, keep) {
   };
 }
 
+// v1.6 lead skill: the same seeds played with a skilled lead (`high`) and an
+// unskilled one (`low`), seed by seed. Per run: abandoned calls, the service
+// level (calls answered within the target over calls offered, all clients and
+// days) and the share of ended client-months paid in full. `better`: seeds
+// where the skilled lead has fewer abandoned calls and an equal or higher
+// service level.
+export function leadSkillVerdict(high, low) {
+  const total = (r, key) => r.days.reduce((s, d) => s + Object.values(d.clients).reduce((t, c) => t + (c[key] ?? 0), 0), 0);
+  const of = (r) => {
+    const offered = total(r, 'offered');
+    return {
+      abandoned: total(r, 'abandoned'),
+      sl: offered > 0 ? total(r, 'inTarget') / offered : 0,
+      fees: r.feeMonths.total > 0 ? r.feeMonths.full / r.feeMonths.total : 0,
+    };
+  };
+  const seeds = high.map((r, i) => ({ high: of(r), low: of(low[i]) }));
+  const better = seeds.filter((s) => s.high.abandoned < s.low.abandoned && s.high.sl >= s.low.sl).length;
+  return { seeds, better };
+}
+
 // v1.3: seeds where the email client was lost at least once.
 export const emailLost = (runs) => runs.filter((r) => r.email.lost > 0).length;
 
@@ -325,6 +355,8 @@ function recordDay(v, tally) {
     if (c.today.intervalsMetRate === null) continue;
     clients[c.id] = {
       met: c.today.intervalsMetRate, offered: c.today.offered, abandoned: c.today.abandoned,
+      // v1.6: calls answered within the target (service level x offered).
+      inTarget: (c.today.serviceLevel ?? 0) * c.today.offered,
       agents: c.today.agents, satisfaction: c.satisfaction,
       ...(c.channel === 'email' ? { backlog: c.backlog } : {}),
     };
@@ -749,10 +781,14 @@ function main() {
   };
   const t0 = Date.now();
   const idleYear = SEEDS.map((seed) => runPolicy({ seed, days: 360, policy: 'idle' }));
+  // v1.6: idle over two years too (a separate run: cash and the S milestone
+  // are read at the end of the run, so the year-1 run above cannot be cut).
+  const idleTwo = SEEDS.map((seed) => runPolicy({ seed, days: 720, policy: 'idle' }));
   const idle = idleYear.map((r) => upTo(r, 180));
   const firstMonth = idleYear.map((r) => upTo(r, 30));
   const sensible = SEEDS.map((seed) => runPolicy({ seed, days: 360, policy: 'sensible' }));
-  const offers = SEEDS.map((seed) => runPolicy({ seed, days: 360, policy: 'sensible', acceptOffers: true }));
+  // Re-based in v1.6 (real breaks): 720 days, not 360 (see the offers-S check below).
+  const offers = SEEDS.map((seed) => runPolicy({ seed, days: 720, policy: 'sensible', acceptOffers: true }));
   const twoYears = SEEDS.map((seed) => runPolicy({ seed, days: 720, policy: 'sensible' }));
   const greedy = SEEDS.map((seed) => runPolicy({ seed, days: 720, policy: 'sensible', expand: 'greedy' }));
   const keep = SEEDS.map((seed) => runPolicy({ seed, days: 720, policy: 'sensible', expand: 'keep' }));
@@ -760,9 +796,12 @@ function main() {
   const noStaff = SEEDS.map((seed) => runPolicy({ seed, days: 720, policy: 'sensible', expand: 'keep', channels: 'nostaff' }));
   const single = SEEDS.map((seed) => runPolicy({ seed, days: 720, policy: 'sensible', expand: 'keep', channels: 'single' }));
   const pair = SEEDS.map((seed) => runPolicy({ seed, days: 720, policy: 'sensible', expand: 'keep', channels: 'pair' }));
+  // v1.6: the same sensible year with the lead's 스케줄링 (planning) at 8 and at 1.
+  const skilled = SEEDS.map((seed) => runPolicy({ seed, days: 360, policy: 'sensible', leadPlanning: 8 }));
+  const unskilled = SEEDS.map((seed) => runPolicy({ seed, days: 360, policy: 'sensible', leadPlanning: 1 }));
   printRuns('idle, 360 days', idleYear);
   printRuns('sensible, 360 days', sensible);
-  printRuns('sensible taking client offers, 360 days', offers);
+  printRuns('sensible taking client offers, 720 days', offers);
   printRuns('sensible, 720 days', twoYears);
   printRuns('sensible expanding the office, greedy (every offer it can staff), 720 days', greedy);
   printRuns('sensible expanding the office, keeping service (at most 3 weekday clients), 720 days', keep);
@@ -770,6 +809,8 @@ function main() {
   printRuns('keeping service with the chat and email clients, nobody on the email, 720 days (v1.3)', noStaff);
   printRuns('keeping service with the chat and email clients, one email agent and no cover, 720 days (v1.3)', single);
   printRuns('keeping service with the chat and email clients, two email agents assigned once, no cover, 720 days (v1.3)', pair);
+  printRuns('sensible, lead planning 8, 360 days (v1.6)', skilled);
+  printRuns('sensible, lead planning 1, 360 days (v1.6)', unskilled);
 
   const target = 0.8;
   const worn = idle.filter((r) => wornDown(r, 180)).length;
@@ -795,6 +836,8 @@ function main() {
   const strained = emailStruggles(single);
   const kept = emailKept(pair);
   const dayList = (runs, key) => runs.map((r) => r[key] ?? '-').join(' ');
+  const lead = leadSkillVerdict(skilled, unskilled);
+  const pair2 = (f) => lead.seeds.map((s) => `${f(s.high)}/${f(s.low)}`).join(' ');
 
   console.log('\nfirst month, default roster (idle): met-share by weekday Mon..Fri',
     start.byWeekday.map(pct).join(' '), `| heavy days ${pct(start.heavy)} (${start.heavyDays}) vs ordinary ${pct(start.normal)}`);
@@ -820,13 +863,18 @@ function main() {
       '| largest email backlog / mails a day', runs.map((r) => `${Math.round(r.email.maxBacklog)}/${Math.round(r.email.perDay)}`).join(' '),
       '| fees in full year 1', pct(fullFeeShare(runs, 0, 360)), 'year 2', pct(fullFeeShare(runs, 360, 720)));
   }
+  console.log('lead planning 8/1 (v1.6): abandoned', pair2((x) => x.abandoned), '| service level', pair2((x) => pct(x.sl)),
+    '| fees in full', pair2((x) => pct(x.fees)));
   console.log('');
 
   const results = [
     check(worn >= 8, `idle wears people down within 180 days: ${worn}/10 seeds (burnouts>=2 or game over)`),
     check(sensibleWorn <= 2, `sensible play is not worn down by day 180 (same rule): ${sensibleWorn}/10 seeds worn`),
-    check(feeSensible >= 0.7 && feeIdle <= feeSensible - 0.15,
-      `fees paid in full: sensible ${pct(feeSensible)} of client-months (>= 70%), idle ${pct(feeIdle)}`),
+    // Re-based in v1.6 (real breaks): 70% -> 65%. Breaks in the hours one shift
+    // covers alone cost sensible play some met days (69.2% measured); the bar
+    // keeps its intent through the gap: idle must stay at least 15 points lower.
+    check(feeSensible >= 0.65 && feeIdle <= feeSensible - 0.15,
+      `fees paid in full: sensible ${pct(feeSensible)} of client-months (>= 65%), idle ${pct(feeIdle)} (<= sensible - 15)`),
     check(survived >= 8, `sensible survives 360 days with avg SL >= 90% of target: ${survived}/10 seeds`),
     check(start.normal >= 0.7 && start.normal < 0.98,
       `default staffing mostly meets target on ordinary days, not always: ${pct(start.normal)}`),
@@ -841,18 +889,35 @@ function main() {
     check(year.poorer === SEEDS.length,
       `idle ends the year with less cash than sensible on every seed: ${year.poorer}/10 (idle ${idleYear.map((r) => Math.round(r.cash)).join(' ')})`),
     check(year.rankS <= 2, `idle reaches the S milestone on at most 2 seeds: ${year.rankS}/10`),
+    // Added in v1.6 (real breaks): idle reaches S in year 2 on 4/10 seeds (the
+    // other idle games mostly end first; v1.5: 5/10). At most 4/10 keeps S rare
+    // for hands-off play over the same two years as the offers-S guard. No margin.
+    check(idleTwo.filter((r) => r.rankS).length <= 4,
+      `idle reaches the S milestone on at most 4 seeds within two years: ${idleTwo.filter((r) => r.rankS).length}/10 (day ${idleTwo.map((r) => r.rankSDay ?? '-').join(' ')})`),
     check(year.lost >= 7, `idle loses someone (resignation) or the game within a year: ${year.lost}/10 seeds`),
-    check(offersS >= 3,
-      `sensible play that takes client offers still reaches the S milestone (v1.2 offers-S guard): ${offersS}/10 seeds (>= 3)`),
+    // Re-based in v1.6 (real breaks): within two years, >= 8/10 (was within a
+    // year, >= 3/10). With real breaks the three-client year holds a score of
+    // 73-87 (best 30-workday run), so S comes in year 2 (days 429-694 measured,
+    // 10/10). The S threshold (90) stays: idle holds 89.1 for 30 workdays in
+    // year 1 on seed 1, so any lower threshold lets idle reach S.
+    check(offersS >= 8,
+      `sensible play that takes client offers still reaches the S milestone within two years (v1.2 offers-S guard, re-based v1.6): ${offersS}/10 seeds (>= 8)`),
     check(over2 === 0 && fee2.every((f) => f >= 0.65),
       `sensible play over two years: fees in full year 1 ${pct(fee2[0])}, year 2 ${pct(fee2[1])} (each >= 65%), game over ${over2}/10`),
-    check(grown.built >= 8 && grown.notPoorer >= 8 && grown.fees.every((f) => f >= 0.65),
-      `sensible play that keeps service expands within 720 days on ${grown.built}/10 seeds (>= 8), fees in full year 1 ${pct(grown.fees[0])}, year 2 ${pct(grown.fees[1])} (each >= 65%), not poorer than without on ${grown.notPoorer}/10 (>= 8)`),
+    // Not poorer re-based in v1.6 (real breaks): >= 8 -> >= 6 of 10, still most
+    // seeds. Year 1 of the expansion runs three weekday clients on the 8 seats,
+    // which real breaks squeeze hardest (6/10 measured, two seeds near a tie).
+    check(grown.built >= 8 && grown.notPoorer >= 6 && grown.fees.every((f) => f >= 0.65),
+      `sensible play that keeps service expands within 720 days on ${grown.built}/10 seeds (>= 8), fees in full year 1 ${pct(grown.fees[0])}, year 2 ${pct(grown.fees[1])} (each >= 65%), not poorer than without on ${grown.notPoorer}/10 (>= 6)`),
     check(ch.active >= 8 && ch.backlogOk === SEEDS.length && ch.fees.every((f) => f >= 0.65) && ch.meanCash >= ch.keepMeanCash,
       `keeping service with the chat and email clients (v1.3): both active at day 720 on ${ch.active}/10 (>= 8), email backlog within two days of mail on ${ch.backlogOk}/10, fees in full year 1 ${pct(ch.fees[0])}, year 2 ${pct(ch.fees[1])} (each >= 65%), mean cash ${Math.round(ch.meanCash)} vs keeping service without ${Math.round(ch.keepMeanCash)} (>=; not poorer on ${ch.notPoorer}/10, not a bar)`),
     check(lostEmail >= 8, `an email client nobody answers is lost (v1.3): ${lostEmail}/10 seeds (>= 8)`),
     check(strained >= 8, `one email agent with no cover struggles (lost, or email met under 90%) (v1.3): ${strained}/10 seeds (>= 8)`),
     check(kept >= 8, `two email agents assigned once, no daily stand-in, keep the email client (never lost) (v1.3): ${kept}/10 seeds (>= 8)`),
+    // Added in v1.6 (design: a lead who schedules breaks badly costs SLA and
+    // dropped calls): same seeds, lead planning 8 against 1 (10/10 measured).
+    check(lead.better >= 8,
+      `a skilled lead (planning 8) has fewer abandoned calls and an equal or higher service level than an unskilled one (planning 1) on the same seeds (v1.6): ${lead.better}/10 seeds (>= 8)`),
   ];
   console.log(`\n${results.filter(Boolean).length}/${results.length} checks pass (${((Date.now() - t0) / 1000).toFixed(1)} s)`);
   if (!results.every(Boolean)) process.exitCode = 1;

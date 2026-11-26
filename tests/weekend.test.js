@@ -41,11 +41,19 @@ function withWeekendClient(seed = 3) {
   return s;
 }
 
-test('without a weekend client the game is byte-identical to the pre-weekend code', () => {
+test('without a weekend client the game matches the weekday golden (v1.6 weekday behaviour)', () => {
   const golden = JSON.parse(readFileSync(new URL('./fixtures/weekday-golden.json', import.meta.url), 'utf8'));
-  for (const sc of SCENARIOS) {
-    const key = `${sc.seed}x${sc.days}`;
-    assert.equal(runScenario(sc), golden[key], key);
+  // The fake weekend client is left out of CLIENTS here, as when the golden
+  // is made (node tests/fixtures/weekday-scenario.js): a game that reaches a
+  // second client offer would otherwise be offered it (seed 7 does since v1.6).
+  CLIENTS.splice(CLIENTS.indexOf(FAKE), 1);
+  try {
+    for (const sc of SCENARIOS) {
+      const key = `${sc.seed}x${sc.days}`;
+      assert.equal(runScenario(sc), golden[key], key);
+    }
+  } finally {
+    CLIENTS.push(FAKE);
   }
 });
 
@@ -256,15 +264,16 @@ test('a weekend crew still assigned to a weekday client answers the weekend clie
     assert.notEqual(s.assignment[p.id].clientId, BARAM);
   }
   const own = crew.map((p) => s.assignment[p.id].clientId);
-  advance(s, SAT * 1440 + 600 - s.minute); // Saturday 10:00 (a new game starts at 09:00)
-  assert.deepEqual([s.day, s.minute], [SAT, 600]);
+  // Saturday 09:00, before any break (v1.6: the am break starts at 10:00 at the earliest).
+  advance(s, SAT * 1440 + 540 - s.minute);
+  assert.deepEqual([s.day, s.minute], [SAT, 540]);
   const v = view(s);
   for (const p of crew) {
     const pv = v.people.find((x) => x.id === p.id);
     assert.equal(pv.activity, 'phone', `${p.id} is on the phone on Saturday`);
     assert.deepEqual(pv.task, { kind: 'phone', clientId: own[crew.indexOf(p)] }, 'the assignment itself is unchanged');
   }
-  advance(s, 2 * 1440); // Monday 10:00
+  advance(s, 2 * 1440); // Monday 09:00
   const sat = s.history.find((h) => h.day === SAT).clients[BARAM];
   assert.ok(sat.handled > 0, `weekend client handled calls on Saturday: ${JSON.stringify(sat)}`);
   assert.ok(sat.intervalsMet > 0);

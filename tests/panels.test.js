@@ -220,7 +220,7 @@ test('metrics strip shows each client target next to its service level', () => {
   renderMetrics(root, v);
   for (const c of v.clients.filter((x) => x.active)) {
     const item = root.querySelector(`[data-client="${c.id}"]`);
-    assert.ok(item.textContent.includes(`(${UI_TEXT.metrics.target} ${c.slTarget.pct}%)`), item.textContent);
+    assert.ok(item.textContent.includes(`(${UI_TEXT.metrics.target} ${c.slTarget.pct.toFixed(2)}%)`), item.textContent);
   }
 });
 

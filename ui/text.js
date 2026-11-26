@@ -7,7 +7,7 @@ import { ADVISOR } from '../world/advisor.js';
 import { RESEARCH } from '../world/research.js';
 import { NATIONS } from '../world/nations.js';
 import { CLIENTS } from '../world/clients.js';
-import { formatMoney } from './money.js';
+import { formatMoney, formatDecimal } from './money.js';
 import { channelOf } from '../sim/interval.js';
 
 export const UI_TEXT = {
@@ -165,6 +165,7 @@ export const UI_TEXT = {
     "phone": "전화 중",
     "task": "업무 중",
     "break": "쉬는 중",
+    "lunch": "점심 중",
     "idle": "대기",
     "off": "퇴근"
   },
@@ -179,7 +180,10 @@ export const UI_TEXT = {
     "holidayToday": "{holiday} · 오늘부터 · {days}일",
     "noHolidays": "2주 안에 쉬는 날이 없어요.",
     "shiftToday": "오늘 근무",
-    "task": "맡은 일"
+    "task": "맡은 일",
+    "breaksToday": "오늘 휴식",
+    "breaksLine": "휴식 {am} · 점심 {lunch} · 휴식 {pm}",
+    "breaksNone": "오늘은 근무가 없어요."
   },
   "skill": {
     "handling": {
@@ -197,6 +201,10 @@ export const UI_TEXT = {
     "evaluation": {
       "name": "평가",
       "tip": "통화를 듣고 고칠 점을 찾는 힘. QA에게 중요해요."
+    },
+    "planning": {
+      "name": "스케줄링",
+      "tip": "휴식 시간을 짜는 솜씨. 팀장이 높을수록 콜이 몰리는 시간을 피해 휴식을 배정해요."
     }
   },
   "bar": {
@@ -573,8 +581,8 @@ function valuesFor(event) {
   };
   if (clientDef) {
     values.sl = channelOf(clientDef) === 'email'
-      ? fill(UI_TEXT.metrics.targetEmail, { hours: clientDef.slTarget.openMinutes / 60, pct: clientDef.slTarget.pct })
-      : fill(UI_TEXT.metrics.targetFull, { sec: clientDef.slTarget.sec, pct: clientDef.slTarget.pct });
+      ? fill(UI_TEXT.metrics.targetEmail, { hours: clientDef.slTarget.openMinutes / 60, pct: formatDecimal(clientDef.slTarget.pct) })
+      : fill(UI_TEXT.metrics.targetFull, { sec: clientDef.slTarget.sec, pct: formatDecimal(clientDef.slTarget.pct) });
     values.fee = fill(UI_TEXT.common.money, { cost: formatMoney(clientDef.monthlyFee) });
   }
   if (event.id === 'build-done') {

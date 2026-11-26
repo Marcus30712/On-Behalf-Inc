@@ -75,13 +75,16 @@ test('two starting clients and three offers; weekday hours Mon-Fri 09:00-21:00 e
   }
   for (const c of CLIENTS) {
     assert.ok(NATIONS.some((n) => n.id === c.nation), c.id);
-    assert.ok(c.callsPerDay >= 60 && c.callsPerDay <= 150, c.id);
+    // Lower bound 60 -> 48 in v1.6 (real breaks): every callsPerDay is x0.8 of its
+    // v1.5 value (user decision 2026-11-26), so baram-delivery is 48 and bandi-repair 56.
+    // A test bound, not a game rule.
+    assert.ok(c.callsPerDay >= 48 && c.callsPerDay <= 150, c.id);
     assert.ok(c.ahtMin >= 4 && c.ahtMin <= (c.channel ? 9 : 6), c.id);
     assert.ok(c.patienceSec === undefined || (c.patienceSec >= 60 && c.patienceSec <= (c.channel === 'chat' ? 240 : 120)), c.id);
   }
 });
 
-const USED_EVENTS = ['sick', 'burnout', 'no-show', 'argument', 'resign-notice', 'holiday-leave', 'friday-off', 'call-spike', 'client-offer', 'churn-warning', 'research-done', 'build-done', 'candidate', 'game-over-cash', 'game-over-clients', 'milestone-big-client', 'milestone-rank-s', 'expansion-done', 'backlog-warning'];
+const USED_EVENTS = ['sick', 'burnout', 'no-show', 'argument', 'resign-notice', 'holiday-leave', 'friday-off', 'call-spike', 'client-offer', 'churn-warning', 'research-done', 'build-done', 'candidate', 'game-over-cash', 'game-over-clients', 'milestone-big-client', 'milestone-rank-s', 'expansion-done', 'backlog-warning', 'breaks-auto'];
 // Ids the sim pushes whose copy is not in world/ yet.
 const PENDING_COPY = [];
 // Advisor key where it differs from the event id.

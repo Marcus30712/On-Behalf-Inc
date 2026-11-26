@@ -1,10 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRng } from '../sim/rng.js';
+import { newGame } from '../sim/state.js';
 import { TRAITS } from '../world/traits.js';
 import { NAMES } from '../world/names.js';
 import {
-  createPerson, ahtFor, applyWork, applyRest, overnight, moraleOf, wearDay, WEAR,
+  createPerson, ahtFor, applyWork, applyRest, overnight, moraleOf, wearDay, WEAR, planningOf,
 } from '../sim/people.js';
 
 const client = { ahtMin: 6 };
@@ -99,7 +100,7 @@ test('applyWork matches the formula', () => {
   const p = bare();
   applyWork(p, { minutes: 30, occupancy: 1 });
   assert.ok(Math.abs(p.fatigue - (10 + 4)) < 1e-9);
-  assert.ok(Math.abs(p.stress - (15 + 1.45 + 1.6 + 2)) < 1e-9); // base + occupancy + overload
+  assert.ok(Math.abs(p.stress - (15 + 1.55 + 1.6 + 2)) < 1e-9); // base + occupancy + overload
 });
 
 test('values stay within 0-100', () => {
@@ -167,4 +168,59 @@ test('long-term wear builds on strained workdays, eases on others and costs mora
   for (let i = 0; i < 100; i++) wearDay(p, false);
   assert.equal(p.history.wear, 0);
   assert.ok(Math.abs(p.morale - 86) < 1e-9);
+});
+
+// v1.6: 스케줄링 (planning) comes from the person's id, never from the rng.
+const PLANNING = { agent: [0, 3], lead: [3, 8], qa: [1, 4] };
+
+test('planning is in the role range, one decimal, and spread over it', () => {
+  for (const [role, [lo, hi]] of Object.entries(PLANNING)) {
+    const values = [];
+    for (let i = 0; i < 200; i++) {
+      for (const id of [`p${i}`, `h${i}`]) {
+        const v = planningOf({ id, name: `${id}-name`, role, skills: { handling: 5, systems: 5, coaching: 0, evaluation: 0 } });
+        assert.ok(v >= lo && v <= hi, `${role} ${id} ${v}`);
+        assert.equal(v, Math.round(v * 10) / 10);
+        values.push(v);
+      }
+    }
+    assert.ok(Math.min(...values) <= lo + 0.3, `${role} min ${Math.min(...values)}`);
+    assert.ok(Math.max(...values) >= hi - 0.3, `${role} max ${Math.max(...values)}`);
+    assert.ok(new Set(values).size >= (hi - lo) * 10 * 0.8, `${role} distinct ${new Set(values).size}`);
+  }
+  // Same id, same value; a stored value wins.
+  // Same id and name, same value; a stored value wins.
+  const lead = { id: 'p8', name: 'Mira', role: 'lead', skills: {} };
+  assert.equal(planningOf(lead), planningOf({ ...lead }));
+  assert.equal(planningOf({ ...lead, skills: { planning: 7.5 } }), 7.5);
+});
+
+test('the lead\'s planning differs between games (ruling: from id and name)', () => {
+  const values = [1, 2, 3, 42, 999].map((seed) => planningOf(newGame(seed).people.find((p) => p.role === 'lead')));
+  assert.ok(new Set(values).size >= 3, `lead planning by seed: ${values.join(', ')}`);
+});
+
+test('a person loaded from a v1.5 save gets the planning a new game gives them', () => {
+  // A v1.5 save holds the person with id and name but no skills.planning;
+  // loading must give the value the live person has.
+  for (const seed of [1, 2, 3]) {
+    for (const p of newGame(seed).people) {
+      const saved = JSON.parse(JSON.stringify(p));
+      delete saved.skills.planning;
+      assert.equal(planningOf(saved), planningOf(p), `${seed} ${p.id}`);
+    }
+  }
+});
+
+test('planning draws nothing: createPerson keeps its v1.5 draw order', () => {
+  // Replay of the documented draws: trait count, trait 1, trait 2, four skills, name.
+  for (const role of Object.keys(PLANNING)) {
+    for (let seed = 1; seed <= 20; seed++) {
+      const r = createRng(seed);
+      createPerson(r, { id: 'x', role, nation: 'veltora' });
+      const replay = createRng(seed);
+      for (let i = 0; i < 3 + 4 + 1; i++) replay.next();
+      assert.equal(r.state(), replay.state(), `${role} ${seed}`);
+    }
+  }
 });

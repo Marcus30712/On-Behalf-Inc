@@ -72,4 +72,6 @@ export const EVENTS = {
   'backlog-warning': { title: '{client} 메일이 밀려요', text: '답장을 기다리는 메일이 {n}통이에요. 기한을 넘긴 메일이 늘면 {client}의 만족도가 떨어져요.' },
   'expansion-start': { title: '{stage} 공사 시작', text: '{stage} 공사를 시작했어요. {days}근무일 뒤에 완공돼요. 그동안 조금 시끄러울 거예요.' },
   'expansion-done': { title: '{stage} 완공', text: '{stage}이 문을 열었어요. 이제 상담사 좌석이 {seats}개예요. 채용 탭에서 새 사람을 뽑을 수 있어요.' },
+  // v1.6: a weekday with no lead at work; breaks were placed at random.
+  'breaks-auto': { title: '휴식 자동 배정', text: '오늘은 팀장이 자리에 없어 휴식 시간이 무작위로 정해졌어요. 콜이 몰리는 시간에 자리가 빌 수 있어요.' },
 };

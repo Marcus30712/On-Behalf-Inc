@@ -1,6 +1,6 @@
 // Number and date display. Pure functions; copy comes from ui/text.js.
 import { UI_TEXT, fill } from './text.js';
-import { formatMoney } from './money.js';
+import { formatMoney, formatDecimal } from './money.js';
 
 const pad = (n) => String(n).padStart(2, '0');
 
@@ -11,15 +11,19 @@ export const formatDate = ({ year, month, date, weekdayLabel }) =>
 
 export { formatMoney };
 
+// Display rule (user decision 2026-11-26): shares and decimal scores show
+// exactly 2 decimals (92.44%, 100.00%, 6.00); money and counts stay whole.
+export { formatDecimal } from './money.js';
+
 // x is a share, 0..1.
-export const formatPct = (x) => (x === null || x === undefined ? '—' : `${Math.round(x * 100)}%`);
+export const formatPct = (x) => (x === null || x === undefined ? '—' : `${formatDecimal(x * 100)}%`);
 
 export const formatSec = (s) => (s === null || s === undefined ? '—' : fill(UI_TEXT.metrics.asaUnit, { n: Math.round(s) }));
 
 // v1.3 channels. A client's target as text: email in open hours, else seconds.
 export const formatTarget = (c) => (c.channel === 'email'
-  ? fill(UI_TEXT.metrics.targetEmail, { hours: c.slTarget.openMinutes / 60, pct: c.slTarget.pct })
-  : fill(UI_TEXT.metrics.targetFull, c.slTarget));
+  ? fill(UI_TEXT.metrics.targetEmail, { hours: c.slTarget.openMinutes / 60, pct: formatDecimal(c.slTarget.pct) })
+  : fill(UI_TEXT.metrics.targetFull, { ...c.slTarget, pct: formatDecimal(c.slTarget.pct) }));
 
 // Channel labels show only once a chat or email client is on the books, so a
 // phone-only game looks as it did before channels.

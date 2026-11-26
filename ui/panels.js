@@ -5,14 +5,14 @@
 // caller re-renders with a fresh view. resetPanels() clears the panels' own
 // state (open card, notices, pending phone picks, an open expansion question)
 // for a new or loaded game.
-import { HIRE_COST, SHIFTS, OFFICE_LEVELS } from '../sim/game.js';
+import { HIRE_COST, SHIFTS, OFFICE_LEVELS, planningOf } from '../sim/game.js';
 import { RESEARCH } from '../world/research.js';
 import { TRAITS } from '../world/traits.js';
 import { NATIONS } from '../world/nations.js';
 import { CLIENTS } from '../world/clients.js';
 import { PLANET } from '../world/planet.js';
 import { UI_TEXT, fill } from './text.js';
-import { formatDate, formatMoney, formatPct, formatSec, formatTarget, hasChannels, channelLabel } from './format.js';
+import { formatDate, formatTime, formatMoney, formatDecimal, formatPct, formatSec, formatTarget, hasChannels, channelLabel } from './format.js';
 import { builder } from './dom.js';
 
 export const TABS = ['people', 'roster', 'tasks', 'research', 'hiring', 'clients', 'calendar'];
@@ -23,7 +23,7 @@ const CYCLE = { early: 'late', late: 'off', off: 'early' };
 const WEEKEND_CYCLE = { weekend: 'off', off: 'weekend' };
 const SIX_DAYS = 6; // sim/interval.js: six rostered days or more tire faster
 const TASK_KINDS = ['phone', 'coaching', 'qa', 'research', 'training'];
-const SKILLS = ['handling', 'systems', 'coaching', 'evaluation'];
+const SKILLS = ['handling', 'systems', 'coaching', 'evaluation', 'planning'];
 const HIGH = 70; // fatigue / stress danger zone
 const LOW = 30; // morale danger zone
 
@@ -114,7 +114,7 @@ const bar = (h, key, value) => {
   return h('div', { class: danger ? 'bar danger' : 'bar', title: UI_TEXT.bar[key].tip },
     h('span', { class: 'bar-name' }, UI_TEXT.bar[key].name),
     h('meter', { min: 0, max: 100, value: Math.round(value) }),
-    h('span', { class: 'bar-value' }, String(Math.round(value))),
+    h('span', { class: 'bar-value' }, formatDecimal(value)),
     flag && h('span', { class: 'warn' }, flag));
 };
 
@@ -154,6 +154,14 @@ function coveringLabel(h, v, p) {
   return h('span', { class: 'covering', title: fill(UI_TEXT.tasks.coveringTip, { client }) }, fill(UI_TEXT.tasks.covering, { client }));
 }
 
+// v1.6: today's three breaks (view.people[].breaks, minutes since midnight),
+// or the day-off line when the person does not work today.
+function breaksText(p) {
+  const b = p.breaks;
+  if (!b) return UI_TEXT.card.breaksNone;
+  return fill(UI_TEXT.card.breaksLine, { am: formatTime(b.am), lunch: formatTime(b.lunch), pm: formatTime(b.pm) });
+}
+
 function personCard({ h, v, rerender }) {
   const back = h('button', { type: 'button', class: 'back', onclick: () => { selected = null; rerender(); } }, UI_TEXT.common.back);
   const p = v.people.find((x) => x.id === selected);
@@ -161,7 +169,10 @@ function personCard({ h, v, rerender }) {
   const C = UI_TEXT.card;
   const traits = p.traits.map((id) => TRAITS.find((t) => t.id === id)).filter(Boolean)
     .map((t) => h('li', {}, h('strong', {}, t.name), ' ', t.blurb));
-  const skills = SKILLS.map((k) => h('li', { title: UI_TEXT.skill[k].tip }, `${UI_TEXT.skill[k].name} ${p.skills?.[k] ?? 0}`));
+  // v1.6 스케줄링 is not stored on most people: planningOf derives it. Shown
+  // with 2 decimals (display rule), so float steps never show (6.00, 6.30).
+  const skillValue = (k) => formatDecimal(k === 'planning' ? planningOf(p) : p.skills?.[k] ?? 0);
+  const skills = SKILLS.map((k) => h('li', { title: UI_TEXT.skill[k].tip }, `${UI_TEXT.skill[k].name} ${skillValue(k)}`));
   const holidays = (p.holidays ?? []).map((x) => {
     const n = x.startDay - v.day;
     return h('li', {}, fill(n <= 0 ? C.holidayToday : C.holidayItem, { holiday: x.name, n, days: x.length }));
@@ -174,6 +185,7 @@ function personCard({ h, v, rerender }) {
       h('dt', {}, C.nation), h('dd', {}, nationName(p.nation)),
       h('dt', {}, C.health), h('dd', {}, healthText(p)),
       h('dt', {}, C.shiftToday), h('dd', {}, shift),
+      h('dt', {}, C.breaksToday), h('dd', {}, breaksText(p)),
       h('dt', {}, C.task), h('dd', {}, taskText(v, p.task), withSep(coveringLabel(h, v, p)))),
     h('h4', {}, C.traits), h('ul', { class: 'traits' }, traits),
     h('h4', {}, C.skills), h('ul', { class: 'skills' }, skills),
@@ -419,8 +431,8 @@ function clientsPanel({ h, v }) {
       h('td', {}, email ? `${M.onTime} ${formatPct(c.onTime ?? null)}` : formatPct(t.serviceLevel)),
       h('td', {}, email ? `${M.backlog} ${fill(M.backlogUnit, { n: Math.round(c.backlog ?? 0) })}` : formatSec(t.asaSec)),
       h('td', {}, !email && t.offered > 0 ? fill(M.abandonedUnit, { n: t.abandoned }) : M.none),
-      h('td', {}, String(Math.round(c.satisfaction))),
-      h('td', {}, t.agents.toFixed(1)),
+      h('td', {}, formatDecimal(c.satisfaction)),
+      h('td', {}, formatDecimal(t.agents)),
       h('td', {}, c.active ? C.active : C.ended,
         c.active && c.churnWorkdaysLeft !== null && c.churnWorkdaysLeft !== undefined
           && h('div', { class: 'warn' }, fill(C.churnWarning, { days: c.churnWorkdaysLeft }))));

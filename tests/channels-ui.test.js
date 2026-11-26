@@ -100,13 +100,13 @@ test('clients panel: a channel label next to every client name, and the email ta
   assert.equal(row('solbang-books').querySelector('.channel').getAttribute('title'),
     '바로 받지 않아도 되지만, 미루면 밀린 메일이 쌓여요. 문을 닫은 시간에는 기한이 흐르지 않아요.');
   const cells = (id) => [...row(id).querySelectorAll('td')].map((td) => td.textContent);
-  assert.equal(cells('solbang-books')[1], '영업시간 12시간 안에 90%');
-  assert.equal(cells('solbang-books')[2], '기한 안 답장 92%');
+  assert.equal(cells('solbang-books')[1], '영업시간 12시간 안에 90.00%');
+  assert.equal(cells('solbang-books')[2], '기한 안 답장 92.00%');
   assert.equal(cells('solbang-books')[3], '밀린 메일 37통');
   assert.equal(cells('solbang-books')[4], '—');
-  assert.equal(cells('saebyeol-bank')[1], '60초 안에 80%');
-  assert.equal(cells('saebyeol-bank')[2], '75%');
-  assert.equal(cells('gureum-travel')[1], '20초 안에 80%');
+  assert.equal(cells('saebyeol-bank')[1], '60초 안에 80.00%');
+  assert.equal(cells('saebyeol-bank')[2], '75.00%');
+  assert.equal(cells('gureum-travel')[1], '20초 안에 80.00%');
 });
 
 test('email chip: backlog and on-time share instead of service level, rounded mail counts', () => {
@@ -117,11 +117,11 @@ test('email chip: backlog and on-time share instead of service level, rounded ma
   const text = chip.textContent;
   assert.ok(text.includes('✉️ 이메일'), text);
   assert.ok(text.includes('밀린 메일 37통'), text);
-  assert.ok(text.includes('기한 안 답장 92%'), text);
-  assert.ok(text.includes('(목표 90%)'), text);
+  assert.ok(text.includes('기한 안 답장 92.00%'), text);
+  assert.ok(text.includes('(목표 90.00%)'), text);
   assert.ok(text.includes('만족도 70'), text);
   assert.ok(!text.includes('서비스 레벨') && !text.includes('평균 대기') && !text.includes('포기'), text);
-  assert.equal(chip.getAttribute('title'), '영업시간 12시간 안에 90% · 들어온 메일 25통 · 답장한 메일 24통');
+  assert.equal(chip.getAttribute('title'), '영업시간 12시간 안에 90.00% · 들어온 메일 25통 · 답장한 메일 24통');
   assert.equal(chip.className, 'metric');
   // The chips wrap to two lines with four clients: the strip packs them closer.
   assert.equal(r.querySelector('ul').className, 'metrics-list channels');
@@ -147,15 +147,16 @@ test('email chip: below target warns; before the first mail it says so', () => {
 test('email chip on an unstaffed first day: the tooltip counts the mail that came in', () => {
   const s = createGame(2);
   s.clients.push({ id: 'solbang-books', satisfaction: 70, active: true });
-  // Day 0, 15:00, nobody on the mail (the final review saw 56 here at 100 mails a day; 84 now).
+  // Day 0, 15:00, nobody on the mail (the final review saw 56 here at 100 mails a day,
+  // 47 at 84; 38 at 67 since v1.6 volumes x0.8).
   advance(s, 15 * 60 - s.minute);
   const r = makeRoot();
   renderMetrics(r, view(s));
   const chip = r.querySelector('[data-client="solbang-books"]');
-  assert.ok(chip.textContent.includes('밀린 메일 47통'), chip.textContent);
+  assert.ok(chip.textContent.includes('밀린 메일 38통'), chip.textContent);
   const title = chip.getAttribute('title');
   assert.ok(!title.includes('오늘은 아직 메일이 없어요'), title);
-  assert.equal(title, '영업시간 12시간 안에 90% · 들어온 메일 47통 · 답장한 메일 0통');
+  assert.equal(title, '영업시간 12시간 안에 90.00% · 들어온 메일 38통 · 답장한 메일 0통');
 });
 
 test('chat chip: like the phone chip, with chat labels', () => {
@@ -165,9 +166,9 @@ test('chat chip: like the phone chip, with chat labels', () => {
   const chip = r.querySelector('[data-client="saebyeol-bank"]');
   const text = chip.textContent;
   assert.ok(text.includes('💬 채팅'), text);
-  assert.ok(text.includes('서비스 레벨 75% (목표 80%)'), text);
+  assert.ok(text.includes('서비스 레벨 75.00% (목표 80.00%)'), text);
   assert.ok(text.includes('평균 대기 41초'), text);
-  assert.equal(chip.getAttribute('title'), '60초 안에 80% · 들어온 채팅 12건 · 받은 채팅 10건');
+  assert.equal(chip.getAttribute('title'), '60초 안에 80.00% · 들어온 채팅 12건 · 받은 채팅 10건');
   const phone = r.querySelector('[data-client="gureum-travel"]');
   assert.ok(phone.textContent.includes('📞 전화'), phone.textContent);
   const empty = makeRoot();

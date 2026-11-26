@@ -71,27 +71,28 @@ test('person missing from roster is off', () => {
 });
 
 test('lunch takes a full interval, short breaks half', () => {
-  // early shift (group 0): breaks 12:00 (15), lunch 13:00 (60), break 16:00 (15)
-  assert.equal(workShare(H(9), 'early'), 1);
-  assert.equal(workShare(H(11), 'early'), 1);
-  assert.equal(workShare(H(12), 'early'), 0.5);
-  assert.equal(workShare(H(12) + 30, 'early'), 1);
-  assert.equal(workShare(H(13), 'early'), 0);
-  assert.equal(workShare(H(13) + 30, 'early'), 0);
-  assert.equal(workShare(H(14), 'early'), 1);
-  assert.equal(workShare(H(16), 'early'), 0.5);
-  assert.equal(workShare(H(17) + 30, 'early'), 1);
+  // v1.6: breaks come from the day plan; these are the old group-0 times.
+  const early = { am: H(12), lunch: H(13), pm: H(16) };
+  const late = { am: H(13), lunch: H(16), pm: H(17) + 30 };
+  assert.equal(workShare(H(9), 'early', early), 1);
+  assert.equal(workShare(H(11), 'early', early), 1);
+  assert.equal(workShare(H(12), 'early', early), 0.5);
+  assert.equal(workShare(H(12) + 30, 'early', early), 1);
+  assert.equal(workShare(H(13), 'early', early), 0);
+  assert.equal(workShare(H(13) + 30, 'early', early), 0);
+  assert.equal(workShare(H(14), 'early', early), 1);
+  assert.equal(workShare(H(16), 'early', early), 0.5);
+  assert.equal(workShare(H(17) + 30, 'early', early), 1);
   // outside shift
-  assert.equal(workShare(H(8) + 30, 'early'), 0);
-  assert.equal(workShare(H(18), 'early'), 0);
-  // late shift (group 0): breaks 13:00, lunch 16:00, break 17:30
-  assert.equal(workShare(H(13), 'late'), 0.5);
-  assert.equal(workShare(H(16), 'late'), 0);
-  assert.equal(workShare(H(16) + 30, 'late'), 0);
-  assert.equal(workShare(H(17) + 30, 'late'), 0.5);
-  assert.equal(workShare(H(19), 'late'), 1);
-  assert.equal(workShare(H(20) + 30, 'late'), 1);
-  assert.equal(workShare(H(21), 'late'), 0);
+  assert.equal(workShare(H(8) + 30, 'early', early), 0);
+  assert.equal(workShare(H(18), 'early', early), 0);
+  assert.equal(workShare(H(13), 'late', late), 0.5);
+  assert.equal(workShare(H(16), 'late', late), 0);
+  assert.equal(workShare(H(16) + 30, 'late', late), 0);
+  assert.equal(workShare(H(17) + 30, 'late', late), 0.5);
+  assert.equal(workShare(H(19), 'late', late), 1);
+  assert.equal(workShare(H(20) + 30, 'late', late), 1);
+  assert.equal(workShare(H(21), 'late', late), 0);
 });
 
 test('default roster gives 4 early and 4 late agents', () => {
@@ -107,30 +108,4 @@ test('default roster gives 4 early and 4 late agents', () => {
   }
   assert.equal(r.l1[2], 'early');
   assert.equal(r.q1[4], 'late');
-});
-
-test('a pair on one shift never breaks together, and nobody breaks while a shift is alone', () => {
-  // Group 1: early 12:30, lunch 14:00, 16:30; late 13:30, lunch 15:00, 17:00.
-  assert.equal(workShare(H(12), 'early', 1), 1);
-  assert.equal(workShare(H(12) + 30, 'early', 1), 0.5);
-  assert.equal(workShare(H(13), 'early', 1), 1);
-  assert.equal(workShare(H(14), 'early', 1), 0);
-  assert.equal(workShare(H(14) + 30, 'early', 1), 0);
-  assert.equal(workShare(H(16) + 30, 'early', 1), 0.5);
-  assert.equal(workShare(H(13) + 30, 'late', 1), 0.5);
-  assert.equal(workShare(H(15), 'late', 1), 0);
-  assert.equal(workShare(H(17), 'late', 1), 0.5);
-  for (const shift of ['early', 'late']) {
-    let total0 = 0; let total1 = 0;
-    for (let m = H(9); m < H(21); m += 30) {
-      const a = workShare(m, shift, 0); const b = workShare(m, shift, 1);
-      total0 += a; total1 += b;
-      const inShift = m >= SHIFTS[shift].start && m < SHIFTS[shift].end;
-      if (inShift) assert.ok(a === 1 || b === 1, `${shift} ${m}: ${a} + ${b}`);
-      if (inShift && (m < H(12) || m >= H(18))) assert.ok(a === 1 && b === 1, `${shift} ${m} alone`);
-    }
-    assert.equal(total0, total1); // same working time in both groups
-    assert.equal(total0, 15); // 9 hours less 1.5 hours of breaks
-  }
-  assert.equal(workShare(H(12), 'early'), workShare(H(12), 'early', 0));
 });

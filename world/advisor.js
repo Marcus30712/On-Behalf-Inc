@@ -25,4 +25,5 @@ export const ADVISOR = {
   'game-over-clients': ['고객사가 떠난 건 아프지만, 무엇이 흔들렸는지 이제 알잖아요. 다시 시작해요.'],
   'milestone-big-client': ['고객사 세 곳이라니! 처음 문 열던 날이 생각나네요.'],
   'milestone-rank-s': ['S등급이에요. 사람을 아껴서 얻은 등급이라 더 값져요.'],
+  'breaks-auto': ['팀장이 없는 날엔 휴식표가 엉성해져요. 오늘은 서비스 레벨을 자주 봐 주세요.'],
 };

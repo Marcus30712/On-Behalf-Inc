@@ -884,7 +884,9 @@ v1.6부터 휴식은 팀장이 정한 계획대로 승인된 시간대 안에서
 - 그래서 가장 작은 변경은 S 기준을 그대로 두는 것이다. offers-S 점검은 기간을 2년으로 옮기고, 측정 10/10에 여유를 둔 ≥ 8/10으로 잡았다. autoplay의 제안 받는 판은 360일에서 720일이 되었다(전체 실행 시간 345초 → 438초, 측정 한 번씩).
 - 1년 안 S가 사라진 이유: 제안 받는 판은 좌석 8개로 고객사 셋을 돌리다 한 곳을 잃는다(−15, 180일). v1.6에서는 그 1년 동안 met 비율이 낮아 유지 점수가 73~87에 머문다. 2년 차에 고객사 둘로 돌아가면 90을 넘는다.
 
-#### 시간대별 목표 달성 구간 비율 (시드 1~10 × 평일 6일, 새 게임, `/tmp/t3gen/byhour.mjs`)
+#### 시간대별 목표 달성 구간 비율 (시드 1~10 × 평일 6일, 새 게임, `node tools/byhour.js`)
+
+방법: 시드 1~10, 평일 6일(날 1·2·3·8·9·10), 매번 그날 09:00의 새 기본 게임(앞선 날 없음, 결정 없음). 09:00~21:00 30분 24칸을 돌린다(rng는 `시드 × 100 + 날`). 콜이 있는 고객사마다 한 칸으로 세고, 그 칸의 서비스 레벨이 고객사 목표 이상이면 달성이다. 스크립트 `tools/byhour.js`는 지금 코드만 읽는다. 표의 세 행은 각각 그 코드·콜량 조합(v1.5 체크아웃 d69421e, 실제 휴식에 v1.5 콜량, 최종)으로 같은 스크립트를 돌린 값이다. 최종 행은 `node tools/byhour.js`로 다시 얻는다.
 
 | 경우 | 10:00~12:00 | 12:00~18:00 | 18:00~20:00 | 하루 전체 |
 |---|---|---|---|---|
@@ -901,13 +903,14 @@ v1.6부터 휴식은 팀장이 정한 계획대로 승인된 시간대 안에서
 | 콜량만 줄이기 (×0.8; ×0.70~0.95를 훑음) | 15/19 | 방치 지침 5/10, 방치가 매 시드 더 가난함 9/10, offers-S 0/10, 확장 가난하지 않음 7/10 |
 | 콜량 ×0.8 + 스트레스 (`STRESS.base` 1.45 → 1.55; 다른 스트레스 값도 훑음) | 16/19 | 계약금 전액 69.2%(기준 70), offers-S 0/10, 확장 가난하지 않음 6/10 |
 | 중간 조 추가 (10:00 또는 10:30 시작, 이른 3 / 중간 2 / 늦은 3; ×1, ×0.8, +1.55) | 최고 12/19 | 한 사람만 있는 시간이 아침·밤 끝으로 옮겨 갈 뿐 하루 전체는 그대로(약 76% / 83%). 되돌림 |
-| 콜량 ×0.8 + 스트레스 1.55 + 기준 세 가지 재설정 (최종) | **19/19** | 없음 |
+| 콜량 ×0.8 + 스트레스 1.55 + 기준 세 가지 재설정 (최종) | **19/19** (이후 2년 방치 S 점검을 더해 20/20) | 없음 |
 
 #### 점검 줄 (v1.5 → v1.6)
 
-v1.5 기준선은 `/tmp/autoplay-before-t3.txt`(19/19, 271.9초), v1.6은 최종 실행(19/19, 437.9초)이다. 바뀐 줄만 적었다. 나머지 줄(합리적 플레이 지침 0/10, 1년 생존 10/10, 첫 달 30일, 방치 S 0/10, 방치 퇴사 10/10, 이메일 방치 10/10, 이메일 1명 10/10)은 글자까지 같다.
+v1.5 기준선은 d69421e의 `node tools/autoplay.js`(19/19, 271.9초), v1.6은 최종 실행(20/20, 456.3초)이다. 아래 diff는 점검 줄만 보인다. 표와 요약 줄 전체는 이 절 끝의 "autoplay 전체 출력"에 두 버전을 모두 실었다. 나머지 점검 줄(합리적 플레이 지침 0/10, 1년 생존 10/10, 첫 달 30일, 방치 S 0/10, 방치 퇴사 10/10, 이메일 방치 10/10, 이메일 1명 10/10)은 글자까지 같다.
 
 ```diff
++ PASS  idle reaches the S milestone on at most 4 seeds within two years: 4/10 (day - - 483 417 427 - - - - 668)
 - PASS  idle wears people down within 180 days: 9/10 seeds (burnouts>=2 or game over)
 + PASS  idle wears people down within 180 days: 10/10 seeds (burnouts>=2 or game over)
 - PASS  fees paid in full: sensible 75.0% of client-months (>= 70%), idle 33.6%
@@ -934,6 +937,366 @@ v1.5 기준선은 `/tmp/autoplay-before-t3.txt`(19/19, 271.9초), v1.6은 최종
 + PASS  two email agents assigned once, no daily stand-in, keep the email client (never lost) (v1.3): 9/10 seeds (>= 8)
 ```
 
+v1.6에서 새로 생긴 점검(20번째): 방치가 2년(720일) 안에 S 이정표에 닿는 시드는 4/10 이하. 측정 4/10(S 달성 417~668일째, 시드 3·4·5·10)이고 나머지 방치 판은 대부분 그 전에 게임이 끝난다(v1.5 5/10). 기준 4는 측정값 그대로라 여유가 없다. 다섯째 시드가 S에 닿으면 그냥 넘기지 말고 살펴본다. 합리적 플레이는 같은 기간 10/10으로 닿는다. `tests/balance.test.js`에도 같은 기준의 시험이 있다. 게임 값은 바꾸지 않았다.
+
+#### 방치 플레이의 벌이 v1.5보다 약해졌다
+
+실제 휴식을 넣고 콜량을 줄이면서(×0.8) 방치한 판이 예전만큼 무너지지 않는다. 숫자로는 다음과 같다.
+
+- 방치 1년 평균 현금: 32,140 → 59,480. 합리적 플레이는 97,760 → 93,320으로 조금 줄었다.
+- 시드별로 방치와 합리적 플레이의 가장 작은 현금 차이: 13,400(시드 6, 98,000 대 84,600).
+- 1년 안에 게임이 끝난 방치 판: 5/10 → 1/10(시드 8).
+- 월요일과 화~목의 서비스 달성 차이: 9.5%p → 3.4%p(72.2% 대 75.6%). 콜이 몰리는 날 달성률은 45.2% → 68.8%.
+
+그래도 합리적 플레이는 계약금 전액 비율에서 방치를 확실히 앞선다(69.2% 대 15.8%). 방치를 벌하는 힘은 이제 현금과 생존보다 계약금 비율과 사람의 피로(번아웃)에서 나온다. 난이도는 콜량보다 휴식 시간대에서 더 많이 온다.
+
+#### autoplay 전체 출력
+
+v1.6 (최종, `node tools/autoplay.js`):
+
+```
+
+idle, 360 days
+seed  days  over                 avgSL   sick(days)  burnout  left  helped  minSat  cash
+1     360   -                    67.5%   22(108)     11       6     0       0       82800
+2     360   -                    64.8%   25(106)     3        6     0       0       56000
+3     360   -                    72.9%   29(132)     7        2     0       0       45200
+4     360   -                    72.9%   19(92)      7        4     0       0       46800
+5     360   -                    70.8%   33(153)     13       3     0       0       41600
+6     360   -                    61.6%   14(60)      15       6     0       0       84600
+7     360   -                    65.6%   34(149)     35       3     0       0       29200
+8     296   game-over-clients    57.4%   18(83)      21       6     0       0       73000
+9     360   -                    58.6%   23(104)     30       5     0       0       62000
+10    360   -                    70.9%   48(212)     9        2     0       34      73600
+
+sensible, 360 days
+seed  days  over                 avgSL   sick(days)  burnout  left  helped  minSat  cash
+1     360   -                    83.9%   14(45)      0        0     2       70      104400
+2     360   -                    84.8%   17(45)      0        0     3       71      105200
+3     360   -                    82.8%   18(53)      0        0     2       70      90800
+4     360   -                    82.1%   22(62)      0        0     3       71      84800
+5     360   -                    81.7%   21(64)      0        0     2       71      84800
+6     360   -                    82.6%   21(62)      0        0     3       71      98000
+7     360   -                    80.7%   31(99)      0        0     2       69      81200
+8     360   -                    83.1%   22(64)      0        0     2       65      98000
+9     360   -                    82.4%   18(53)      0        0     3       71      88000
+10    360   -                    83.0%   25(83)      0        0     3       68      98000
+
+sensible taking client offers, 720 days
+seed  days  over                 avgSL   sick(days)  burnout  left  helped  minSat  cash
+1     720   -                    73.7%   32(93)      0        0     2       0       217200
+2     720   -                    75.2%   37(104)     0        0     3       9       372400
+3     720   -                    73.9%   35(103)     0        0     2       0       332400
+4     720   -                    71.9%   33(92)      0        0     3       0       368800
+5     720   -                    69.6%   42(118)     0        0     2       0       343200
+6     720   -                    76.0%   36(103)     0        0     3       12      388000
+7     720   -                    76.5%   43(125)     0        0     2       0       85600
+8     720   -                    74.4%   44(133)     0        0     2       5       356400
+9     720   -                    75.2%   38(107)     0        0     3       0       344800
+10    720   -                    73.9%   44(141)     0        0     3       7       351200
+
+sensible, 720 days
+seed  days  over                 avgSL   sick(days)  burnout  left  helped  minSat  cash
+1     720   -                    83.9%   26(80)      0        0     2       70      188800
+2     720   -                    84.3%   34(96)      0        0     3       71      183200
+3     720   -                    83.5%   33(93)      0        0     2       70      168400
+4     720   -                    83.1%   36(100)     0        0     3       71      162800
+5     720   -                    82.1%   41(120)     0        0     2       71      160000
+6     720   -                    84.3%   44(116)     0        0     3       71      189200
+7     720   -                    81.6%   50(152)     0        0     2       69      142800
+8     720   -                    83.1%   39(103)     0        0     2       65      169200
+9     720   -                    82.5%   45(133)     0        0     3       71      159200
+10    720   -                    84.2%   40(123)     0        0     3       68      193200
+
+sensible expanding the office, greedy (every offer it can staff), 720 days
+seed  days  over                 avgSL   sick(days)  burnout  left  helped  minSat  cash
+1     720   -                    77.3%   48(139)     0        0     2       54      295233
+2     720   -                    77.7%   64(184)     0        0     3       64      261967
+3     720   -                    76.7%   58(167)     0        0     2       61      261033
+4     720   -                    76.1%   64(177)     0        0     3       69      230233
+5     720   -                    76.8%   65(190)     0        0     2       68      255033
+6     720   -                    77.1%   56(160)     0        0     3       65      274833
+7     720   -                    76.2%   79(222)     0        0     2       65      265233
+8     720   -                    78.1%   61(166)     0        0     2       62      247033
+9     720   -                    77.5%   59(167)     0        0     3       60      240433
+10    720   -                    77.9%   66(203)     0        0     3       68      249833
+
+sensible expanding the office, keeping service (at most 3 weekday clients), 720 days
+seed  days  over                 avgSL   sick(days)  burnout  left  helped  minSat  cash
+1     720   -                    86.8%   59(171)     0        0     2       70      237633
+2     720   -                    86.6%   49(134)     0        0     3       65      175233
+3     720   -                    85.2%   58(176)     0        0     2       70      182300
+4     720   -                    85.5%   58(161)     0        0     3       70      162100
+5     720   -                    85.2%   58(174)     0        0     2       55      160900
+6     720   -                    86.3%   54(149)     0        0     3       70      191233
+7     720   -                    87.2%   72(204)     0        0     2       69      118833
+8     720   -                    86.0%   55(154)     0        0     2       65      195500
+9     720   -                    85.5%   63(176)     0        0     3       70      194300
+10    720   -                    88.8%   62(184)     0        0     3       68      119233
+
+keeping service with the chat and email clients, 720 days (v1.3)
+seed  days  over                 avgSL   sick(days)  burnout  left  helped  minSat  cash
+1     720   -                    86.4%   55(147)     0        0     2       70      265233
+2     720   -                    87.7%   50(151)     0        0     3       70      182633
+3     720   -                    85.6%   63(177)     0        0     2       70      180433
+4     720   -                    85.5%   59(163)     0        0     3       70      188033
+5     720   -                    86.6%   51(156)     0        0     2       70      152033
+6     720   -                    87.3%   52(146)     0        0     3       70      196233
+7     720   -                    86.0%   73(215)     0        0     2       69      136633
+8     720   -                    86.9%   60(165)     0        0     2       65      213100
+9     720   -                    86.5%   57(164)     0        0     3       66      201100
+10    720   -                    87.3%   63(194)     0        0     3       68      169433
+
+keeping service with the chat and email clients, nobody on the email, 720 days (v1.3)
+seed  days  over                 avgSL   sick(days)  burnout  left  helped  minSat  cash
+1     720   -                    83.8%   56(148)     0        0     2       0       225033
+2     720   -                    85.1%   46(132)     0        0     3       0       153033
+3     720   -                    83.3%   54(156)     0        0     2       0       133433
+4     720   -                    83.2%   53(151)     0        0     3       0       150433
+5     720   -                    83.7%   45(137)     0        0     2       0       120433
+6     720   -                    84.5%   60(167)     0        0     3       0       168833
+7     720   -                    83.6%   68(195)     0        0     2       0       118033
+8     720   -                    84.5%   55(152)     0        0     2       0       168900
+9     720   -                    83.9%   63(179)     0        0     3       0       150500
+10    720   -                    83.4%   69(212)     0        0     3       0       147033
+
+keeping service with the chat and email clients, one email agent and no cover, 720 days (v1.3)
+seed  days  over                 avgSL   sick(days)  burnout  left  helped  minSat  cash
+1     720   -                    84.2%   54(157)     0        0     2       0       198433
+2     720   -                    85.2%   47(132)     0        0     3       0       167433
+3     720   -                    82.4%   54(159)     0        0     2       0       168833
+4     720   -                    82.9%   54(147)     0        0     3       0       138233
+5     720   -                    84.8%   50(150)     0        0     2       0       146033
+6     720   -                    83.9%   50(139)     0        0     3       0       171833
+7     720   -                    82.6%   71(208)     0        0     2       0       144633
+8     720   -                    83.8%   55(146)     0        0     2       0       157300
+9     720   -                    83.2%   63(185)     0        0     3       0       157100
+10    720   -                    83.1%   62(191)     0        0     3       0       156833
+
+keeping service with the chat and email clients, two email agents assigned once, no cover, 720 days (v1.3)
+seed  days  over                 avgSL   sick(days)  burnout  left  helped  minSat  cash
+1     720   -                    87.4%   52(148)     0        0     2       70      269233
+2     720   -                    87.9%   55(160)     0        0     3       70      186233
+3     720   -                    84.9%   56(165)     0        0     2       7       169233
+4     720   -                    86.8%   50(142)     0        0     3       70      198833
+5     720   -                    86.8%   52(159)     0        0     2       70      155233
+6     720   -                    87.5%   52(146)     0        0     3       70      192633
+7     720   -                    86.2%   73(215)     0        0     2       69      143033
+8     720   -                    87.1%   58(163)     0        0     2       65      223100
+9     720   -                    86.8%   52(147)     0        0     3       66      208300
+10    720   -                    87.2%   67(207)     0        0     3       68      170233
+
+first month, default roster (idle): met-share by weekday Mon..Fri 72.2% 76.7% 76.4% 73.6% 73.0% | heavy days 57.0% (25) vs ordinary 75.5%
+sensible year: met-share by weekday Mon..Fri 81.5% 84.4% 77.3% 84.0% 86.5% | heavy days 68.8% (336) vs ordinary 83.7%
+sensible cash at month ends (seed 1): 28200 36400 44600 52800 61000 65600 67000 75200 79800 88000 96200 104400
+research that helped someone (seed 1): rest-room: 토 테산, 펠 지벨, 세토, 케피, 토 리셀, 메른 이르덴, 에루 | stress-training: 토 테산, 펠 지벨, 세토, 토 리셀, 메른 이르덴
+sensible year: clinic shortened a sick leave on 5 of 10 seeds; client offers per seed: 4 4 4 4 4 4 4 4 4 4
+expanding greedy: expansion 1 done on day 163 221 253 283 283 253 253 253 253 253 | expansion 2 290 319 380 410 380 350 350 380 380 380 | clients at the end gureum+mulbit+bandi+baram+dalbit gureum+mulbit+bandi+baram+dalbit gureum+mulbit+bandi+baram+dalbit gureum+mulbit+bandi+baram+dalbit gureum+mulbit+bandi+baram+dalbit gureum+mulbit+bandi+baram+dalbit gureum+mulbit+dalbit+baram+bandi gureum+mulbit+bandi+baram+dalbit gureum+mulbit+bandi+baram+dalbit gureum+mulbit+bandi+baram+dalbit
+expanding greedy: fees in full year 1 50.2% year 2 28.7% | cash at day 360 64033 39767 71900 59100 68900 36633 43833 69900 69700 69700 | weekend days open 143 129 125 117 117 125 109 119 117 117 | person-days rostered 6+ days a week 0 0 0 0 0 0 0 0 0 0 | burnouts 0 resigned 0
+expanding keep: expansion 1 done on day 163 221 253 283 283 253 253 253 253 253 | expansion 2 350 410 438 438 438 410 410 438 438 380 | clients at the end gureum+mulbit+dalbit+baram gureum+mulbit+dalbit+baram gureum+mulbit+dalbit+baram gureum+mulbit+dalbit+baram gureum+mulbit+dalbit+baram gureum+mulbit+dalbit+baram gureum+mulbit+bandi+baram gureum+mulbit+dalbit+baram gureum+mulbit+dalbit+baram gureum+mulbit+bandi+baram
+expanding keep: fees in full year 1 67.3% year 2 89.5% | cash at day 360 45033 51700 50500 36300 42700 54100 59900 46900 52500 68700 | weekend days open 99 77 73 55 55 73 65 73 73 65 | person-days rostered 6+ days a week 0 0 0 0 0 0 0 0 0 0 | burnouts 0 resigned 0
+plain sensible 720: cash at day 360 104400 105200 90800 84800 84800 98000 81200 98000 88000 98000
+channels: clients at the end gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+baram+solbang gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+baram+solbang gureum+mulbit+saebyeol+baram+solbang gureum+mulbit+saebyeol+baram+solbang gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+baram+solbang | email workdays 252 139 168 166 73 132 69 188 188 93 | times lost 0 0 0 0 0 0 0 0 0 0 | email met 100.0% 100.0% 100.0% 100.0% 100.0% 100.0% 100.0% 100.0% 100.0% 100.0% | largest email backlog / mails a day 46/81 14/81 13/80 21/80 0/80 0/81 13/80 19/80 19/80 14/80 | fees in full year 1 68.8% year 2 70.9%
+channels, email unstaffed: clients at the end gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+baram gureum+mulbit+saebyeol+baram gureum+mulbit+saebyeol+baram gureum+mulbit+saebyeol+baram gureum+mulbit+saebyeol+baram gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+baram gureum+mulbit+saebyeol+baram gureum+mulbit+saebyeol+baram | email workdays 107 73 74 76 73 75 70 75 76 74 | times lost 2 2 2 2 2 2 1 2 2 2 | email met 2.9% 2.9% 2.8% 2.7% 2.9% 2.8% 3.0% 2.8% 2.7% 2.8% | largest email backlog / mails a day 3295/80 3009/79 3047/78 3115/78 2880/76 3111/79 2997/77 3034/79 3130/79 3033/76 | fees in full year 1 68.8% year 2 80.3%
+channels, one email agent: clients at the end gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+baram+solbang gureum+mulbit+saebyeol+baram gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+baram gureum+mulbit+saebyeol+baram gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+baram gureum+mulbit+saebyeol+baram gureum+mulbit+saebyeol+baram | email workdays 109 75 88 87 42 85 85 90 85 91 | times lost 2 1 2 1 1 2 1 2 2 2 | email met 21.4% 15.6% 15.0% 16.6% 14.6% 10.0% 21.8% 13.9% 9.7% 15.8% | largest email backlog / mails a day 730/78 920/79 1048/76 2113/77 686/80 1210/80 1007/78 432/78 1621/78 730/77 | fees in full year 1 68.8% year 2 78.9%
+channels, two fixed email agents: clients at the end gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+baram+solbang gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+baram+solbang gureum+mulbit+saebyeol+baram+solbang gureum+mulbit+saebyeol+baram+solbang gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+baram+solbang | email workdays 252 139 104 166 73 132 69 188 188 93 | times lost 0 0 1 0 0 0 0 0 0 0 | email met 99.7% 97.0% 77.7% 98.6% 97.5% 100.0% 93.6% 99.6% 98.4% 95.4% | largest email backlog / mails a day 95/81 107/81 315/79 99/80 81/79 16/81 167/80 87/80 101/80 166/80 | fees in full year 1 68.8% year 2 74.6%
+
+PASS  idle wears people down within 180 days: 10/10 seeds (burnouts>=2 or game over)
+PASS  sensible play is not worn down by day 180 (same rule): 0/10 seeds worn
+PASS  fees paid in full: sensible 69.2% of client-months (>= 65%), idle 15.8% (<= sensible - 15)
+PASS  sensible survives 360 days with avg SL >= 90% of target: 10/10 seeds
+PASS  default staffing mostly meets target on ordinary days, not always: 75.5%
+PASS  Mondays and heavy days strain it: Mon 72.2% vs Tue-Thu 75.6%, heavy 68.8% vs 83.7%
+PASS  sensible cash after 12 months positive with growth: min 81200, mean 93320 (start 20000)
+PASS  idle reaches the first month end on every seed: 30 30 30 30 30 30 30 30 30 30
+PASS  research helps someone (build-done with names): 2.5 per seed
+PASS  idle ends the year with less cash than sensible on every seed: 10/10 (idle 82800 56000 45200 46800 41600 84600 29200 73000 62000 73600)
+PASS  idle reaches the S milestone on at most 2 seeds: 0/10
+PASS  idle reaches the S milestone on at most 4 seeds within two years: 4/10 (day - - 483 417 427 - - - - 668)
+PASS  idle loses someone (resignation) or the game within a year: 10/10 seeds
+PASS  sensible play that takes client offers still reaches the S milestone within two years (v1.2 offers-S guard, re-based v1.6): 10/10 seeds (>= 8)
+PASS  sensible play over two years: fees in full year 1 69.2%, year 2 75.4% (each >= 65%), game over 0/10
+PASS  sensible play that keeps service expands within 720 days on 10/10 seeds (>= 8), fees in full year 1 67.3%, year 2 89.5% (each >= 65%), not poorer than without on 6/10 (>= 6)
+PASS  keeping service with the chat and email clients (v1.3): both active at day 720 on 10/10 (>= 8), email backlog within two days of mail on 10/10, fees in full year 1 68.8%, year 2 70.9% (each >= 65%), mean cash 188486 vs keeping service without 173727 (>=; not poorer on 8/10, not a bar)
+PASS  an email client nobody answers is lost (v1.3): 10/10 seeds (>= 8)
+PASS  one email agent with no cover struggles (lost, or email met under 90%) (v1.3): 10/10 seeds (>= 8)
+PASS  two email agents assigned once, no daily stand-in, keep the email client (never lost) (v1.3): 9/10 seeds (>= 8)
+
+20/20 checks pass (455.0 s)
+```
+
+v1.5 (d69421e):
+
+```
+
+idle, 360 days
+seed  days  over                 avgSL   sick(days)  burnout  left  helped  minSat  cash
+1     360   -                    73.9%   38(183)     6        1     0       0       52800
+2     360   -                    78.1%   28(124)     4        1     0       0       22000
+3     360   -                    75.6%   29(130)     7        3     0       0       34000
+4     299   game-over-cash       79.0%   23(102)     9        1     0       0       -1200
+5     360   -                    73.5%   27(128)     8        3     0       0       41600
+6     360   -                    71.9%   23(100)     13       3     0       0       10000
+7     176   game-over-clients    47.6%   21(89)      22       3     0       0       39000
+8     329   game-over-cash       79.5%   26(117)     12       2     0       0       -1000
+9     256   game-over-clients    57.8%   20(90)      22       5     0       0       48800
+10    360   -                    71.2%   39(178)     8        3     0       0       75400
+
+sensible, 360 days
+seed  days  over                 avgSL   sick(days)  burnout  left  helped  minSat  cash
+1     360   -                    88.4%   14(43)      0        0     2       70      100800
+2     360   -                    88.6%   22(72)      0        0     2       71      101200
+3     360   -                    86.6%   25(76)      0        0     2       70      97600
+4     360   -                    87.3%   17(51)      0        0     2       70      94400
+5     360   -                    84.3%   24(76)      0        0     2       71      87600
+6     360   -                    86.3%   21(62)      0        0     2       71      98000
+7     360   -                    83.3%   32(96)      0        0     2       67      87600
+8     360   -                    87.9%   22(64)      0        0     2       68      97600
+9     360   -                    88.4%   16(47)      0        0     2       71      108000
+10    360   -                    88.3%   23(79)      0        0     2       69      104800
+
+sensible taking client offers, 360 days
+seed  days  over                 avgSL   sick(days)  burnout  left  helped  minSat  cash
+1     360   -                    68.6%   12(39)      0        0     2       1       48000
+2     360   -                    71.9%   18(52)      0        0     2       0       209600
+3     155   game-over-clients    52.3%   9(33)       0        0     2       0       83400
+4     360   -                    67.0%   14(44)      0        0     2       0       212000
+5     360   -                    59.4%   17(52)      0        0     2       0       96400
+6     360   -                    76.3%   14(47)      0        0     2       0       214400
+7     360   -                    68.3%   29(86)      0        0     2       0       27600
+8     360   -                    66.8%   24(70)      0        0     2       0       84800
+9     360   -                    73.4%   26(88)      0        0     3       0       75200
+10    360   -                    69.2%   13(44)      0        0     2       0       176000
+
+sensible, 720 days
+seed  days  over                 avgSL   sick(days)  burnout  left  helped  minSat  cash
+1     720   -                    88.0%   33(94)      0        0     2       70      185600
+2     720   -                    89.3%   35(106)     0        0     2       71      182800
+3     720   -                    88.3%   44(126)     0        0     2       70      192400
+4     720   -                    87.6%   31(90)      0        0     2       70      178800
+5     720   -                    86.6%   43(130)     0        0     2       71      175600
+6     720   -                    88.2%   40(109)     0        0     2       71      192800
+7     720   -                    83.9%   55(160)     0        0     2       67      155200
+8     720   -                    87.9%   39(103)     0        0     2       68      192800
+9     720   -                    88.1%   45(125)     0        0     2       71      193200
+10    720   -                    89.0%   43(139)     0        0     2       69      203200
+
+sensible expanding the office, greedy (every offer it can staff), 720 days
+seed  days  over                 avgSL   sick(days)  burnout  left  helped  minSat  cash
+1     720   -                    75.4%   56(156)     0        0     2       56      309967
+2     720   -                    79.1%   58(165)     0        0     2       65      310767
+3     720   -                    78.8%   60(170)     0        0     2       68      289833
+4     720   -                    77.8%   51(140)     0        0     2       67      285233
+5     720   -                    77.9%   60(175)     0        0     2       69      258633
+6     720   -                    76.8%   67(194)     0        0     2       63      246833
+7     720   -                    75.8%   79(218)     0        0     2       62      280433
+8     720   -                    77.4%   63(182)     0        0     2       61      285767
+9     720   -                    76.2%   72(196)     0        0     2       64      268767
+10    720   -                    77.9%   67(199)     0        0     2       68      280033
+
+sensible expanding the office, keeping service (at most 3 weekday clients), 720 days
+seed  days  over                 avgSL   sick(days)  burnout  left  helped  minSat  cash
+1     720   -                    90.7%   53(154)     0        0     2       70      220633
+2     720   -                    91.0%   50(147)     0        0     2       70      227033
+3     720   -                    89.7%   62(178)     0        0     2       66      198033
+4     720   -                    89.0%   55(155)     0        0     2       68      216233
+5     720   -                    86.5%   55(164)     0        0     2       70      173700
+6     720   -                    88.4%   59(166)     0        0     2       70      198033
+7     720   -                    87.5%   63(181)     0        0     2       67      185033
+8     720   -                    90.2%   54(153)     0        0     2       68      221433
+9     720   -                    88.8%   60(171)     0        0     2       70      210833
+10    720   -                    89.2%   64(184)     0        0     2       69      221433
+
+keeping service with the chat and email clients, 720 days (v1.3)
+seed  days  over                 avgSL   sick(days)  burnout  left  helped  minSat  cash
+1     720   -                    89.0%   57(163)     0        0     2       70      252433
+2     720   -                    88.1%   66(194)     0        0     2       70      217633
+3     720   -                    89.2%   58(169)     0        0     2       66      175900
+4     720   -                    87.7%   56(148)     0        0     2       70      239433
+5     720   -                    86.9%   61(185)     0        0     2       70      180100
+6     720   -                    87.5%   63(185)     0        0     2       70      208300
+7     720   -                    86.7%   67(190)     0        0     2       67      209833
+8     720   -                    88.4%   54(151)     0        0     2       68      220033
+9     720   -                    87.6%   58(166)     0        0     2       63      247033
+10    720   -                    89.5%   57(166)     0        0     2       69      206633
+
+keeping service with the chat and email clients, nobody on the email, 720 days (v1.3)
+seed  days  over                 avgSL   sick(days)  burnout  left  helped  minSat  cash
+1     720   -                    87.8%   56(161)     0        0     2       0       213833
+2     720   -                    87.1%   61(180)     0        0     2       0       184033
+3     720   -                    87.7%   55(158)     0        0     2       0       175500
+4     720   -                    86.7%   54(139)     0        0     2       0       203433
+5     720   -                    85.7%   66(196)     0        0     2       0       144300
+6     720   -                    86.3%   51(142)     0        0     2       0       165900
+7     720   -                    85.7%   66(191)     0        0     2       0       168833
+8     720   -                    87.1%   54(149)     0        0     2       0       161033
+9     720   -                    86.4%   54(144)     0        0     2       0       182433
+10    720   -                    87.4%   63(182)     0        0     2       0       166833
+
+keeping service with the chat and email clients, one email agent and no cover, 720 days (v1.3)
+seed  days  over                 avgSL   sick(days)  burnout  left  helped  minSat  cash
+1     720   -                    87.5%   61(172)     0        0     2       0       209633
+2     720   -                    87.1%   53(153)     0        0     2       0       179833
+3     720   -                    87.3%   57(167)     0        0     2       0       177300
+4     720   -                    86.8%   56(149)     0        1     2       0       174133
+5     720   -                    85.4%   68(205)     0        0     2       0       167700
+6     720   -                    85.9%   58(165)     0        0     2       0       170700
+7     720   -                    85.3%   75(213)     0        1     2       0       172533
+8     720   -                    86.5%   67(190)     0        0     2       0       182033
+9     720   -                    85.4%   56(164)     0        0     2       0       172633
+10    720   -                    86.4%   65(185)     0        0     2       0       165233
+
+keeping service with the chat and email clients, two email agents assigned once, no cover, 720 days (v1.3)
+seed  days  over                 avgSL   sick(days)  burnout  left  helped  minSat  cash
+1     720   -                    90.3%   50(149)     0        0     2       70      268033
+2     720   -                    88.3%   66(190)     0        0     2       70      235433
+3     720   -                    90.2%   55(153)     0        0     2       70      201100
+4     720   -                    86.6%   60(166)     0        0     2       67      250033
+5     720   -                    87.6%   62(189)     0        0     2       70      187700
+6     720   -                    88.1%   62(187)     0        0     2       70      219700
+7     720   -                    86.9%   69(201)     0        0     2       59      215233
+8     720   -                    88.8%   52(141)     0        0     2       68      222633
+9     720   -                    87.8%   59(172)     0        0     2       63      247033
+10    720   -                    88.9%   61(181)     0        0     2       69      200633
+
+first month, default roster (idle): met-share by weekday Mon..Fri 72.0% 81.1% 84.3% 79.1% 76.8% | heavy days 26.0% (20) vs ordinary 81.0%
+sensible year: met-share by weekday Mon..Fri 83.4% 89.8% 79.9% 90.4% 91.4% | heavy days 45.2% (333) vs ordinary 89.8%
+sensible cash at month ends (seed 1): 24600 32800 41000 49200 57400 62000 67000 75200 79800 88000 96200 100800
+research that helped someone (seed 1): rest-room: 토 테산, 유라밋, 펠 지벨, 세토, 케피, 메른 이르덴 | stress-training: 토 테산, 펠 지벨, 세토, 토 리셀, 메른 이르덴
+sensible year: clinic shortened a sick leave on 0 of 10 seeds; client offers per seed: 4 4 4 4 4 4 4 4 4 4
+expanding greedy: expansion 1 done on day 193 193 221 193 253 253 221 221 193 221 | expansion 2 319 319 350 350 350 350 350 319 319 350 | clients at the end gureum+mulbit+bandi+baram+dalbit gureum+mulbit+bandi+baram+dalbit gureum+mulbit+bandi+baram+dalbit gureum+mulbit+bandi+baram+dalbit gureum+mulbit+bandi+baram+dalbit gureum+mulbit+bandi+baram+dalbit gureum+mulbit+bandi+baram+dalbit gureum+mulbit+bandi+baram+dalbit gureum+mulbit+bandi+baram+dalbit gureum+mulbit+bandi+baram+dalbit
+expanding greedy: fees in full year 1 53.4% year 2 34.2% | cash at day 360 64767 46967 40833 44033 40033 36233 42433 42167 46167 39633 | weekend days open 141 135 127 133 121 117 133 127 135 133 | person-days rostered 6+ days a week 0 0 0 0 0 0 0 0 0 0 | burnouts 0 resigned 0
+expanding keep: expansion 1 done on day 193 193 221 193 253 253 221 221 193 221 | expansion 2 350 350 410 350 438 410 380 380 350 380 | clients at the end gureum+mulbit+dalbit+baram gureum+mulbit+dalbit+baram gureum+mulbit+dalbit+baram gureum+mulbit+dalbit+baram gureum+mulbit+dalbit+baram gureum+mulbit+dalbit+baram gureum+mulbit+dalbit+baram gureum+mulbit+dalbit+baram gureum+mulbit+dalbit+baram gureum+mulbit+dalbit+baram
+expanding keep: fees in full year 1 77.4% year 2 89.3% | cash at day 360 38833 52833 59700 44833 34900 60900 70100 78500 38833 83700 | weekend days open 89 89 75 89 69 73 81 81 89 81 | person-days rostered 6+ days a week 0 0 0 0 0 0 0 0 0 0 | burnouts 0 resigned 0
+plain sensible 720: cash at day 360 100800 101200 97600 94400 87600 98000 87600 97600 108000 104800
+channels: clients at the end gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+baram+solbang gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+baram+solbang gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+baram+solbang | email workdays 229 203 114 229 119 188 209 209 229 154 | times lost 0 0 0 0 0 0 0 0 0 0 | email met 100.0% 99.3% 99.7% 100.0% 100.0% 100.0% 100.0% 100.0% 100.0% 100.0% | largest email backlog / mails a day 55/101 102/101 51/101 43/101 17/101 37/100 50/100 47/101 57/101 23/100 | fees in full year 1 77.0% year 2 68.9%
+channels, email unstaffed: clients at the end gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+baram gureum+mulbit+saebyeol+baram gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+baram gureum+mulbit+saebyeol+baram gureum+mulbit+saebyeol+baram gureum+mulbit+saebyeol+baram gureum+mulbit+saebyeol+baram | email workdays 84 75 75 83 52 75 74 75 76 75 | times lost 2 2 2 2 1 2 2 2 2 2 | email met 3.7% 2.8% 2.8% 3.8% 4.0% 2.8% 2.8% 2.8% 2.7% 2.8% | largest email backlog / mails a day 3898/98 3890/100 3859/99 3877/97 3819/96 3797/98 3883/99 3925/100 3886/100 3872/99 | fees in full year 1 77.0% year 2 84.6%
+channels, one email agent: clients at the end gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+baram gureum+mulbit+saebyeol+baram gureum+mulbit+saebyeol+baram gureum+mulbit+saebyeol+baram+solbang gureum+mulbit+saebyeol+baram gureum+mulbit+saebyeol+baram gureum+mulbit+saebyeol+baram gureum+mulbit+saebyeol+baram gureum+mulbit+saebyeol+baram | email workdays 86 87 84 84 55 82 83 78 87 82 | times lost 2 2 2 2 1 2 2 2 2 2 | email met 13.3% 11.9% 11.4% 9.2% 11.1% 7.6% 12.0% 7.5% 11.1% 8.7% | largest email backlog / mails a day 1881/99 1450/100 1508/99 1935/100 1726/95 1923/98 1892/100 1982/100 1752/100 1965/100 | fees in full year 1 77.0% year 2 84.7%
+channels, two fixed email agents: clients at the end gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+baram+solbang gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+baram+solbang gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+solbang+baram gureum+mulbit+saebyeol+baram+solbang | email workdays 229 203 114 229 119 188 209 209 229 154 | times lost 0 0 0 0 0 0 0 0 0 0 | email met 99.3% 92.4% 99.7% 80.7% 97.6% 98.7% 91.7% 95.6% 96.5% 92.9% | largest email backlog / mails a day 133/101 307/101 80/101 256/101 155/101 149/100 250/100 173/100 213/101 234/100 | fees in full year 1 77.0% year 2 73.2%
+
+PASS  idle wears people down within 180 days: 9/10 seeds (burnouts>=2 or game over)
+PASS  sensible play is not worn down by day 180 (same rule): 0/10 seeds worn
+PASS  fees paid in full: sensible 75.0% of client-months (>= 70%), idle 33.6%
+PASS  sensible survives 360 days with avg SL >= 90% of target: 10/10 seeds
+PASS  default staffing mostly meets target on ordinary days, not always: 81.0%
+PASS  Mondays and heavy days strain it: Mon 72.0% vs Tue-Thu 81.5%, heavy 45.2% vs 89.8%
+PASS  sensible cash after 12 months positive with growth: min 87600, mean 97760 (start 20000)
+PASS  idle reaches the first month end on every seed: 30 30 30 30 30 30 30 30 30 30
+PASS  research helps someone (build-done with names): 2.0 per seed
+PASS  idle ends the year with less cash than sensible on every seed: 10/10 (idle 52800 22000 34000 -1200 41600 10000 39000 -1000 48800 75400)
+PASS  idle reaches the S milestone on at most 2 seeds: 0/10
+PASS  idle loses someone (resignation) or the game within a year: 10/10 seeds
+PASS  sensible play that takes client offers still reaches the S milestone (v1.2 offers-S guard): 3/10 seeds (>= 3)
+PASS  sensible play over two years: fees in full year 1 75.0%, year 2 86.7% (each >= 65%), game over 0/10
+PASS  sensible play that keeps service expands within 720 days on 10/10 seeds (>= 8), fees in full year 1 77.4%, year 2 89.3% (each >= 65%), not poorer than without on 9/10 (>= 8)
+PASS  keeping service with the chat and email clients (v1.3): both active at day 720 on 10/10 (>= 8), email backlog within two days of mail on 10/10, fees in full year 1 77.0%, year 2 68.9% (each >= 65%), mean cash 215733 vs keeping service without 207240 (>=; not poorer on 6/10, not a bar)
+PASS  an email client nobody answers is lost (v1.3): 10/10 seeds (>= 8)
+PASS  one email agent with no cover struggles (lost, or email met under 90%) (v1.3): 10/10 seeds (>= 8)
+PASS  two email agents assigned once, no daily stand-in, keep the email client (never lost) (v1.3): 10/10 seeds (>= 8)
+
+19/19 checks pass (271.9 s)
+```
+
 #### 고정 파일
 
 - `tests/fixtures/weekday-golden.json`: 계획대로 한 번 다시 만들었다(`node tests/fixtures/weekday-scenario.js > tests/fixtures/weekday-golden.json`). 골든 테스트는 `tests/weekend.test.js`의 가짜 주말 고객사를 빼고 돈다(Task 3 판정).
@@ -943,4 +1306,4 @@ v1.5 기준선은 `/tmp/autoplay-before-t3.txt`(19/19, 271.9초), v1.6은 최종
 
 - 확장 "가난하지 않음" 기준 6/10에는 여유가 없다. 시드 4(162,100 대 162,800)와 5(160,900 대 160,000)가 거의 같다. 평균 현금은 확장 쪽이 높다(173,727 대 171,680). 앞으로 작은 변경에도 5/10으로 떨어질 수 있다.
 - 합리적 플레이는 v1.5처럼 1년 안에 10/10 S에 닿는다. S가 "드문" 것은 제안을 받아 고객사를 늘린 판과 방치한 판에서다.
-- 방치한 판은 2년이 지나면 4/10 시드에서 S에 닿는다(v1.5는 5/10). 점검은 1년만 보므로 v1.5와 같은 성격이다.
+- 방치한 판은 2년이 지나면 4/10 시드에서 S에 닿는다(v1.5는 5/10). 2년 점검(≤ 4/10)을 더했지만 측정값 그대로라 여유가 없다.

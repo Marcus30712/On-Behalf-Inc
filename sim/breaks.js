@@ -168,6 +168,22 @@ export function ensureBreakPlan(state) {
   return true;
 }
 
+// A full plan for today, made at most once per day and roster: the view asks
+// every animation frame, and someone moved to another shift has no kept entry
+// until an interval keeps one. Cached per state object (so it is never saved)
+// on the day and what planBreaks reads besides the forecast: who works which
+// shift, who answers which client, which clients are active, and the lead's planning
+// skill.
+const freshPlans = new WeakMap();
+function freshPlan(state) {
+  const key = `${state.day}|${state.clients.filter((c) => c.active).map((c) => c.id).join()}|${state.people.map((p) => `${workingShift(state, p, state.day) ?? '-'}:${JSON.stringify(state.assignment[p.id] ?? null)}:${p.role === 'lead' ? planningOf(p) : ''}`).join()}`;
+  const cached = freshPlans.get(state);
+  if (cached?.key === key) return cached.plan;
+  const plan = planBreaks(state, state.day);
+  freshPlans.set(state, { key, plan });
+  return plan;
+}
+
 // (person, shiftId) => today's { am, lunch, pm, by } for someone working
 // `shiftId` today. The kept entry when it fits the shift; otherwise planned
 // now (planBreaks once per lookup). keep: true (the interval) keeps today's
@@ -180,7 +196,7 @@ export function breakLookup(state, { keep }) {
   return (person, shiftId) => {
     const entry = plan?.[person.id];
     if (fitsShift(entry, shiftId)) return entry;
-    now ??= planBreaks(state, state.day);
+    now ??= freshPlan(state);
     const made = now[person.id];
     if (keep && made) plan[person.id] = made;
     return made;

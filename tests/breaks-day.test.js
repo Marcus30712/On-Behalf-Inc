@@ -5,7 +5,7 @@ import { createGame, advance, act, view, load, SAVE_KEY } from '../sim/game.js';
 import { serialize } from '../sim/state.js';
 import * as interval from '../sim/interval.js';
 import { stepInterval } from '../sim/interval.js';
-import { planBreaks } from '../sim/breaks.js';
+import { planBreaks, breakLookup } from '../sim/breaks.js';
 import { workShare, onBreak } from '../sim/schedule.js';
 import { createRng } from '../sim/rng.js';
 import { dateOf } from '../sim/calendar.js';
@@ -84,6 +84,25 @@ test('a roster change during the day: the moved person gets breaks for their new
   assert.deepEqual(after, shown, 'the interval keeps what the view showed');
   for (const id of Object.keys(before)) if (id !== 'p0') assert.deepEqual(s.breaks.plan[id], before[id], id);
   assert.equal(view(s).people.find((p) => p.id === 'p2').breaks, null, 'rostered off');
+});
+
+// view() runs every animation frame: someone whose kept entry does not fit
+// (moved to another shift) must not cost a full re-plan per call.
+test('a re-plan for someone who was moved is made once per day, not on every lookup', () => {
+  const s = createGame(5);
+  advance(s, 30);
+  act(s, { type: 'setRoster', personId: 'p0', weekday: 0, shift: 'late' });
+  const first = breakLookup(s, { keep: false })(s.people[0], 'late');
+  assert.equal(breakLookup(s, { keep: false })(s.people[0], 'late'), first, 'same entry object: not planned again');
+  assert.equal(s.breaks.plan.p0.am < H(12), true, 'the kept plan is untouched by the view');
+  // Another roster change in the same day plans afresh.
+  const other = s.people.find((p) => p.id !== 'p0' && shiftOf(s, p.id) === 'early');
+  act(s, { type: 'setRoster', personId: other.id, weekday: 0, shift: 'late' });
+  assert.notEqual(breakLookup(s, { keep: false })(s.people[0], 'late'), first);
+  // And so does the next day.
+  const again = breakLookup(s, { keep: false })(s.people[0], 'late');
+  s.day += 1;
+  assert.notEqual(breakLookup(s, { keep: false })(s.people[0], 'late'), again);
 });
 
 test('breaks move only work shares, never the game rng: a day of intervals draws the same with any plan', () => {

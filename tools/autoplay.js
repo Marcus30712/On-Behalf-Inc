@@ -750,6 +750,9 @@ function main() {
   };
   const t0 = Date.now();
   const idleYear = SEEDS.map((seed) => runPolicy({ seed, days: 360, policy: 'idle' }));
+  // v1.6: idle over two years too (a separate run: cash and the S milestone
+  // are read at the end of the run, so the year-1 run above cannot be cut).
+  const idleTwo = SEEDS.map((seed) => runPolicy({ seed, days: 720, policy: 'idle' }));
   const idle = idleYear.map((r) => upTo(r, 180));
   const firstMonth = idleYear.map((r) => upTo(r, 30));
   const sensible = SEEDS.map((seed) => runPolicy({ seed, days: 360, policy: 'sensible' }));
@@ -846,6 +849,11 @@ function main() {
     check(year.poorer === SEEDS.length,
       `idle ends the year with less cash than sensible on every seed: ${year.poorer}/10 (idle ${idleYear.map((r) => Math.round(r.cash)).join(' ')})`),
     check(year.rankS <= 2, `idle reaches the S milestone on at most 2 seeds: ${year.rankS}/10`),
+    // Added in v1.6 (real breaks): idle reaches S in year 2 on 4/10 seeds (the
+    // other idle games mostly end first; v1.5: 5/10). At most 4/10 keeps S rare
+    // for hands-off play over the same two years as the offers-S guard. No margin.
+    check(idleTwo.filter((r) => r.rankS).length <= 4,
+      `idle reaches the S milestone on at most 4 seeds within two years: ${idleTwo.filter((r) => r.rankS).length}/10 (day ${idleTwo.map((r) => r.rankSDay ?? '-').join(' ')})`),
     check(year.lost >= 7, `idle loses someone (resignation) or the game within a year: ${year.lost}/10 seeds`),
     // Re-based in v1.6 (real breaks): within two years, >= 8/10 (was within a
     // year, >= 3/10). With real breaks the three-client year holds a score of

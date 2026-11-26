@@ -41,7 +41,7 @@ function withWeekendClient(seed = 3) {
   return s;
 }
 
-test('without a weekend client the game is byte-identical to the pre-weekend code', () => {
+test('without a weekend client the game matches the weekday golden (v1.6 weekday behaviour)', () => {
   const golden = JSON.parse(readFileSync(new URL('./fixtures/weekday-golden.json', import.meta.url), 'utf8'));
   // The fake weekend client is left out of CLIENTS here, as when the golden
   // is made (node tests/fixtures/weekday-scenario.js): a game that reaches a

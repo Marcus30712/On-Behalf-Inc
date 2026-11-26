@@ -63,6 +63,18 @@ test('hands-off play does not win a year', () => {
   assert.ok(v.lost >= 7, `idle lost someone or the game on ${v.lost}/10 seeds`);
 });
 
+// Added in v1.6 (real breaks): the idle guard above looks at one year, but
+// idle play can reach S in year 2 (4/10 seeds within 720 days measured; most
+// of the other idle games end first). Bar: at most 4/10, so S stays rare for
+// hands-off play; sensible play reaches it on 10/10. No margin over the
+// measurement (v1.5: 5/10): a change that lets idle reach S on a fifth seed
+// should be looked at, not waved through.
+test('hands-off play rarely reaches S even in two years', () => {
+  const runs = SEEDS.map((seed) => runPolicy({ seed, days: 720, policy: 'idle' }));
+  const n = runs.filter((r) => r.rankS).length;
+  assert.ok(n <= 4, `idle reached the S milestone within 720 days on ${n}/10 seeds`);
+});
+
 // The brief's offers-S guard for v1.2 ("제안 수락 sensible의 S 이정표가 v1.1(3/10)보다
 // 나빠지지 않는다"): the same check as v1.1, the 13th line of the autoplay checks.
 // Re-based in v1.6 (real breaks): within two years on >= 8/10 seeds (was within

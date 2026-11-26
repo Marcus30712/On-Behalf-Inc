@@ -8,7 +8,7 @@ const s = MAP.spots;
 let n = 0;
 const person = (o = {}) => ({
   id: `p${n++}`, role: 'agent', activity: 'idle', task: null,
-  health: { kind: 'well', daysLeft: 0 }, shiftToday: 'early', breakGroup: 0, ...o,
+  health: { kind: 'well', daysLeft: 0 }, shiftToday: 'early', ...o,
 });
 const at = (a, t) => a.x === t[0] && a.y === t[1];
 const run = (actors, people, ms, step = 100) => {

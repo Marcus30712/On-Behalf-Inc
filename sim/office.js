@@ -10,7 +10,8 @@ import { DAYS_PER_MONTH } from './calendar.js';
 
 export const OFFICE_LEVELS = [
   { seats: 8, cost: 0, buildWorkdays: 0, rent: 0 },
-  { seats: 12, cost: 30000, buildWorkdays: 10, rent: 3000 },
+  // v1.8: level 1 rent 3000 -> 2000 so expansion pays off (balance record, v1.8 section).
+  { seats: 12, cost: 30000, buildWorkdays: 10, rent: 2000 },
   // Level 2: cost and rent set by the v1.2 balance task (balance record, v1.2 section).
   { seats: 16, cost: 36000, buildWorkdays: 15, rent: 2000 },
 ];

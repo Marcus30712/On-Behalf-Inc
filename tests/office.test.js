@@ -10,7 +10,7 @@ import { eventText } from '../ui/text.js';
 test('office levels table', () => {
   assert.deepEqual(OFFICE_LEVELS, [
     { seats: 8, cost: 0, buildWorkdays: 0, rent: 0 },
-    { seats: 12, cost: 30000, buildWorkdays: 10, rent: 3000 },
+    { seats: 12, cost: 30000, buildWorkdays: 10, rent: 2000 }, // v1.8: 3000 -> 2000
     { seats: 16, cost: 36000, buildWorkdays: 15, rent: 2000 },
   ]);
 });
@@ -90,7 +90,7 @@ test('hiring uses seatsOf: full at 8, free after expansion', () => {
 test('act startExpansion and view.office', () => {
   const s = createGame(1);
   assert.deepEqual(view(s).office, {
-    level: 0, seats: 8, build: null, rentThisMonth: 0, next: { cost: 30000, buildWorkdays: 10, rent: 3000 },
+    level: 0, seats: 8, build: null, rentThisMonth: 0, next: { cost: 30000, buildWorkdays: 10, rent: 2000 },
   });
   s.cash = 40000;
   assert.deepEqual(act(s, { type: 'startExpansion' }), { ok: true });
@@ -117,27 +117,27 @@ test('rent prorated from completion day', () => {
   const s = createGame(1);
   // Level 1 finished on day 20 of month 0 (days 0-29): days 20-29 are 10 days.
   s.office = { level: 1, build: null, level1Day: 20 };
-  assert.equal(rentOf(s, 0, 29), 3000 * 10 / 30);
-  assert.equal(rentOf(s, 30, 59), 3000, 'full rent the next month');
-  assert.equal(rentOf(s), 3000, 'without a month, the full monthly rent');
+  assert.equal(rentOf(s, 0, 29), Math.round(2000 * 10 / 30));
+  assert.equal(rentOf(s, 30, 59), 2000, 'full rent the next month');
+  assert.equal(rentOf(s), 2000, 'without a month, the full monthly rent');
   // Through monthEnd: against the same game at level 0.
   const a = createGame(1); const b = createGame(1);
   a.cash = b.cash = 200000;
   a.day = b.day = 29;
   b.office = { level: 1, build: null, level1Day: 20 };
   monthEnd(a); monthEnd(b);
-  assert.equal(a.cash - b.cash, 1000);
+  assert.equal(a.cash - b.cash, 667); // v1.8: round(2000 x 10 / 30)
   a.day = b.day = 59;
   const gap = a.cash - b.cash;
   monthEnd(a); monthEnd(b);
-  assert.equal(a.cash - b.cash - gap, 3000);
+  assert.equal(a.cash - b.cash - gap, 2000);
   // Level 2 finishing on day 45 (days 45-59: 15 days); level 1 is paid in full.
   s.office = { level: 2, build: null, level1Day: 20, level2Day: 45 };
-  assert.equal(rentOf(s, 30, 59), 3000 + 2000 * 15 / 30);
-  assert.equal(rentOf(s, 60, 89), 5000);
+  assert.equal(rentOf(s, 30, 59), 2000 + 2000 * 15 / 30);
+  assert.equal(rentOf(s, 60, 89), 4000);
   // A v1.3 save at level 2 has no level2Day: full rent.
   s.office = { level: 2, build: null, level1Day: 20 };
-  assert.equal(rentOf(s, 30, 59), 5000);
+  assert.equal(rentOf(s, 30, 59), 4000);
 });
 
 test('finishing expansion 2 records its day', () => {

@@ -321,11 +321,12 @@ tr.ended { opacity: .55; }
 .break-chart { display: flex; align-items: flex-end; gap: 2px; height: 96px; margin: 0.5rem 0; }
 .break-slot { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; height: 100%; min-width: 10px; }
 .break-slot .bar { display: block; width: 100%; background: var(--accent); opacity: 0.7; border-radius: 2px 2px 0 0; }
-.break-slot.busy .bar { background: var(--warn); opacity: 1; }
+.break-slot.busy .bar { background: var(--bad); opacity: 1; }
 .break-slot small { font-size: 0.65rem; line-height: 1.1; }
-.break-slot.busy .away { color: var(--warn); font-weight: 700; }
+.break-slot.busy .away { color: var(--bad); font-weight: 700; }
 .break-busy { margin: 0.25rem 0; padding-left: 1.2rem; }
 table.breaks td[data-break] { white-space: nowrap; }
 table.breaks button[data-step] { padding: 0 0.4rem; }
 table.breaks button[disabled] { opacity: 0.35; cursor: not-allowed; }
 table.breaks .edited { color: var(--accent); }
+.break-busy .bad { color: var(--bad); }

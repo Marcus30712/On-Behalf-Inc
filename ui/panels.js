@@ -511,7 +511,7 @@ function breaksPanel({ h, v, run }) {
   h('small', { class: 'away' }, String(x.away)),
   h('small', { class: 'time' }, x.minute % 60 === 0 ? formatTime(x.minute) : '')));
   const busy = board.slots.filter((x) => x.busy)
-    .map((x) => h('li', { class: 'warn' }, `${formatTime(x.minute)} · ${fill(B.busy, { n: x.away })}`));
+    .map((x) => h('li', { class: 'bad' }, `${formatTime(x.minute)} · ${fill(B.busy, { n: x.away })}`));
   const byId = new Map(v.people.map((p) => [p.id, p]));
   const rows = board.rows.map((r) => {
     const p = byId.get(r.personId);

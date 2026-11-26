@@ -1,6 +1,6 @@
 import { MAP, tileAt, baseSeats } from './map.js';
 import { findPath, tilesByDistance } from './path.js';
-import { BREAK_LENGTH } from '../sim/schedule.js';
+import { nowActivity } from '../sim/away.js';
 
 export const WALK_SPEED = 3; // tiles per real second: the floor (paused, or no rate given)
 // v1.6: walking keeps pace with game time. 4 tiles per game minute means a
@@ -24,20 +24,7 @@ function offSite(person) {
   return person.activity === 'off' || (person.health && person.health.kind !== 'well');
 }
 
-// v1.6: the sim marks the whole 30-minute interval 'break' or 'lunch' when a
-// break touches it. With the current game minute (sim minute plus the part of
-// the interval already run) and the person's plan (view.people[].breaks, start
-// minutes; lengths from sim/schedule.js), the person is away only during the
-// break's own minutes and at the desk ('idle') for the rest of the interval.
-// Without a minute or a plan, the activity decides as before.
-function nowActivity(person, minute) {
-  if (!BREAK_ROOM.has(person.activity) || !Number.isFinite(minute) || !person.breaks) return person.activity;
-  const away = Object.entries(BREAK_LENGTH).some(([kind, length]) => {
-    const start = person.breaks[kind];
-    return Number.isFinite(start) && minute >= start && minute < start + length;
-  });
-  return away ? person.activity : 'idle';
-}
+// v1.6 nowActivity (break minutes inside a break interval) lives in sim/away.js (v1.8).
 
 // Where a person wants to be. `slotIndex` is the agent's seat index (order
 // among agents); `spotIndex` is the index among people sharing the break room

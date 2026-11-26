@@ -488,3 +488,17 @@ test('v1.7 a lead hired while the old one works out notice is the only lead afte
   assert.ok(plan.length > 0, 'a plan exists');
   assert.ok(plan.every((e) => e.by === 'lead'), 'planned by the lead');
 });
+
+// v1.8: deskActivity is what the person does when not on a break (the sim
+// marks a whole interval 'break'/'lunch'; the card and sprite use the minutes).
+test('v1.8 view deskActivity: the activity without breaks', () => {
+  const s = createGame(11);
+  advance(s, 12 * 60 - s.minute); // 12:00 on the first day
+  const v = view(s);
+  for (const p of v.people) {
+    if (p.activity === 'off') assert.equal(p.deskActivity, 'off');
+    else if (p.activity !== 'break' && p.activity !== 'lunch') assert.equal(p.deskActivity, p.activity, p.id);
+    else assert.ok(['phone', 'task', 'idle'].includes(p.deskActivity), `${p.id}: ${p.deskActivity}`);
+  }
+  assert.ok(v.people.some((p) => p.activity === 'lunch' || p.activity === 'break'), 'someone is on a break interval at 12:00');
+});

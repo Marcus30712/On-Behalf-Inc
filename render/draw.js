@@ -7,6 +7,7 @@
 import { MAP, tileAt } from './map.js';
 import { SPRITES, PALETTES, FACILITY_TILES, personLook, personSprite, personPhase } from './sprites.js';
 import { UI_TEXT } from '../ui/text.js';
+import { nowActivity } from '../sim/away.js';
 
 export const SCALE = 3;
 export const TILE_PX = 16 * SCALE;
@@ -339,7 +340,9 @@ export function createDrawer(makeCanvas = defaultMakeCanvas) {
   // Role tags and channel marks go on after every person, so someone walking
   // in a lower row never covers them. People on one tile (arriving at the
   // door) show one tag: the person drawn last's.
-  function drawActors(ctx, actors, peopleView, timeMs = 0, clients = []) {
+  // v1.8: `minute` (the clock's minute now) puts the headset on in the desk
+  // minutes of a break interval (sim/away.js), as the people list says.
+  function drawActors(ctx, actors, peopleView, timeMs = 0, clients = [], minute = undefined) {
     ctx.imageSmoothingEnabled = false;
     const channelOf = new Map(clients.map((c) => [c.id, c.channel]));
     const shown = visible(actors, peopleView);
@@ -350,7 +353,7 @@ export function createDrawer(makeCanvas = defaultMakeCanvas) {
       ctx.drawImage(personCanvas(p, name), px, py, PERSON_W, PERSON_H);
       if (name === 'sitBack') blit(ctx, 'chairRest', px, py + PERSON_LIFT); // the chair back is nearer than they are
       if (p.role === 'qa' && !back) blit(ctx, 'lanyard', px, py);
-      if (p.role !== 'agent' || p.activity !== 'phone') continue;
+      if (p.role !== 'agent' || nowActivity(p, minute) !== 'phone') continue;
       const mark = CHANNEL_MARKS[channelOf.get(p.answering ?? p.task?.clientId)];
       if (mark) marks.set(p.id, mark);
       else blit(ctx, back ? 'headsetBack' : 'headset', px, py);

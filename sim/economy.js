@@ -17,6 +17,9 @@ export const SALARY = { agent: 2400, lead: 3600, qa: 3000 };
 const MET_DAY = 0.8; // share of a day's intervals at target for the day to count as met
 const FEE_CUT_BELOW = 0.7; // share of met workdays in the month
 const FEE_CUT = 0.8;
+// v1.8: a deeper cut below 40% met days (가상 값); balance record, v1.8 section.
+const FEE_DEEP_BELOW = 0.4;
+const FEE_DEEP_CUT = 0.6;
 const RECENT_WORKDAYS = 20;
 // v1.6 (real breaks): S stays at 90 by measurement. Idle play holds 89.1 for 30
 // workdays in its first year on one seed, so any lower S threshold lets idle
@@ -116,7 +119,8 @@ export function monthEnd(state) {
     const days = month.map((h) => h.clients?.[c.id]).filter((t) => t?.intervals > 0);
     if (!def || days.length === 0) continue; // no workday served, no fee
     const metDays = days.filter((t) => t.intervalsMet / t.intervals >= MET_DAY).length;
-    income += def.monthlyFee * (metDays / days.length < FEE_CUT_BELOW ? FEE_CUT : 1);
+    const share = metDays / days.length;
+    income += def.monthlyFee * (share < FEE_DEEP_BELOW ? FEE_DEEP_CUT : share < FEE_CUT_BELOW ? FEE_CUT : 1);
   }
   const salaries = state.people.reduce((s, p) => s + (SALARY[p.role] ?? 0), 0);
   state.cash = (state.cash ?? 0) + income - salaries - rentOf(state, monthStart, state.day);

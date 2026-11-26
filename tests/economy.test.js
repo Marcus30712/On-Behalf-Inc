@@ -311,3 +311,20 @@ test('the S streak does not advance on a weekend client day', () => {
   assert.equal(s.rankSStreak, 30);
   assert.equal(events(s, 'milestone-rank-s').length, 1);
 });
+
+// v1.8: a second, deeper cut. Met share < 0.4 pays 60%, < 0.7 pays 80%, else
+// in full; a share exactly at a threshold is not below it.
+test('v1.8 fee tiers at their edges', () => {
+  const tenDays = (met) => monthHistory({ [GUREUM]: met }).slice(0, 10);
+  const paid = (met) => {
+    const s = makeState({ clients: [GUREUM] });
+    s.people = s.people.slice(0, 0);
+    s.history = tenDays(met);
+    monthEnd(s);
+    return s.cash - 100000;
+  };
+  assert.equal(paid(3), 18000 * 0.6);
+  assert.equal(paid(4), 18000 * 0.8);
+  assert.equal(paid(6), 18000 * 0.8);
+  assert.equal(paid(7), 18000);
+});

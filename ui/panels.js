@@ -6,6 +6,7 @@
 // state (open card, notices, pending phone picks, an open expansion question)
 // for a new or loaded game.
 import { HIRE_COST, LEAD_HIRE_COST, SHIFTS, OFFICE_LEVELS, planningOf } from '../sim/game.js';
+import { nowActivity } from '../sim/away.js';
 import { RESEARCH } from '../world/research.js';
 import { TRAITS } from '../world/traits.js';
 import { NATIONS } from '../world/nations.js';
@@ -79,14 +80,15 @@ const roleText = (p) => [UI_TEXT.role[p.role] ?? p.role,
   p.probationDays > 0 ? fill(UI_TEXT.role.probation, { n: p.probationDays }) : null].filter(Boolean).join(' · ');
 
 // options.onClose: shows a close button that calls it.
-export function renderPanel(root, v, tab, onAct, { onClose } = {}) {
+export function renderPanel(root, v, tab, onAct, { onClose, minuteNow } = {}) {
   if (tab !== lastTab) closePanel();
   lastTab = tab;
   const h = builder(root.ownerDocument);
   const notice = h('p', { class: 'notice', role: 'status' }, noticeFor(tab, v));
   const ctx = {
     h, v,
-    rerender: () => renderPanel(root, v, tab, onAct, { onClose }),
+    minuteNow: Number.isFinite(minuteNow) ? minuteNow : v.minute,
+    rerender: () => renderPanel(root, v, tab, onAct, { onClose, minuteNow }),
     // Focuses the first match of the selectors, in order (after a rerender).
     focus: (...sels) => sels.map((sel) => root.querySelector(sel)).find(Boolean)?.focus?.(),
     run(action) {
@@ -125,16 +127,19 @@ function healthText(p) {
 }
 
 // 'off' before today's shift has begun reads as the shift, not as gone home.
-function activityText(v, p) {
+// v1.8: `minute` is the clock's minute now; within a break interval the text
+// follows the break's own minutes, as the sprite does (sim/away.js).
+function activityText(v, p, minute = v.minute) {
+  const now = nowActivity(p, minute);
   if (p.shiftToday === 'absent') return UI_TEXT.health.absent.name;
   if (p.health?.kind && p.health.kind !== 'well' && UI_TEXT.health[p.health.kind]) return UI_TEXT.health[p.health.kind].name;
   const shift = SHIFTS[p.shiftToday];
   // An agent answering chat or email is not 전화 중: the channel says what they
   // do, by the client answered now (a covered client's, not their own).
-  const channel = p.activity === 'phone' && p.task?.kind === 'phone' ? channelOf(v, p.answering ?? p.task.clientId) : 'phone';
+  const channel = now === 'phone' && p.task?.kind === 'phone' ? channelOf(v, p.answering ?? p.task.clientId) : 'phone';
   if (channel !== 'phone') return UI_TEXT.channel[channel];
-  if (p.activity === 'off' && shift && v.minute < shift.start) return UI_TEXT.shift[p.shiftToday].full;
-  return UI_TEXT.activity[p.activity] ?? '';
+  if (now === 'off' && shift && v.minute < shift.start) return UI_TEXT.shift[p.shiftToday].full;
+  return UI_TEXT.activity[now] ?? '';
 }
 
 function taskText(v, task) {
@@ -195,7 +200,7 @@ function personCard({ h, v, rerender }) {
 }
 
 function peoplePanel(ctx) {
-  const { h, v, rerender } = ctx;
+  const { h, v, rerender, minuteNow } = ctx;
   if (selected !== null) return personCard(ctx);
   const P = UI_TEXT.people;
   if (v.people.length === 0) return [title(h, P.title), h('p', {}, P.empty)];
@@ -206,7 +211,7 @@ function peoplePanel(ctx) {
   },
   h('strong', {}, p.name),
   h('span', {}, roleText(p)),
-  h('span', {}, activityText(v, p)),
+  h('span', {}, activityText(v, p, minuteNow)),
   h('span', {}, healthText(p))));
   return [title(h, P.title, fill(P.count, { n: v.people.length })), noLead, h('div', { class: 'person-list' }, cards)];
 }

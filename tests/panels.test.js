@@ -389,3 +389,23 @@ test('v1.7 the people tab warns when there is no lead', () => {
   renderPanel(root, view(leadGone()), 'people', () => ({ ok: true }));
   assert.equal(root.querySelector('.warn').textContent, '팀장 없음 · 휴식이 무작위로 정해지고 있어요.');
 });
+
+// v1.8: the people list says 점심 중/휴식 중 only during the person's own
+// break minutes, like the sprite (sim marks the whole 30-minute interval).
+test('v1.8 the people list follows break minutes inside a break interval', () => {
+  const base = view(createGame(11));
+  const p = { ...base.people.find((x) => x.role === 'agent'), activity: 'lunch', deskActivity: 'phone', breaks: { am: 600, lunch: 735, pm: 900 } };
+  const v = { ...base, minute: 720, people: [p] };
+  const shown = (minuteNow) => {
+    const root = makeRoot();
+    renderPanel(root, v, 'people', () => ({ ok: true }), { minuteNow });
+    return root.querySelector(`[data-person="${p.id}"]`).textContent;
+  };
+  assert.ok(shown(725).includes(UI_TEXT.activity.phone), 'before lunch starts: on the phone at the desk');
+  assert.ok(!shown(725).includes(UI_TEXT.activity.lunch));
+  assert.ok(shown(740).includes(UI_TEXT.activity.lunch), 'during lunch');
+  const noPlan = { ...p, breaks: undefined };
+  const root = makeRoot();
+  renderPanel(root, { ...v, people: [noPlan] }, 'people', () => ({ ok: true }), { minuteNow: 725 });
+  assert.ok(root.textContent.includes(UI_TEXT.activity.lunch), 'no plan (old save): as the sim says');
+});

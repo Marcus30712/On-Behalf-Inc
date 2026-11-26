@@ -303,7 +303,7 @@ export const UI_TEXT = {
   "task": {
     "phone": {
       "name": "상담 응대",
-      "tip": "고객사 전화를 받아요."
+      "tip": "고객사의 전화·채팅·메일을 맡아요."
     },
     "coaching": {
       "name": "코칭",

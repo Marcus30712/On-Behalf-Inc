@@ -109,7 +109,8 @@ test('the people list shows 점심 중 for someone at lunch', () => {
   const p = v.people[0];
   p.activity = 'lunch';
   const root = makeRoot();
-  renderPanel(root, v, 'people', () => ({ ok: true }));
+  // v1.8: 점심 중 during the person's own lunch minutes (sim/away.js).
+  renderPanel(root, v, 'people', () => ({ ok: true }), { minuteNow: p.breaks?.lunch ?? v.minute });
   const row = root.querySelector(`[data-person="${p.id}"]`);
   assert.ok(row.textContent.includes('점심 중'), row.textContent);
 });
@@ -334,4 +335,20 @@ test('someone who goes home sick mid-day has no breaks: the card says 오늘은 
   const p = v.people.find((x) => x.id === id);
   assert.equal(p.breaks, null);
   assert.equal(field(card(v, id), '오늘 휴식'), '오늘은 근무가 없어요.');
+});
+
+// v1.8 (final review): before their lunch minutes inside a lunch interval, an
+// agent at the desk on the phone wears the headset, as the list says 전화 중.
+test('v1.8 headset during the desk minutes of a lunch interval', () => {
+  const { drawer, ctx } = setup();
+  const headsets = [drawer.spriteCanvas('headset').id, drawer.spriteCanvas('headsetBack').id];
+  const p = person('a1', 'agent', 'lunch', { deskActivity: 'phone', task: { kind: 'phone', clientId: 'gureum-travel' }, breaks: { am: 600, lunch: 735, pm: 900 } });
+  const wearing = (minute) => {
+    ctx.ops.length = 0;
+    drawer.drawActors(ctx, [seated('a1', MAP.spots.seats[4])], [p], 0, [], minute);
+    return ctx.ops.some((o) => o[0] === 'drawImage' && headsets.includes(o[1]));
+  };
+  assert.equal(wearing(725), true, 'at the desk before lunch');
+  assert.equal(wearing(740), false, 'at lunch');
+  assert.equal(wearing(undefined), false, 'no minute: as the sim says (lunch)');
 });

@@ -46,7 +46,7 @@ test('the office section lives in the hiring tab; there are still seven tabs', (
   assert.ok(one.textContent.includes(O.stages[1].blurb));
   assert.ok(one.textContent.includes(fill(O.cost, { cost: formatMoney(30000) })));
   assert.ok(one.textContent.includes(fill(O.buildTime, { days: 10 })));
-  assert.ok(one.textContent.includes(fill(O.rent, { rent: formatMoney(3000) })));
+  assert.ok(one.textContent.includes(fill(O.rent, { rent: formatMoney(2000) })));
   assert.ok(one.textContent.includes(fill(O.seatsAfter, { seats: 12 })));
   assert.ok(one.querySelector('button[data-action="startExpansion"]'));
   const two = stage(root, 2);
@@ -110,7 +110,7 @@ test('after expansions: done stages, rent this month, seats, and all done', () =
   renderPanel(root, view(state), 'hiring', (a) => act(state, a));
   assert.ok(stage(root, 1).textContent.includes(O.done));
   assert.ok(root.textContent.includes(fill(O.seatsNow, { seats: 12 })));
-  assert.ok(root.textContent.includes(fill(O.rentTotal, { rent: formatMoney(3000) })));
+  assert.ok(root.textContent.includes(fill(O.rentTotal, { rent: formatMoney(2000) })));
   assert.ok(stage(root, 2).querySelector('button[data-action="startExpansion"]'));
   assert.ok(stage(root, 2).textContent.includes(fill(O.seatsAfter, { seats: 16 })));
   assert.ok(root.textContent.includes(fill(UI_TEXT.hiring.seats, { n: 12 - 8 })), 'four free seats');
@@ -285,12 +285,12 @@ test('rent this month is prorated in the month an expansion finishes', () => {
   const state = createGame(11);
   state.day = 25; // month 0 is days 0-29
   state.office = { level: 1, build: null, level1Day: 20 }; // days 20-29: 10 of 30
-  assert.equal(view(state).office.rentThisMonth, 1000);
+  assert.equal(view(state).office.rentThisMonth, 667); // v1.8: round(2000 x 10 / 30)
   const root = makeRoot();
   renderPanel(root, view(state), 'hiring', (a) => act(state, a));
-  assert.ok(root.textContent.includes('이번 달 임대료 💰 1,000'));
-  assert.ok(!root.textContent.includes('이번 달 임대료 💰 3,000'));
+  assert.ok(root.textContent.includes('이번 달 임대료 💰 667'));
+  assert.ok(!root.textContent.includes('이번 달 임대료 💰 2,000'));
   state.day = 40; // the next month: full rent
   renderPanel(root, view(state), 'hiring', (a) => act(state, a));
-  assert.ok(root.textContent.includes('이번 달 임대료 💰 3,000'));
+  assert.ok(root.textContent.includes('이번 달 임대료 💰 2,000'));
 });

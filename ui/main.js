@@ -219,10 +219,14 @@ export function start({ document, storage, now, requestFrame, seedSource: pickSe
     renderAdvisor(roots.advisor, event, { drawer });
   }
 
+  const panelKey = (v) => `${tab}|${v.day}:${v.minute}|${Math.floor(clock.minuteNow / 15)}`;
+
   function drawPanel(v) {
     if (!tab) { roots.panel.replaceChildren(); return; }
-    keepFocus(roots.panel, () => renderPanel(roots.panel, v, tab, onAct, { onClose: () => openTab(null) }), keyboardFocus);
-    keys.panel = `${tab}|${v.day}:${v.minute}`;
+    // v1.8: the people list follows break minutes (15-minute slots), so the
+    // panel also redraws when the clock enters a new slot.
+    keepFocus(roots.panel, () => renderPanel(roots.panel, v, tab, onAct, { onClose: () => openTab(null), minuteNow: clock.minuteNow }), keyboardFocus);
+    keys.panel = panelKey(v);
   }
 
   function drawInbox(v) {
@@ -261,7 +265,7 @@ export function start({ document, storage, now, requestFrame, seedSource: pickSe
     if (t - lastRefresh < REFRESH_MS) return;
     lastRefresh = t;
     if (keys.bars !== barsKey(v) && free(roots.topbar) && free(roots.metrics)) drawBars(v);
-    if (tab && keys.panel !== `${tab}|${v.day}:${v.minute}` && !selectOpen() && free(roots.panel)) drawPanel(v);
+    if (tab && keys.panel !== panelKey(v) && !selectOpen() && free(roots.panel)) drawPanel(v);
   }
 
   for (const root of [roots.topbar, roots.metrics, roots.inbox, roots.panel]) {
@@ -307,7 +311,7 @@ export function start({ document, storage, now, requestFrame, seedSource: pickSe
   function draw(v, t) {
     if (!ctx) return;
     drawer.drawOffice(ctx, undefined, v.research, v.office);
-    drawer.drawActors(ctx, actors, v.people, t, v.clients);
+    drawer.drawActors(ctx, actors, v.people, t, v.clients, game ? clock.minuteNow : undefined);
     drawer.drawBubbles(ctx, actors, v.people, { sparkles, timeMs: t });
   }
 

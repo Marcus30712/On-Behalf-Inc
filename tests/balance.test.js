@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  runPolicy, wornDown, idleYearVerdict, fullFeeShare, expansionVerdict, channelsVerdict, emailLost, emailStruggles, emailKept,
+  runPolicy, wornDown, idleYearVerdict, idleCashVerdict, fullFeeShare, expansionVerdict, channelsVerdict, emailLost, emailStruggles, emailKept,
   leadSkillVerdict, leadHireVerdict,
 } from '../tools/autoplay.js';
 
@@ -62,6 +62,14 @@ test('hands-off play does not win a year', () => {
   assert.equal(v.poorer, SEEDS.length, `idle cash ${cash(idle)} vs sensible ${cash(sensible)}`);
   assert.ok(v.rankS <= 2, `idle reached the S milestone on ${v.rankS}/10 seeds`);
   assert.ok(v.lost >= 7, `idle lost someone or the game on ${v.lost}/10 seeds`);
+});
+
+// v1.8: hands-off play keeps at most half of sensible play's cash after a year
+// (deeper fee cut below 40% met days; about 38% measured, 64% before).
+test('hands-off play ends the year with at most half of sensible play\'s cash (v1.8)', () => {
+  const { idle, sensible } = year();
+  const v = idleCashVerdict(idle, sensible);
+  assert.ok(v.idleMean <= v.sensibleMean / 2, `idle mean ${Math.round(v.idleMean)} vs sensible ${Math.round(v.sensibleMean)}`);
 });
 
 // Added in v1.6 (real breaks): the idle guard above looks at one year, but
@@ -137,7 +145,8 @@ test('sensible play that keeps service finishes expansion 1 and is not poorer fo
   const cash = (runs) => runs.map((r) => Math.round(r.cash)).join(' ');
   assert.ok(v.built >= 8, `expansion 1 finished on ${v.built}/10 seeds (days ${days})`);
   assert.ok(v.fees.every((f) => f >= 0.65), `fees in full ${v.fees.map((f) => (f * 100).toFixed(1)).join('% / ')}%`);
-  assert.ok(v.notPoorer >= 6, `not poorer on ${v.notPoorer}/10: expanded ${cash(keep)} vs not ${cash(plain)}`);
+  // v1.8: back to >= 8 (level 1 rent 3000 -> 2000; 9/10 measured).
+  assert.ok(v.notPoorer >= 8, `not poorer on ${v.notPoorer}/10: expanded ${cash(keep)} vs not ${cash(plain)}`);
   for (const r of keep) assert.equal(r.gameOver, null, `game over on day ${r.survivedDays}`);
 });
 

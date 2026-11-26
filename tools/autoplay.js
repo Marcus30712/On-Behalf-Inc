@@ -269,6 +269,12 @@ export function idleYearVerdict(idle, sensible) {
   };
 }
 
+// v1.8: mean cash at the end of the idle and sensible games (same seeds).
+export function idleCashVerdict(idle, sensible) {
+  const avg = (runs) => runs.reduce((t, r) => t + r.cash, 0) / runs.length;
+  return { idleMean: avg(idle), sensibleMean: avg(sensible) };
+}
+
 // Office expansion is not a loss (v1.2): on how many seeds the expanding
 // sensible game finished expansion 1, on how many of those it ended with at
 // least the cash of the same seed's sensible game without expansion, and the
@@ -850,6 +856,7 @@ function main() {
   const helpedPerSeed = mean(sensible.map((r) => r.helped));
   const cash12 = sensible.map((r) => r.monthCash[11] ?? r.cash);
   const year = idleYearVerdict(idleYear, sensible);
+  const idleCash = idleCashVerdict(idleYear, sensible);
   const offersS = offers.filter((r) => r.rankS).length;
   const fee2 = [fullFeeShare(twoYears, 0, 360), fullFeeShare(twoYears, 360, 720)];
   const over2 = twoYears.filter((r) => r.gameOver).length;
@@ -920,6 +927,9 @@ function main() {
     check(idleTwo.filter((r) => r.rankS).length <= 4,
       `idle reaches the S milestone on at most 4 seeds within two years: ${idleTwo.filter((r) => r.rankS).length}/10 (day ${idleTwo.map((r) => r.rankSDay ?? '-').join(' ')})`),
     check(year.lost >= 7, `idle loses someone (resignation) or the game within a year: ${year.lost}/10 seeds`),
+    // Added in v1.8 (deeper fee cut): idle keeps at most half of sensible's cash (about 38% measured).
+    check(idleCash.idleMean <= idleCash.sensibleMean / 2,
+      `idle ends the year with at most half of sensible play's mean cash (v1.8): ${Math.round(idleCash.idleMean)} vs ${Math.round(idleCash.sensibleMean)}`),
     // Re-based in v1.6 (real breaks): within two years, >= 8/10 (was within a
     // year, >= 3/10). With real breaks the three-client year holds a score of
     // 73-87 (best 30-workday run), so S comes in year 2 (days 429-694 measured,
@@ -929,11 +939,10 @@ function main() {
       `sensible play that takes client offers still reaches the S milestone within two years (v1.2 offers-S guard, re-based v1.6): ${offersS}/10 seeds (>= 8)`),
     check(over2 === 0 && fee2.every((f) => f >= 0.65),
       `sensible play over two years: fees in full year 1 ${pct(fee2[0])}, year 2 ${pct(fee2[1])} (each >= 65%), game over ${over2}/10`),
-    // Not poorer re-based in v1.6 (real breaks): >= 8 -> >= 6 of 10, still most
-    // seeds. Year 1 of the expansion runs three weekday clients on the 8 seats,
-    // which real breaks squeeze hardest (6/10 measured, two seeds near a tie).
-    check(grown.built >= 8 && grown.notPoorer >= 6 && grown.fees.every((f) => f >= 0.65),
-      `sensible play that keeps service expands within 720 days on ${grown.built}/10 seeds (>= 8), fees in full year 1 ${pct(grown.fees[0])}, year 2 ${pct(grown.fees[1])} (each >= 65%), not poorer than without on ${grown.notPoorer}/10 (>= 6)`),
+    // Not poorer re-based in v1.6 (real breaks): >= 8 -> >= 6 of 10. Back to
+    // >= 8 in v1.8: level 1 rent 3000 -> 2000 (9/10 measured).
+    check(grown.built >= 8 && grown.notPoorer >= 8 && grown.fees.every((f) => f >= 0.65),
+      `sensible play that keeps service expands within 720 days on ${grown.built}/10 seeds (>= 8), fees in full year 1 ${pct(grown.fees[0])}, year 2 ${pct(grown.fees[1])} (each >= 65%), not poorer than without on ${grown.notPoorer}/10 (>= 8)`),
     check(ch.active >= 8 && ch.backlogOk === SEEDS.length && ch.fees.every((f) => f >= 0.65) && ch.meanCash >= ch.keepMeanCash,
       `keeping service with the chat and email clients (v1.3): both active at day 720 on ${ch.active}/10 (>= 8), email backlog within two days of mail on ${ch.backlogOk}/10, fees in full year 1 ${pct(ch.fees[0])}, year 2 ${pct(ch.fees[1])} (each >= 65%), mean cash ${Math.round(ch.meanCash)} vs keeping service without ${Math.round(ch.keepMeanCash)} (>=; not poorer on ${ch.notPoorer}/10, not a bar)`),
     check(lostEmail >= 8, `an email client nobody answers is lost (v1.3): ${lostEmail}/10 seeds (>= 8)`),

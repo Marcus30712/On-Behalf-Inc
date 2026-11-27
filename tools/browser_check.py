@@ -63,11 +63,11 @@ def serve():
 # ---- saves made by the sim itself (Node) ---------------------------------------
 
 def node_save(body):
-    """Runs `body` with createGame/advance/save/view in scope; `game` is saved."""
+    """Runs `body` with createGame/advance/save/view/act in scope; `game` is saved."""
     game_url = (ROOT / 'sim' / 'game.js').as_uri()
     events_url = (ROOT / 'sim' / 'events.js').as_uri()
     script = f"""
-import {{ createGame, advance, save, view }} from {json.dumps(game_url)};
+import {{ createGame, advance, save, view, act }} from {json.dumps(game_url)};
 import {{ pushEvent }} from {json.dumps(events_url)};
 const store = {{ text: null, setItem(k, v) {{ this.text = v; }}, getItem() {{ return this.text; }} }};
 const game = createGame(7);
@@ -640,6 +640,54 @@ def check_phone(browser):
                 fail(f'{tag}: 휴식표 ▶ moved {kind} of {pid} from {before} to {after}, not 15 minutes later')
             page.screenshot(path=str(OUT / 'phone-breaks.png'))
         page.click(f'[data-tab="{tab}"]')  # close
+    # v2.2.1: the tab bar shows there is more to the right, and a tab chosen off
+    # screen scrolls into view.
+    has_more = lambda: page.evaluate("document.querySelector('.tabs').classList.contains('more-right')")
+    page.evaluate("document.querySelector('.tabs').scrollLeft = 0")  # the loop above left it at the end
+    page.wait_for_timeout(150)
+    if not has_more():
+        fail(f'{tag}: the overflowing tab bar does not show there are more tabs')
+    last = page.eval_on_selector_all('.tabs [data-tab]', 'els => els.at(-1).dataset.tab')
+    page.evaluate(f"document.querySelector('.tabs [data-tab=\"{last}\"]').click()")
+    page.wait_for_timeout(400)
+    r = page.locator(f'.tabs [data-tab="{last}"]').bounding_box()
+    if not r or r['x'] < 0 or r['x'] + r['width'] > PHONE[0] + 1:
+        fail(f'{tag}: the chosen tab {last} is not scrolled into view: {r}')
+    if has_more():
+        fail(f'{tag}: at the end of the tab bar it still shows more tabs to the right')
+    page.click(f'.tabs [data-tab="{last}"]')  # close
+    check_errors(page, tag)
+    page.context.close()
+    check_phone_channels(browser)
+
+
+def check_phone_channels(browser):
+    """v2.2.1: on a phone a client's channel sits on its name's line, the numbers below."""
+    tag = f'{where(PHONE)} channels'
+    text = node_save("game.research.done.push('chat-desk', 'mail-desk'); game.cash = 100000;"
+                     "for (const id of ['saebyeol-bank', 'solbang-books']) pushEvent(game, { id: 'client-offer', clientId: id, deadlineDay: game.day + 7 });"
+                     "for (const e of view(game).inbox.filter((x) => x.id === 'client-offer' && !x.choice)) act(game, { type: 'resolve', index: e.index, choiceId: 'accept' });"
+                     "advance(game, Math.max(0, 600 - game.minute));"
+                     "if (game.gameOver) throw new Error('game ended');")
+    page = open_page(browser, PHONE, text)
+    page.click('.start-continue')
+    page.wait_for_selector('.overlay', state='hidden')
+    page.keyboard.press(' ')
+    rows = page.eval_on_selector_all('.metrics .metric', """els => els.map(li => {
+        const name = li.querySelector('strong').getBoundingClientRect();
+        const ch = li.querySelector('.channel')?.getBoundingClientRect();
+        const num = li.querySelector(':scope > span:not(.channel)')?.getBoundingClientRect();
+        return { id: li.dataset.client, name: Math.round(name.top), ch: ch && Math.round(ch.top), num: num && Math.round(num.top) };
+    })""")
+    if not any(r['ch'] is not None for r in rows):
+        fail(f'{tag}: no channel labels on the metrics')
+    for r in rows:
+        if r['ch'] is not None and abs(r['ch'] - r['name']) > 2:
+            fail(f'{tag}: {r["id"]}: the channel is not on the name line ({r})')
+        if r['num'] is not None and r['num'] <= r['name'] + 2:
+            fail(f'{tag}: {r["id"]}: the numbers are not below the name ({r})')
+    check_no_sideways(page, tag)
+    page.screenshot(path=str(OUT / 'phone-channels.png'))
     check_errors(page, tag)
     page.context.close()
 

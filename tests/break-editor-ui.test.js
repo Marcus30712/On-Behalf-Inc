@@ -66,7 +66,8 @@ test('v1.9 later moves a break 15 minutes and marks the row edited', () => {
   const { root, redraw } = draw(s);
   const before = view(s).breakBoard.rows.find((r) => r.personId === agent.id).breaks.lunch.start;
   const later = cell(root, agent.id, 'lunch').querySelector('button[data-step="later"]');
-  assert.equal(later.getAttribute('aria-label'), `${B.lunch} ${B.later}`);
+  // v2.2.1: the person's name first, so a screen reader on the phone cards says whose break.
+  assert.equal(later.getAttribute('aria-label'), `${agent.name} ${B.lunch} ${B.later}`);
   click(later);
   redraw();
   const now = view(s).breakBoard.rows.find((r) => r.personId === agent.id).breaks.lunch.start;

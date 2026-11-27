@@ -360,8 +360,12 @@ table.breaks .edited { color: var(--accent); }
   .inbox .inbox { max-height: none; } /* the list section inside the aside: the aside scrolls */
   /* A client per block: name and channel first, its numbers wrap below. */
   .metrics-list, .metrics-list.compact { flex-direction: column; gap: 6px; padding: 6px 8px; }
+  /* v2.2.1: the name and its channel share the first line; a zero-height
+     full-width item (::before, order 1) breaks the line before the numbers. */
   .metric { flex-wrap: wrap; gap: 2px 10px; }
-  .metric > strong { flex: 1 0 100%; }
+  .metric > strong, .metric > .channel { order: 0; }
+  .metric::before { content: ''; order: 1; flex-basis: 100%; height: 0; }
+  .metric > :not(strong):not(.channel) { order: 2; }
   /* The tab bar: one row fixed to the bottom (swipe sideways for more), so
      tabs stay reachable while a panel is open just above it. */
   .app { padding-bottom: 52px; }
@@ -378,6 +382,11 @@ table.breaks .edited { color: var(--accent); }
     border-top: 1px solid var(--line);
   }
   .tabs button { flex: 0 0 auto; min-height: 44px; }
+  /* v2.2.1: more tabs to the right (ui/main.js sets .more-right): fade the edge. */
+  .tabs.more-right {
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent);
+    mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent);
+  }
   .panel-root {
     position: fixed;
     left: 0;

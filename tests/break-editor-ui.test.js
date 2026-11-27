@@ -87,11 +87,26 @@ test('v1.9 a button that cannot move is disabled', () => {
 });
 
 test('v1.9 a busy slot is marked and says how many are away', () => {
+  // v2.0.1: a real busy slot: three early agents' breaks moved into a
+  // top-25% forecast slot their window reaches.
   const { s } = game();
+  const early = s.people.filter((p) => p.role === 'agent' && workingShift(s, p, s.day) === 'early');
+  const shift = SHIFTS.early;
+  const slots0 = view(s).breakBoard.slots;
+  const sorted = slots0.map((x) => x.calls).sort((a, b) => b - a);
+  const top = sorted[Math.ceil(sorted.length * 0.25) - 1];
+  // The first break window that reaches a top-25% slot (the peak may be in the afternoon).
+  const [kind, peak] = ['am', 'lunch', 'pm'].map((k) => {
+    const w = windowsFor(shift.end - shift.start)[k];
+    const reach = slots0.filter((x) => x.minute >= shift.start + w.from && x.minute <= shift.start + w.to);
+    return [k, reach.reduce((a, x) => (x.calls > a.calls ? x : a))];
+  }).find(([, x]) => x.calls >= top);
+  for (const p of early.slice(0, 3)) assert.deepEqual(moveBreak(s, { personId: p.id, kind, start: peak.minute }), { ok: true });
   const board = view(s).breakBoard;
-  const slot = board.slots.find((x) => x.busy) ?? (() => { board.slots[0].busy = true; board.slots[0].away = 3; return board.slots[0]; })();
+  const slot = board.slots.find((x) => x.minute === peak.minute);
+  assert.ok(slot.busy, `the peak slot ${slot.minute} is busy (calls ${slot.calls}, away ${slot.away})`);
   const root = makeRoot();
-  renderPanel(root, { ...view(s), breakBoard: board }, 'breaks', () => ({ ok: true }));
+  renderPanel(root, view(s), 'breaks', () => ({ ok: true }));
   const bar = [...root.querySelectorAll('.break-slot')][board.slots.indexOf(slot)];
   assert.ok(bar.classList.contains('busy'));
   assert.ok(root.textContent.includes(fill(B.busy, { n: slot.away })));
@@ -116,4 +131,10 @@ test('v1.9 nobody working today', () => {
   const root = makeRoot();
   renderPanel(root, v, 'breaks', () => ({ ok: true }));
   assert.ok(root.textContent.includes(B.none));
+});
+
+test('v2.0.1 the role column has its header', () => {
+  const { s } = game();
+  const ths = [...draw(s).root.querySelectorAll('thead th')].map((th) => th.textContent);
+  assert.equal(ths[1], UI_TEXT.tasks.colRole);
 });

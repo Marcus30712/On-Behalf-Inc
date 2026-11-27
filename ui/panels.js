@@ -529,7 +529,7 @@ function breaksPanel({ h, v, run }) {
       h('td', {}, p ? roleText(p) : ''),
       cells);
   });
-  const head = h('thead', {}, h('tr', {}, h('th', {}, UI_TEXT.roster.colName), h('th', {}), BREAK_KINDS.map((k) => h('th', {}, B[k]))));
+  const head = h('thead', {}, h('tr', {}, h('th', {}, UI_TEXT.roster.colName), h('th', {}, UI_TEXT.tasks.colRole), BREAK_KINDS.map((k) => h('th', {}, B[k]))));
   return [title(h, B.title, B.help),
     h('p', { class: 'break-by' }, who),
     h('div', { class: 'break-chart' }, bars),

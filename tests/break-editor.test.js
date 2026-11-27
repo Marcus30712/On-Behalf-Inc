@@ -54,7 +54,9 @@ test('v1.9 window edges and now are allowed; the entry is marked edited for toda
   // The next day the plan is new and unmarked.
   advance(s, DAY);
   view(s);
-  assert.notEqual(s.breaks.plan[agent.id]?.edited, true);
+  assert.equal(s.breaks.day, s.day, 'a new plan for the new day');
+  assert.ok(s.breaks.plan[agent.id], 'the agent works the next day too (v2.0.1: stricter)');
+  assert.notEqual(s.breaks.plan[agent.id].edited, true);
 });
 
 test('v1.9 the interval uses the moved break', () => {
@@ -148,4 +150,36 @@ test('v1.9 now is the screen minute, pending minutes included', () => {
     && s.breaks.plan[p.id]?.am > first + 30);
   assert.deepEqual(moveBreak(s, { personId: other.id, kind: 'am', start: first + 15 }), { ok: false, reason: 'break-started' }, 'a start already past on screen');
   assert.deepEqual(moveBreak(s, { personId: other.id, kind: 'am', start: first + 30 }), { ok: true }, 'the next quarter-hour is fine');
+});
+
+// ---- v2.0.1 ---------------------------------------------------------------------
+
+test('v2.0.1 the board names the lead who planned, even off shift later; old plans fall back', () => {
+  const { s } = game();
+  const lead = s.people.find((p) => p.role === 'lead');
+  assert.equal(Object.values(s.breaks.plan).find((e) => e.by === 'lead').lead, lead.id, 'entries keep their planner');
+  s.roster[lead.id] = { ...s.roster[lead.id], [0]: 'off' };
+  const b = breakBoard(s);
+  assert.deepEqual([b.by, b.lead], ['lead', lead.name], 'planned by the lead, now off shift');
+  for (const e of Object.values(s.breaks.plan)) delete e.lead; // a v1.9 save
+  s.roster[lead.id] = { ...s.roster[lead.id], [0]: 'early' };
+  assert.deepEqual([breakBoard(s).by, breakBoard(s).lead], ['lead', lead.name], 'old plan: the working lead');
+});
+
+test('v2.0.1 a refused move changes nothing, not even the day plan', () => {
+  const s = createGame(11);
+  advance(s, 540 - s.minute);
+  delete s.breaks;
+  const before = serialize(s);
+  const agent = s.people.find((p) => p.role === 'agent');
+  assert.equal(act(s, { type: 'moveBreak', personId: agent.id, kind: 'am', start: 5 }).ok, false);
+  assert.equal(serialize(s), before);
+});
+
+test('v2.0.1 view computes the board only when asked, once', () => {
+  const { s } = game();
+  const v = view(s);
+  assert.equal(typeof Object.getOwnPropertyDescriptor(v, 'breakBoard').get, 'function', 'a lazy getter');
+  assert.equal(v.breakBoard, v.breakBoard, 'the same board on a second read');
+  assert.deepEqual({ ...v }.breakBoard, breakBoard(s), 'spreading a view still carries it');
 });

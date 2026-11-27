@@ -45,7 +45,8 @@ const area = (x0, y0, w, h) => {
 // Office props (v1.5), drawn with the office: { id, x, y } names a sprite and
 // the left cell of the row it stands on (render/sprites.js). Props never
 // change walking: wall pieces sit on the back wall row, floor pieces only on
-// cells nobody walks on (plant corners, desk tops), never on a spot, the door,
+// cells nobody walks on (plant corners, desk tops, the pantry counter's own
+// blocked 'N' cells, v2.0), never on a spot, the door,
 // a facility or an expansion area. A prop taller than its cell reaches up over
 // a wall or desk cell, so no person stands behind it.
 const prop = (id, x, y) => Object.freeze({ id, x, y });

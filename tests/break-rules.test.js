@@ -135,3 +135,19 @@ test('v2.3 through the game: actions and the board flag', () => {
   assert.deepEqual(act(s, { type: 'unpinBreak', personId: agent.id, kind: 'am' }), { ok: true });
   assert.equal(view(s).breakBoard.rows.find((r) => r.personId === agent.id).breaks.am.pinned, false);
 });
+
+// v2.3 (final review): on a day the rule could not be used (another shift),
+// moving that day's break leaves the rule alone.
+test('v2.3 moving a break whose rule did not apply today keeps the rule', () => {
+  const { s, agent } = game();
+  const rule = win('lunch').last; // an early-shift lunch
+  s.breakRules = { [agent.id]: { lunch: rule } };
+  s.roster[agent.id] = { ...s.roster[agent.id], 0: 'late' };
+  delete s.breaks;
+  ensureBreakPlan(s);
+  const today = s.breaks.plan[agent.id].lunch;
+  const late = win('lunch', 'late');
+  const to = today + 15 <= late.last ? today + 15 : today - 15;
+  assert.deepEqual(moveBreak(s, { personId: agent.id, kind: 'lunch', start: to }), { ok: true });
+  assert.equal(s.breakRules[agent.id].lunch, rule, 'the early-shift habit stays');
+});

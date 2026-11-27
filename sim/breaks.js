@@ -268,8 +268,10 @@ export function moveBreak(state, { personId, kind, start } = {}) {
   if (reason) return { ok: false, reason };
   const entry = breakLookup(state, { keep: true })(person, shiftId);
   state.breaks.plan[person.id] = { ...entry, [kind]: start, edited: true };
-  // v2.3: a pinned break keeps the time shown: its rule moves with it.
-  if (Number.isFinite(state.breakRules?.[person.id]?.[kind])) state.breakRules[person.id][kind] = start;
+  // v2.3: a pinned break keeps the time shown: its rule moves with it, when
+  // the rule was the time in effect today (a rule today's shift could not use
+  // is left alone, final review).
+  if (state.breakRules?.[person.id]?.[kind] === seen[kind]) state.breakRules[person.id][kind] = start;
   return { ok: true };
 }
 

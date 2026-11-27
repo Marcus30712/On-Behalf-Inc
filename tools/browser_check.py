@@ -562,15 +562,16 @@ def check_phone(browser):
         fail(f'{tag}: a tab is tappable through the start screen: {hit}')
     new_game(page)
     page.keyboard.press(' ')  # pause: the sheet stays still while we look
-    # v2.2: one column — the office fills the width, metrics then the inbox below it.
+    # v2.2: one column — the office fills the width, the inbox then the metrics below it.
     check_canvas_flush(page, tag)
     canvas = page.locator('.stage canvas').bounding_box()
     inbox = page.locator('aside.inbox').bounding_box()
     metrics = page.locator('.metrics').bounding_box()
     if abs(canvas['width'] - PHONE[0]) > 1:
         fail(f'{tag}: the office is {canvas["width"]:.0f}px wide, not the screen width')
-    if not (metrics['y'] >= canvas['y'] + canvas['height'] - 1 and inbox['y'] >= metrics['y'] + metrics['height'] - 1):
-        fail(f'{tag}: not office, metrics, inbox from top to bottom: {canvas} {metrics} {inbox}')
+    # The inbox (decisions with deadlines) comes right after the office, before the metrics.
+    if not (inbox['y'] >= canvas['y'] + canvas['height'] - 1 and metrics['y'] >= inbox['y'] + inbox['height'] - 1):
+        fail(f'{tag}: not office, inbox, metrics from top to bottom: {canvas} {inbox} {metrics}')
     if abs(inbox['width'] - PHONE[0]) > 1:
         fail(f'{tag}: the inbox is {inbox["width"]:.0f}px wide, not the screen width')
     check_no_sideways(page, f'{tag} main')

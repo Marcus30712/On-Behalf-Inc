@@ -328,8 +328,10 @@ export function start({ document, storage, now, requestFrame, seedSource: pickSe
     const sy = rect.height ? roots.canvas.height / rect.height : 1;
     const x = (e.clientX - rect.left) * sx;
     const y = (e.clientY - rect.top) * sy;
-    // v2.2: drawn small (a phone), a tap within half a tile still picks someone.
-    const hit = personAt(actors, x, y, sx > 1 / 0.6 ? TILE_PX / 2 : 0);
+    // v2.2: on a phone (the ≤700px layout) with the office drawn small, a tap
+    // within half a tile still picks someone; desktop windows click exactly.
+    const phone = document.defaultView?.matchMedia?.('(max-width: 700px)').matches ?? false;
+    const hit = personAt(actors, x, y, phone && sx > 1 / 0.6 ? TILE_PX / 2 : 0);
     if (!hit) return;
     selectPerson(hit);
     if (tab === 'people') drawPanel(view(game));

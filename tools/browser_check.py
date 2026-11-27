@@ -545,6 +545,11 @@ def check_phone(browser):
     break 15 minutes."""
     tag = where(PHONE)
     page = open_page(browser, PHONE)
+    # The start screen covers everything: the fixed tab bar must not be tappable through it.
+    hit = page.evaluate("""() => { const e = document.elementFromPoint(innerWidth / 2, innerHeight - 20);
+                                       return e && e.closest('.tabs') ? e.outerHTML.slice(0, 60) : null; }""")
+    if hit:
+        fail(f'{tag}: a tab is tappable through the start screen: {hit}')
     new_game(page)
     page.keyboard.press(' ')  # pause: the sheet stays still while we look
     tabs = page.eval_on_selector_all('[data-tab]', 'els => els.map(e => e.dataset.tab)')
@@ -555,6 +560,16 @@ def check_phone(browser):
         if not box or abs(box['width'] - PHONE[0]) > 1 or box['y'] + box['height'] > PHONE[1] + 1:
             fail(f'{tag} {tab}: panel is not a full-width sheet on screen: {box}')
         check_no_sideways(page, f'{tag} {tab}')
+        top = page.locator('.topbar').bounding_box()
+        if box and top and box['y'] < top['y'] + top['height'] - 1:
+            fail(f'{tag} {tab}: the sheet covers the top bar (sheet top {box["y"]:.0f} < top bar bottom {top["y"] + top["height"]:.0f})')
+        if tab == 'roster':
+            # Names stay on one line; a wide table scrolls sideways inside the sheet instead.
+            lines = page.eval_on_selector_all('.panel-root tbody th[scope="row"]', """ths => ths.map(th => {
+                const r = document.createRange(); r.selectNodeContents(th.firstChild);
+                return new Set([...r.getClientRects()].map(x => Math.round(x.top))).size; })""")
+            if any(n > 1 for n in lines):
+                fail(f'{tag}: 근무표 names wrap onto {max(lines)} lines')
         if not page.locator('.panel-root .panel-close').is_visible():
             fail(f'{tag} {tab}: panel close button not visible')
         if tab == 'breaks':

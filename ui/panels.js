@@ -16,7 +16,7 @@ import { UI_TEXT, fill } from './text.js';
 import { formatDate, formatTime, formatMoney, formatDecimal, formatPct, formatSec, formatTarget, hasChannels, channelLabel } from './format.js';
 import { builder } from './dom.js';
 
-export const TABS = ['people', 'roster', 'tasks', 'research', 'hiring', 'clients', 'calendar'];
+export const TABS = ['people', 'roster', 'breaks', 'tasks', 'research', 'hiring', 'clients', 'calendar'];
 
 const WEEKDAYS = 5; // Monday to Friday; Saturday and Sunday too with a weekend client
 const WEEK = 7;
@@ -495,9 +495,53 @@ function calendarPanel({ h, v }) {
         h('tbody', {}, rows))];
 }
 
+// v1.9: today's breaks against the forecast; each break moves 15 minutes.
+const BREAK_KINDS = ['am', 'lunch', 'pm'];
+function breaksPanel({ h, v, run }) {
+  const B = UI_TEXT.breaks;
+  const board = v.breakBoard;
+  if (!board || board.rows.length === 0) return [title(h, B.title, B.help), h('p', {}, B.none)];
+  const who = board.by === 'lead' && board.lead ? fill(B.byLead, { name: board.lead }) : B.byAuto;
+  const peak = Math.max(1, ...board.slots.map((x) => x.calls));
+  const bars = board.slots.map((x) => h('div', {
+    class: x.busy ? 'break-slot busy' : 'break-slot',
+    title: fill(B.slot, { time: formatTime(x.minute), calls: Math.round(x.calls), n: x.away }),
+  },
+  h('span', { class: 'bar', style: `height: ${Math.round((x.calls / peak) * 100)}%` }),
+  h('small', { class: 'away' }, String(x.away)),
+  h('small', { class: 'time' }, x.minute % 60 === 0 ? formatTime(x.minute) : '')));
+  const busy = board.slots.filter((x) => x.busy)
+    .map((x) => h('li', { class: 'bad' }, `${formatTime(x.minute)} · ${fill(B.busy, { n: x.away })}`));
+  const byId = new Map(v.people.map((p) => [p.id, p]));
+  const rows = board.rows.map((r) => {
+    const p = byId.get(r.personId);
+    const cells = BREAK_KINDS.map((kind) => {
+      const b = r.breaks[kind];
+      const step = (dir) => h('button', {
+        type: 'button', 'data-step': dir, 'aria-label': `${B[kind]} ${B[dir]}`, title: B[dir],
+        disabled: !b[dir],
+        onclick: () => run({ type: 'moveBreak', personId: r.personId, kind, start: b.start + (dir === 'later' ? 15 : -15) }),
+      }, dir === 'later' ? '▶' : '◀');
+      return h('td', { 'data-break': kind }, step('earlier'), ' ', h('span', { class: 'break-time' }, formatTime(b.start)), ' ', step('later'));
+    });
+    return h('tr', { 'data-person': r.personId },
+      h('th', { scope: 'row' }, p?.name ?? r.personId, r.edited && h('small', { class: 'edited' }, ' ', B.edited)),
+      h('td', {}, p ? roleText(p) : ''),
+      cells);
+  });
+  const head = h('thead', {}, h('tr', {}, h('th', {}, UI_TEXT.roster.colName), h('th', {}), BREAK_KINDS.map((k) => h('th', {}, B[k]))));
+  return [title(h, B.title, B.help),
+    h('p', { class: 'break-by' }, who),
+    h('div', { class: 'break-chart' }, bars),
+    h('p', { class: 'help' }, B.legend),
+    busy.length > 0 && h('ul', { class: 'break-busy' }, busy),
+    h('table', { class: 'breaks' }, head, h('tbody', {}, rows))];
+}
+
 const BODIES = {
   people: peoplePanel,
   roster: rosterPanel,
+  breaks: breaksPanel,
   tasks: tasksPanel,
   research: researchPanel,
   hiring: hiringPanel,

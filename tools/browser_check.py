@@ -263,6 +263,7 @@ def play_viewport(browser, size):
         check_no_sideways(page, f'{tag} tab {name}')
     if size == VIEWPORTS[0]:
         check_card_breaks(page, tag)
+        check_break_move(page, tag)
     page.click('.panel-root .panel-close')  # close the last one
     if page.locator('.panel-root .panel').count() != 0:
         fail(f'{tag}: the close button did not close the panel')
@@ -508,6 +509,33 @@ def check_metrics_fit(browser):
 
 
 BREAKS_LINE_RE = re.compile(r'^휴식 \d\d:\d\d · 점심 \d\d:\d\d · 휴식 \d\d:\d\d$')
+
+
+def check_break_move(page, tag):
+    """v1.9: the 휴식표 tab shows bars and moves a break 15 minutes on ▶."""
+    page.click('[data-tab="breaks"]')
+    page.wait_for_selector('.panel-root .break-chart')
+    if page.locator('.panel-root .break-slot').count() == 0:
+        fail(f'{tag}: 휴식표 has no forecast bars')
+        return
+    button = page.locator('.panel-root table.breaks button[data-step="later"]:not([disabled])').first
+    if button.count() == 0:
+        fail(f'{tag}: 휴식표 has no movable break')
+        return
+    cell = button.locator('xpath=..')
+    before = cell.locator('.break-time').text_content()
+    pid = button.evaluate("b => b.closest('tr').dataset.person")
+    kind = button.evaluate("b => b.closest('td').dataset.break")
+    button.click()
+    page.wait_for_timeout(150)
+    after = page.locator(f'.panel-root tr[data-person="{pid}"] td[data-break="{kind}"] .break-time').text_content()
+    bh, bm = map(int, before.split(':'))
+    ah, am = map(int, after.split(':'))
+    if (ah * 60 + am) - (bh * 60 + bm) != 15:
+        fail(f'{tag}: 휴식표 ▶ moved {kind} of {pid} from {before} to {after}, not 15 minutes later')
+    if '직접 조정' not in page.locator(f'.panel-root tr[data-person="{pid}"]').text_content():
+        fail(f'{tag}: 휴식표 row of {pid} is not marked 직접 조정 after a move')
+    page.screenshot(path=str(OUT / 'breaks-moved.png'))
 
 
 def check_card_breaks(page, tag):

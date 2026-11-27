@@ -5,7 +5,7 @@
 // caller re-renders with a fresh view. resetPanels() clears the panels' own
 // state (open card, notices, pending phone picks, an open expansion question)
 // for a new or loaded game.
-import { HIRE_COST, LEAD_HIRE_COST, SHIFTS, OFFICE_LEVELS, planningOf } from '../sim/game.js';
+import { HIRE_COST, LEAD_HIRE_COST, QA_HIRE_COST, SHIFTS, OFFICE_LEVELS, planningOf } from '../sim/game.js';
 import { nowActivity, answeringAt } from '../sim/away.js';
 import { RESEARCH } from '../world/research.js';
 import { TRAITS } from '../world/traits.js';
@@ -206,6 +206,7 @@ function peoplePanel(ctx) {
   const P = UI_TEXT.people;
   if (v.people.length === 0) return [title(h, P.title), h('p', {}, P.empty)];
   const noLead = !v.people.some((p) => p.role === 'lead') && h('p', { class: 'warn' }, P.noLead);
+  const noQa = !v.people.some((p) => p.role === 'qa') && h('p', { class: 'warn' }, P.noQa); // v2.4
   const cards = v.people.map((p) => h('button', {
     type: 'button', class: 'person', 'data-person': p.id, title: P.open,
     onclick: () => { selected = p.id; rerender(); },
@@ -214,7 +215,7 @@ function peoplePanel(ctx) {
   h('span', {}, roleText(p)),
   h('span', {}, activityText(v, p, minuteNow)),
   h('span', {}, healthText(p))));
-  return [title(h, P.title, fill(P.count, { n: v.people.length })), noLead, h('div', { class: 'person-list' }, cards)];
+  return [title(h, P.title, fill(P.count, { n: v.people.length })), noLead, noQa, h('div', { class: 'person-list' }, cards)];
 }
 
 const shiftRunsOn = (shift, w) => !!SHIFTS[shift]?.days.includes(w);
@@ -404,20 +405,24 @@ function officeSection(ctx) {
 }
 
 // v1.7: lead hiring, shown above agent hiring while the center needs a lead.
-function leadHiring({ h, v, run }) {
-  const L = UI_TEXT.hiring.lead;
-  const mine = v.hiring?.role === 'lead';
+// v1.7 lead / v2.4 QA hiring, shown above agent hiring while the center needs one.
+const STAFF_COST = { lead: LEAD_HIRE_COST, qa: QA_HIRE_COST };
+function staffHiring({ h, v, run }, role) {
+  const L = UI_TEXT.hiring[role];
+  const busy = UI_TEXT.hiring.lead.busy;
+  const mine = v.hiring?.role === role;
   let action;
   if (!v.hiring) {
-    action = h('button', { type: 'button', 'data-action': 'startHiring-lead', onclick: () => run({ type: 'startHiring', role: 'lead' }) }, L.start);
-  } else if (!mine) action = h('p', { class: 'help' }, L.busy);
+    action = h('button', { type: 'button', 'data-action': `startHiring-${role}`, onclick: () => run({ type: 'startHiring', role }) }, L.start);
+  } else if (!mine) action = h('p', { class: 'help' }, busy);
   else if (v.hiring.candidates) action = h('p', {}, UI_TEXT.hiring.state.arrived);
   else action = h('p', {}, fill(L.searching, { n: v.hiring.workdays }));
-  return h('section', { class: 'lead-hiring' },
+  const leaving = role === 'lead' ? v.leadLeaving : v.qaLeaving;
+  return h('section', { class: `${role}-hiring` },
     h('h3', {}, L.title),
-    h('p', { class: 'warn' }, v.leadLeaving ? L.leaving : L.missing),
+    h('p', { class: 'warn' }, leaving ? L.leaving : L.missing),
     h('p', { class: 'help' }, L.help),
-    h('p', {}, fill(L.cost, { cost: formatMoney(LEAD_HIRE_COST) })),
+    h('p', {}, fill(L.cost, { cost: formatMoney(STAFF_COST[role]) })),
     action);
 }
 
@@ -427,11 +432,12 @@ function hiringPanel(ctx) {
   const free = Math.max(0, v.office.seats - v.people.filter((p) => p.role === 'agent').length);
   let state;
   if (!v.hiring) state = free > 0 ? H.state.ready : H.noSeats;
-  else if (v.hiring.role === 'lead') state = H.lead.busy;
+  else if (v.hiring.role === 'lead' || v.hiring.role === 'qa') state = H.lead.busy;
   else if (v.hiring.candidates) state = H.state.arrived;
   else state = fill(H.state.searching, { n: v.hiring.workdays });
   return [title(h, H.title, H.help),
-    v.needsLead && leadHiring(ctx),
+    v.needsLead && staffHiring(ctx, 'lead'),
+    v.needsQa && staffHiring(ctx, 'qa'),
     h('p', { class: 'state' }, state),
     h('p', {}, fill(H.cost, { cost: formatMoney(HIRE_COST) })),
     (free > 0 || v.hiring) && h('p', {}, free > 0 ? fill(H.seats, { n: free }) : H.noSeats),

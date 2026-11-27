@@ -144,7 +144,7 @@ function rollBreakingPoint(state, person, rng) {
       id: kind,
       personId: person.id,
       // v1.7: lead marks a lead's notice (Kim Miso's advice differs).
-      data: { days: RESIGN_WORKDAYS, leaveDay, ...(person.role === 'lead' && { lead: true }) },
+      data: { days: RESIGN_WORKDAYS, leaveDay, ...(person.role === 'lead' && { lead: true }), ...(person.role === 'qa' && { qa: true }) },
       deadlineDay: leaveDay,
     });
   }

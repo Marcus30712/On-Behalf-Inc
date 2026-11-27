@@ -10,7 +10,7 @@ import { breakLookup, workingShift, moveBreak, breakBoard, pinBreak, unpinBreak 
 import { backlogCount } from './backlog.js';
 import { advanceResearch, advanceBuild, startResearch } from './research.js';
 import { dailyEconomy, monthEnd, reputation } from './economy.js';
-import { advanceHiring, startHiring, needsLead } from './hiring.js';
+import { advanceHiring, startHiring, needsLead, needsQa } from './hiring.js';
 import { advanceExpansion, startExpansion, officeView } from './office.js';
 import { resolveEvent } from './events.js';
 import {
@@ -24,7 +24,7 @@ import { NATIONS } from '../world/nations.js';
 
 export const SAVE_KEY = 'on-behalf-inc:save:v1';
 // Agent seats and the hiring cost, for the screen.
-export { SEATS, HIRE_COST, LEAD_HIRE_COST } from './hiring.js';
+export { SEATS, HIRE_COST, LEAD_HIRE_COST, QA_HIRE_COST } from './hiring.js';
 export { SHIFTS } from './schedule.js';
 export { seatsOf, OFFICE_LEVELS } from './office.js';
 // v1.6: a person's 스케줄링 (stored, or derived from id and name), for the card.
@@ -118,7 +118,7 @@ const ACTIONS = {
   },
   // v1.7: role 'lead' starts a lead search.
   startHiring(state, { role } = {}) {
-    return startHiring(state, role === 'lead' ? 'lead' : 'agent');
+    return startHiring(state, role === 'lead' || role === 'qa' ? role : 'agent'); // v2.4: 'qa'
   },
   startExpansion(state) {
     return startExpansion(state);
@@ -357,6 +357,7 @@ function withBreakBoard(v, state) {
 export function view(state) {
   const date = dateOf(state.day);
   const leadNeeded = needsLead(state); // v1.7; computed once (v1.8.1)
+  const qaNeeded = needsQa(state); // v2.4
   const current = RESEARCH.find((r) => r.id === state.research.current);
   const inbox = state.inbox
     .map((e, index) => ({ ...e, index }))
@@ -384,6 +385,9 @@ export function view(state) {
     // v1.7: needsLead opens lead hiring; leadLeaving says why while a lead still works.
     needsLead: leadNeeded,
     leadLeaving: leadNeeded && state.people.some((p) => p.role === 'lead'),
+    // v2.4: the same for QA hiring.
+    needsQa: qaNeeded,
+    qaLeaving: qaNeeded && state.people.some((p) => p.role === 'qa'),
     office: officeView(state),
     // weekend: an active client opens on Saturday or Sunday (roster shows those days).
     flags: { weekend: isCenterOpenWeekday(state, 5) || isCenterOpenWeekday(state, 6) },

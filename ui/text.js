@@ -158,7 +158,8 @@ export const UI_TEXT = {
     "empty": "아직 함께하는 사람이 없어요.",
     "open": "자세히",
     "leftNote": "이 사람은 센터를 떠났어요.",
-    "noLead": "팀장 없음 · 휴식이 무작위로 정해지고 있어요."
+    "noLead": "팀장 없음 · 휴식이 무작위로 정해지고 있어요.",
+    "noQa": "QA 없음 · 통화 점검이 멈춰 있어요. 상담사에게 QA 업무를 맡길 수도 있어요."
   },
   "role": {
     "agent": "상담사",
@@ -364,6 +365,17 @@ export const UI_TEXT = {
       "start": "팀장 채용 시작",
       "searching": "팀장 지원자를 찾는 중 · {n}근무일째",
       "busy": "다른 채용이 끝나면 시작할 수 있어요."
+    },
+    "qa": {
+      "title": "QA 채용",
+      "missing": "지금은 QA가 없어요. 통화 점검이 멈춰서 고객사 만족도가 덜 올라요.",
+      "leaving": "QA가 곧 떠나요. 지금 새 QA를 찾기 시작할 수 있어요.",
+      "help": "QA는 통화를 점검해 실수를 줄이고 고객사 만족도를 올려요. 며칠 뒤 지원자 두 명이 오면 한 명을 고를 수 있어요.",
+      "cost": "QA 채용 비용 💰 {cost}",
+      "start": "QA 채용 시작",
+      "searching": "QA 지원자를 찾는 중 · {n}근무일째",
+      "traits": "특성 {list}",
+      "noTraits": "특별한 특성 없음"
     }
   },
   "clients": {
@@ -621,6 +633,10 @@ function valuesFor(event) {
   };
   // v1.7 lead-candidate: coaching and planning, 2 decimals (display rule).
   for (const k of ['c1', 'c2', 'p1', 'p2']) if (d[k] !== undefined) values[k] = formatDecimal(d[k]);
+  // v2.4 qa-candidate: trait names, or none.
+  for (const k of ['t1', 't2']) {
+    if (Array.isArray(d[k])) values[k] = d[k].length > 0 ? fill(UI_TEXT.hiring.qa.traits, { list: d[k].join(', ') }) : UI_TEXT.hiring.qa.noTraits;
+  }
   if (clientDef) {
     values.sl = channelOf(clientDef) === 'email'
       ? fill(UI_TEXT.metrics.targetEmail, { hours: clientDef.slTarget.openMinutes / 60, pct: formatDecimal(clientDef.slTarget.pct) })
@@ -674,7 +690,8 @@ export function eventText(event) {
   const weekendOffer = event.id === 'client-offer' && clientDef(event)?.hours.days.some((x) => x >= 5);
   const adviceKey = event.id === 'client-offer' && channel !== 'phone' ? `client-offer-${channel}`
     : weekendOffer ? 'client-offer-weekend' : event.id === 'backlog-warning' ? 'backlog-growing'
-      : event.id === 'resign-notice' && event.data?.lead ? 'resign-notice-lead' : event.id;
+      : event.id === 'resign-notice' && event.data?.lead ? 'resign-notice-lead'
+        : event.id === 'resign-notice' && event.data?.qa ? 'resign-notice-qa' : event.id;
   const lines = ADVISOR[adviceKey] ?? [];
   // A desk's featured person only stars in its done text: nobody's face
   // changed, so the advisor speaks as if nobody was helped.

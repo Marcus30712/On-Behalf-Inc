@@ -60,6 +60,16 @@ export const EVENTS = {
       { id: 'hold', label: '이번엔 보류한다', result: '아무도 뽑지 않아요. 다시 뽑으려면 팀장 채용을 새로 시작해야 해요.' },
     ],
   },
+  // v2.4: a QA search; t1/t2 are trait texts (ui/text.js hiring.qa.traits/noTraits).
+  'qa-candidate': {
+    title: 'QA 지원자 두 명이 왔어요',
+    text: '{cand1} 씨({t1})와 {cand2} 씨({t2})가 QA 자리에 지원했어요. 누구와 함께할까요?',
+    choices: [
+      { id: 'pick-1', label: '{cand1} 씨를 뽑는다', result: '{cand1} 씨가 QA로 들어와요. 통화 점검을 맡아요.' },
+      { id: 'pick-2', label: '{cand2} 씨를 뽑는다', result: '{cand2} 씨가 QA로 들어와요. 통화 점검을 맡아요.' },
+      { id: 'hold', label: '이번엔 보류한다', result: '아무도 뽑지 않아요. 다시 뽑으려면 QA 채용을 새로 시작해야 해요.' },
+    ],
+  },
   'client-offer': {
     title: '새 고객사 제안',
     text: '{client}에서 계약을 제안했어요. 목표는 {sl}, 월 계약금은 {fee}예요. 좌석이 8개뿐이라 지금 인원을 나눠야 해요.',

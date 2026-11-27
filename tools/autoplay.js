@@ -111,6 +111,7 @@ const mean = (xs) => (xs.length === 0 ? 0 : xs.reduce((s, x) => s + x, 0) / xs.l
 export function runPolicy({
   seed, days, policy, acceptOffers = false, expand = false, channels = false, leadPlanning = null,
   leadLeavesDay = null, hireLead = true,
+  qaLeavesDay = null, hireQa = true, // v2.4: the same for the QA
 }) {
   const state = createGame(seed);
   if (leadPlanning !== null) {
@@ -118,7 +119,7 @@ export function runPolicy({
     lead.skills = { ...lead.skills, planning: leadPlanning };
   }
   const sensible = policy === 'sensible';
-  const plan = sensible ? { ...sensiblePlan(view(state), acceptOffers, expand, channels), hireLead } : null;
+  const plan = sensible ? { ...sensiblePlan(view(state), acceptOffers, expand, channels), hireLead, hireQa } : null;
   const tally = {
     seen: 0, sick: 0, sickDays: 0, burnouts: 0, burnoutLog: [], helped: 0, clinicHelped: 0, helpedNames: [], offers: 0, builtOn: {},
     levelDay: {}, rankSDay: null, sixDay: 0, weekendDays: 0,
@@ -131,6 +132,10 @@ export function runPolicy({
     if (d === leadLeavesDay) {
       const lead = state.people.find((p) => p.role === 'lead');
       if (lead) state.leaving.push({ personId: lead.id, day: state.day });
+    }
+    if (d === qaLeavesDay) {
+      const qa = state.people.find((p) => p.role === 'qa');
+      if (qa) state.leaving.push({ personId: qa.id, day: state.day });
     }
     let v = view(state);
     collect(v, tally);
@@ -339,6 +344,17 @@ export function leadHireVerdict(rehired, without) {
   return { seeds, better: seeds.filter((x) => x.rehired < x.without).length };
 }
 
+// v2.4: seeds where the play that rehired a QA kept a higher mean client
+// satisfaction over the run than the same play without a QA.
+export function qaHireVerdict(rehired, without) {
+  const mean = (r) => {
+    const all = r.days.flatMap((d) => Object.values(d.clients).map((c) => c.satisfaction));
+    return all.reduce((a, b) => a + b, 0) / Math.max(1, all.length);
+  };
+  const seeds = rehired.map((r, i) => ({ rehired: mean(r), without: mean(without[i]) }));
+  return { seeds, better: seeds.filter((x) => x.rehired > x.without).length };
+}
+
 // v1.3: seeds where the email client was lost at least once.
 export const emailLost = (runs) => runs.filter((r) => r.email.lost > 0).length;
 
@@ -462,6 +478,7 @@ function decide(state, v, plan, tally) {
   }
   // v1.7: a missing lead comes first; the lead does the research hours (plan.leadId).
   if (plan.hireLead && v.needsLead && !view(state).hiring) act(state, { type: 'startHiring', role: 'lead' });
+  if (plan.hireQa && v.needsQa && !view(state).hiring) act(state, { type: 'startHiring', role: 'qa' }); // v2.4
   plan.leadId = view(state).people.find((p) => p.role === 'lead')?.id;
   if (agentsOf(v).length < v.office.seats && !view(state).hiring) act(state, { type: 'startHiring' });
 }
@@ -661,6 +678,7 @@ function answerInbox(state, v, plan) {
     else if (e.id === 'resign-notice') choice = 'keep-trying';
     else if (e.id === 'candidate') choice = 'pick-1';
     else if (e.id === 'lead-candidate') choice = e.data.p1 >= e.data.p2 ? 'pick-1' : 'pick-2'; // v1.7: the better planner
+    else if (e.id === 'qa-candidate') choice = !e.data.t1.includes('꼼꼼함') && e.data.t2.includes('꼼꼼함') ? 'pick-2' : 'pick-1'; // v2.4: 꼼꼼함 first
     else if (e.id === 'client-offer') {
       choice = plan.acceptOffers || (plan.expand && canStaff(v, e.clientId, plan)) ? 'accept' : 'decline';
     }
@@ -831,6 +849,8 @@ function main() {
   const unskilled = SEEDS.map((seed) => runPolicy({ seed, days: 360, policy: 'sensible', leadPlanning: 1 }));
   const rehired = SEEDS.map((seed) => runPolicy({ seed, days: 360, policy: 'sensible', leadLeavesDay: 30 }));
   const leadless = SEEDS.map((seed) => runPolicy({ seed, days: 360, policy: 'sensible', leadLeavesDay: 30, hireLead: false }));
+  const qaRehired = SEEDS.map((seed) => runPolicy({ seed, days: 360, policy: 'sensible', qaLeavesDay: 30 }));
+  const qaless = SEEDS.map((seed) => runPolicy({ seed, days: 360, policy: 'sensible', qaLeavesDay: 30, hireQa: false }));
   printRuns('idle, 360 days', idleYear);
   printRuns('sensible, 360 days', sensible);
   printRuns('sensible taking client offers, 720 days', offers);
@@ -871,6 +891,8 @@ function main() {
   const dayList = (runs, key) => runs.map((r) => r[key] ?? '-').join(' ');
   const lead = leadSkillVerdict(skilled, unskilled);
   const rehire = leadHireVerdict(rehired, leadless);
+  const qaRehire = qaHireVerdict(qaRehired, qaless);
+  console.log('QA leaves day 30, rehired/without (v2.4): mean satisfaction', qaRehire.seeds.map((x) => `${x.rehired.toFixed(1)}/${x.without.toFixed(1)}`).join(' '));
   console.log('lead leaves day 30, rehired/without (v1.7): abandoned', rehire.seeds.map((x) => `${x.rehired}/${x.without}`).join(' '));
   const pair2 = (f) => lead.seeds.map((s) => `${f(s.high)}/${f(s.low)}`).join(' ');
 
@@ -957,6 +979,8 @@ function main() {
       `a skilled lead (planning 8) has fewer abandoned calls and an equal or higher service level than an unskilled one (planning 1) on the same seeds (v1.6): ${lead.better}/10 seeds (>= 8)`),
     check(rehire.better >= 8,
       `after the lead leaves (day 30), rehiring a lead drops fewer calls than going without (v1.7): ${rehire.better}/10 seeds (>= 8)`),
+    check(qaRehire.better >= 8,
+      `after the QA leaves (day 30), rehiring a QA keeps clients happier than going without (v2.4): ${qaRehire.better}/10 seeds (>= 8)`),
   ];
   console.log(`\n${results.filter(Boolean).length}/${results.length} checks pass (${((Date.now() - t0) / 1000).toFixed(1)} s)`);
   if (!results.every(Boolean)) process.exitCode = 1;

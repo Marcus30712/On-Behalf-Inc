@@ -22,6 +22,9 @@ export const ADVISOR = {
   'build-done': ['보세요, {name} 씨 얼굴이 달라졌죠? 이게 센터장님이 한 일이에요.'],
   // v1.7: lead-candidate, and resign-notice-lead in place of resign-notice when a lead hands in notice.
   'lead-candidate': ['휴식표는 팀장 솜씨예요. 스케줄링이 높을수록 바쁜 시간을 잘 피해서 쉬게 해요.'],
+  // v2.4: qa-candidate, and resign-notice-qa in place of resign-notice when a QA hands in notice.
+  'qa-candidate': ['QA는 꼼꼼함이 중요해요. 꼼꼼한 사람은 같은 시간에 통화를 더 많이 점검해요.'],
+  'resign-notice-qa': ['QA가 떠나면 통화 점검이 멈춰요. 채용 탭에서 새 QA를 찾거나, 그동안 상담사에게 QA를 맡겨요.'],
   'resign-notice-lead': ['팀장이 떠나면 휴식표를 짤 사람이 없어요. 채용 탭에서 새 팀장을 미리 찾아 둬요.'],
   candidate: ['기술은 가르치면 늘어요. 우리 팀과 잘 맞을 사람을 골라요.'],
   'game-over-cash': ['이번엔 여기까지예요. 그래도 많이 배웠잖아요. 다시 해 봐요, 센터장님.'],

@@ -247,3 +247,71 @@ test('v1.7 a v1.6 save mid-search (no role) still hires an agent', () => {
   assert.equal(candidates(s).length, 1);
   assert.equal(leadOffers(s).length, 0);
 });
+
+// --- v2.4 QA hiring ----------------------------------------------------------
+import { needsQa, QA_HIRE_COST } from '../sim/hiring.js';
+import { TRAITS } from '../world/traits.js';
+
+const withoutQa = (s) => { const q = s.people.find((p) => p.role === 'qa'); s.people = s.people.filter((p) => p !== q); delete s.roster[q.id]; delete s.assignment[q.id]; return s; };
+const qaOffers = (state) => state.inbox.filter((e) => e.id === 'qa-candidate');
+const traitText = (p) => p.traits.map((id) => TRAITS.find((t) => t.id === id)?.name).filter(Boolean);
+
+test('v2.4 needsQa: a QA present, gone, or surely leaving', () => {
+  const s = makeState();
+  const qa = s.people.find((p) => p.role === 'qa');
+  assert.equal(needsQa(s), false);
+  s.leaving = [{ personId: qa.id, day: 10 }];
+  assert.equal(needsQa(s), true);
+  s.leaving = [{ personId: qa.id, day: 10, withdrawIfMoraleAbove: 50 }];
+  assert.equal(needsQa(s), false, 'a QA being talked round may stay');
+  assert.equal(needsQa(withoutQa(makeState())), true);
+});
+
+test('v2.4 starting a QA search: cost, refusals, no seat needed', () => {
+  assert.equal(QA_HIRE_COST, 2000);
+  assert.deepEqual(startHiring(makeState(), 'qa'), { ok: false, reason: 'no-need' });
+  const s = withoutQa(makeState());
+  assert.deepEqual(startHiring(s, 'qa'), { ok: true });
+  assert.equal(s.cash, 10000 - 2000);
+  assert.equal(s.hiring.role, 'qa');
+  assert.deepEqual(startHiring(s, 'lead'), { ok: false, reason: 'already' });
+  assert.deepEqual(startHiring(withoutQa(makeState({ agents: 8 })), 'qa'), { ok: true }, 'the QA has their own desk');
+  assert.deepEqual(startHiring(withoutQa(makeState({ cash: 1999 })), 'qa'), { ok: false, reason: 'no-cash' });
+});
+
+test('v2.4 QA candidates arrive after 4-6 workdays with their traits in the event', () => {
+  for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
+    const s = withoutQa(makeState());
+    startHiring(s, 'qa');
+    const n = untilCandidates(s, createRng(seed));
+    assert.ok(n >= 4 && n <= 6, `seed ${seed}: ${n} workdays`);
+    assert.deepEqual(s.hiring.candidates.map((p) => p.role), ['qa', 'qa']);
+    const [e] = qaOffers(s);
+    const [a, b] = s.hiring.candidates;
+    assert.equal(e.data.cand1, a.name);
+    assert.deepEqual(e.data.t1, traitText(a));
+    assert.deepEqual(e.data.t2, traitText(b));
+  }
+});
+
+test('v2.4 a hired QA checks calls on the late shift, no probation; never two', () => {
+  const s = withoutQa(makeState());
+  startHiring(s, 'qa');
+  untilCandidates(s, createRng(4));
+  const [e] = qaOffers(s);
+  const chosen = s.hiring.candidates[0];
+  resolveEvent(s, s.inbox.indexOf(e), 'pick-1');
+  assert.ok(s.people.includes(chosen));
+  assert.deepEqual(s.roster[chosen.id], { 0: 'late', 1: 'late', 2: 'late', 3: 'late', 4: 'late' });
+  assert.deepEqual(s.assignment[chosen.id], { kind: 'qa' });
+  assert.equal(chosen.probationDays ?? 0, 0);
+  assert.equal(needsQa(s), false);
+  // A second QA does not join while one is in place.
+  const t = withoutQa(makeState());
+  startHiring(t, 'qa');
+  untilCandidates(t, createRng(4));
+  t.people.push(createPerson(createRng(9), { id: 'q9', role: 'qa', nation: 'veltora' }));
+  const before = t.people.length;
+  hireCandidate(t, 0);
+  assert.equal(t.people.length, before);
+});

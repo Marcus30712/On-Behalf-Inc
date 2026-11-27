@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   runPolicy, wornDown, idleYearVerdict, idleCashVerdict, fullFeeShare, expansionVerdict, channelsVerdict, emailLost, emailStruggles, emailKept,
-  leadSkillVerdict, leadHireVerdict,
+  leadSkillVerdict, leadHireVerdict, qaHireVerdict,
 } from '../tools/autoplay.js';
 
 const SEEDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
@@ -230,4 +230,13 @@ test('rehiring a lead after the lead leaves drops fewer calls than going without
   const without = SEEDS.map((seed) => runPolicy({ seed, days: 360, policy: 'sensible', leadLeavesDay: 30, hireLead: false }));
   const v = leadHireVerdict(rehired, without);
   assert.ok(v.better >= 8, `better on ${v.better}/10: abandoned ${v.seeds.map((x) => `${x.rehired}/${x.without}`).join(' ')}`);
+});
+
+// v2.4: the QA leaves on day 30. Sensible play that hires a new QA (a 꼼꼼함
+// candidate first) keeps clients happier over the year than without one.
+test('rehiring a QA after the QA leaves keeps clients happier than going without (v2.4)', () => {
+  const rehired = SEEDS.map((seed) => runPolicy({ seed, days: 360, policy: 'sensible', qaLeavesDay: 30 }));
+  const without = SEEDS.map((seed) => runPolicy({ seed, days: 360, policy: 'sensible', qaLeavesDay: 30, hireQa: false }));
+  const v = qaHireVerdict(rehired, without);
+  assert.ok(v.better >= 8, `happier on ${v.better}/10: mean satisfaction ${v.seeds.map((x) => `${x.rehired.toFixed(1)}/${x.without.toFixed(1)}`).join(' ')}`);
 });

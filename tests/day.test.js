@@ -501,3 +501,14 @@ test('v1.7 a lead\'s resign notice is marked as a lead\'s', () => {
   endOfDay(s, pickAt(1));
   assert.equal(ids(s, 'resign-notice')[0].data.lead, true);
 });
+
+test('v2.4 a QA\'s resign notice is marked as a QA\'s', () => {
+  const pickAt = (i) => ({ ...never, chance: (p) => p === 0.08, pick: (a) => a[i] });
+  const s = makeState({ day: 4, nations: ['veltora'] });
+  const p = s.people[0];
+  p.role = 'qa';
+  s.assignment[p.id] = { kind: 'qa' };
+  set(p, { stress: 100, fatigue: 100 });
+  endOfDay(s, pickAt(1));
+  assert.equal(ids(s, 'resign-notice')[0].data.qa, true);
+});

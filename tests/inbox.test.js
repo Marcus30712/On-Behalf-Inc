@@ -185,3 +185,10 @@ test('v1.7 lead-candidate shows skills with 2 decimals; a lead\'s notice has its
   const agent = eventText({ id: 'resign-notice', day: 0, data: { name: '가을', days: 10, leaveDay: 12 } });
   assert.notEqual(agent.advisor, lead.advisor);
 });
+
+test('v2.4 qa-candidate shows traits; a QA\'s notice has its own advice', () => {
+  const out = eventText({ id: 'qa-candidate', day: 0, data: { cand1: '가을', cand2: '나무', t1: ['꼼꼼함', '차분함'], t2: [] } });
+  assert.equal(out.text, '가을 씨(특성 꼼꼼함, 차분함)와 나무 씨(특별한 특성 없음)가 QA 자리에 지원했어요. 누구와 함께할까요?');
+  const qa = eventText({ id: 'resign-notice', day: 0, data: { name: '가을', days: 10, leaveDay: 12, qa: true } });
+  assert.equal(qa.advisor, 'QA가 떠나면 통화 점검이 멈춰요. 채용 탭에서 새 QA를 찾거나, 그동안 상담사에게 QA를 맡겨요.');
+});

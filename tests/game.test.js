@@ -502,3 +502,14 @@ test('v1.8 view deskActivity: the activity without breaks', () => {
   }
   assert.ok(v.people.some((p) => p.activity === 'lunch' || p.activity === 'break'), 'someone is on a break interval at 12:00');
 });
+
+test('v2.4 QA hiring through the game: action role, view flags', () => {
+  const s = createGame(42);
+  assert.deepEqual(act(s, { type: 'startHiring', role: 'qa' }), { ok: false, reason: 'no-need' });
+  assert.deepEqual([view(s).needsQa, view(s).qaLeaving], [false, false]);
+  const qa = s.people.find((p) => p.role === 'qa');
+  s.leaving.push({ personId: qa.id, day: s.day + 10 });
+  assert.deepEqual([view(s).needsQa, view(s).qaLeaving], [true, true]);
+  assert.deepEqual(act(s, { type: 'startHiring', role: 'qa' }), { ok: true });
+  assert.equal(view(s).hiring.role, 'qa');
+});

@@ -122,13 +122,37 @@ export function planBreaks(state, day, rngForDay = dayRng(state, day)) {
     return sum / (length / GRID);
   };
 
+  // v2.3: pinned breaks (state.breakRules) that fit the day's window go first,
+  // so the lead plans everyone else around them; rules that do not fit are
+  // left to the lead that day.
+  const pinnedOf = (person, kind, shift) => {
+    const at = state.breakRules?.[person.id]?.[kind];
+    if (!Number.isFinite(at)) return null;
+    const w = windowsFor(shift.end - shift.start)[kind];
+    return at >= shift.start + w.from && at <= shift.start + w.to && (at - shift.start) % GRID === 0 ? at : null;
+  };
+  for (const { person, shift } of working) {
+    for (const [kind, w] of Object.entries(windowsFor(shift.end - shift.start))) {
+      const at = pinnedOf(person, kind, shift);
+      if (at !== null) placed.push({ id: person.id, from: at, to: at + w.length });
+    }
+  }
+
   const plan = {};
   for (const { person, shift } of working) {
     const windows = windowsFor(shift.end - shift.start);
     const entry = {};
     for (const [kind, w] of Object.entries(windows)) {
+      const pinned = pinnedOf(person, kind, shift);
       const starts = [];
       for (let off = w.from; off <= w.to; off += GRID) starts.push(shift.start + off);
+      if (pinned !== null) {
+        // The same draws as an unpinned break, so pinning one break does not
+        // reshuffle anyone else's chance; the break itself stays put.
+        for (let i = 0; i < starts.length; i++) rngForDay.next();
+        entry[kind] = pinned;
+        continue;
+      }
       const loads = starts.map((start) => (q > 0 ? loadOf(person, start, w.length) : 0));
       const maxLoad = Math.max(...loads);
       let best;
@@ -177,7 +201,7 @@ export function ensureBreakPlan(state) {
 // skill.
 const freshPlans = new WeakMap();
 function freshPlan(state) {
-  const key = `${state.day}|${state.clients.filter((c) => c.active).map((c) => c.id).join()}|${state.people.map((p) => `${p.id}=${workingShift(state, p, state.day) ?? '-'}:${JSON.stringify(state.assignment[p.id] ?? null)}:${p.role === 'lead' ? planningOf(p) : ''}`).join()}`;
+  const key = `${state.day}|${state.clients.filter((c) => c.active).map((c) => c.id).join()}|${state.people.map((p) => `${p.id}=${workingShift(state, p, state.day) ?? '-'}:${JSON.stringify(state.assignment[p.id] ?? null)}:${p.role === 'lead' ? planningOf(p) : ''}`).join()}|${JSON.stringify(state.breakRules ?? {})}`; // v2.3: rules too
   const cached = freshPlans.get(state);
   if (cached?.key === key) return cached.plan;
   const plan = planBreaks(state, state.day);
@@ -244,6 +268,10 @@ export function moveBreak(state, { personId, kind, start } = {}) {
   if (reason) return { ok: false, reason };
   const entry = breakLookup(state, { keep: true })(person, shiftId);
   state.breaks.plan[person.id] = { ...entry, [kind]: start, edited: true };
+  // v2.3: a pinned break keeps the time shown: its rule moves with it, when
+  // the rule was the time in effect today (a rule today's shift could not use
+  // is left alone, final review).
+  if (state.breakRules?.[person.id]?.[kind] === seen[kind]) state.breakRules[person.id][kind] = start;
   return { ok: true };
 }
 
@@ -271,8 +299,13 @@ export function breakBoard(state) {
     const breaks = {};
     for (const kind of BREAK_KINDS) {
       const at = entry[kind];
+      const rule = state.breakRules?.[p.id]?.[kind];
       breaks[kind] = {
         start: at,
+        // v2.3: pinned to a time every day; ruleOff is that time when today's
+        // plan could not use it (outside the day's window), else null.
+        pinned: Number.isFinite(rule),
+        ruleOff: Number.isFinite(rule) && rule !== at ? rule : null,
         earlier: moveRefusal(state, shiftId, kind, at, at - GRID) === null,
         later: moveRefusal(state, shiftId, kind, at, at + GRID) === null,
       };
@@ -301,4 +334,35 @@ export function breakBoard(state) {
   const named = planner ? state.people.find((p) => p.id === planner)?.name ?? null : null;
   const who = named ?? lead;
   return { slots, rows, by: by === 'lead' && who ? 'lead' : 'auto', lead: who };
+}
+
+// ---- v2.3: "매일 이 시간" — pinning a break to a time every day ---------------
+
+// pinBreak(state, { personId, kind }) -> { ok } | { ok: false, reason }: today's
+// start of that break becomes the person's rule (state.breakRules), used by
+// planBreaks from the next plan on. Today's plan is not changed.
+export function pinBreak(state, { personId, kind } = {}) {
+  const person = state.people.find((p) => p.id === personId);
+  if (!person) return { ok: false, reason: 'unknown-person' };
+  if (!BREAK_KINDS.includes(kind)) return { ok: false, reason: 'bad-break' };
+  const shiftId = workingShift(state, person, state.day);
+  if (!shiftId) return { ok: false, reason: 'not-working' };
+  const entry = breakLookup(state, { keep: true })(person, shiftId);
+  if (!entry) return { ok: false, reason: 'not-working' };
+  state.breakRules ??= {};
+  state.breakRules[person.id] = { ...state.breakRules[person.id], [kind]: entry[kind] };
+  return { ok: true };
+}
+
+// unpinBreak(state, { personId, kind }) -> { ok } | { ok: false, reason }:
+// removes the rule (today's plan is not changed).
+export function unpinBreak(state, { personId, kind } = {}) {
+  if (!state.people.some((p) => p.id === personId)) return { ok: false, reason: 'unknown-person' };
+  if (!BREAK_KINDS.includes(kind)) return { ok: false, reason: 'bad-break' };
+  const rules = state.breakRules?.[personId];
+  if (rules) {
+    delete rules[kind];
+    if (Object.keys(rules).length === 0) delete state.breakRules[personId];
+  }
+  return { ok: true };
 }

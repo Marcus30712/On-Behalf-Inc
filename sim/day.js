@@ -84,6 +84,7 @@ function processLeaving(state) {
     state.people = state.people.filter((p) => p !== person);
     delete state.assignment[person.id];
     delete state.roster[person.id];
+    delete state.breakRules?.[person.id]; // v2.3
     state.absences = state.absences.filter((a) => a.personId !== person.id);
     for (const e of state.inbox ?? []) {
       if (e.personId === person.id) e.resolved = true;

@@ -71,6 +71,7 @@ export function newGame(seed) {
     history: [],
     spikes: [],
     leaving: [],
+    breakRules: {}, // v2.3: { [personId]: { am?, lunch?, pm? } } pinned break times
     cash: START_CASH,
     gameOver: null,
     milestones: [],
@@ -148,6 +149,15 @@ export function deserialize(text) {
     }
     // v1.6: a malformed break plan is dropped; the game makes today's again on load.
     if ('breaks' in s && !isBreakPlan(s.breaks)) delete s.breaks;
+    // v2.3: break rules { [id]: { am?, lunch?, pm? } }; saves before v2.3 have
+    // none, and malformed entries are dropped.
+    const rules = hasShape(s.breakRules, 'object') ? s.breakRules : {};
+    s.breakRules = {};
+    for (const [id, r] of Object.entries(rules)) {
+      if (!hasShape(r, 'object')) continue;
+      const kept = Object.fromEntries(BREAK_KINDS.filter((k) => Number.isFinite(r[k])).map((k) => [k, r[k]]));
+      if (Object.keys(kept).length > 0) s.breakRules[id] = kept;
+    }
     // v1.1 saves: offered held bare ids; they count as offered on the day the save is loaded.
     s.offered = s.offered.map((o) => (typeof o === 'string' ? { id: o, day: s.day } : o));
     return s;

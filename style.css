@@ -434,3 +434,14 @@ table.breaks .edited { color: var(--accent); }
   table.breaks td[data-break] .break-time { min-width: 3.2em; text-align: center; font-variant-numeric: tabular-nums; }
   table.breaks button[data-step] { min-width: 44px; min-height: 44px; font-size: 1rem; }
 }
+
+/* v2.3: 📌 pinned breaks */
+table.breaks button[data-pin] { padding: 0 0.3rem; opacity: 0.45; filter: grayscale(1); }
+table.breaks button[data-pin][aria-pressed="true"] { opacity: 1; filter: none; border-color: var(--accent); }
+table.breaks .pinned { color: var(--accent); font-weight: 700; }
+table.breaks .pin-off { display: block; color: var(--warn); white-space: normal; }
+@media (max-width: 700px) {
+  table.breaks button[data-pin] { min-width: 44px; min-height: 44px; }
+  table.breaks td[data-break] { flex-wrap: wrap; }
+  table.breaks .pin-off { flex-basis: 100%; }
+}

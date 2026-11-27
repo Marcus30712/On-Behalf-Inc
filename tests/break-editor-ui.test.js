@@ -147,3 +147,41 @@ test('v2.1 each break cell is labelled with its break name', () => {
   const { root } = draw(s);
   for (const kind of ['am', 'lunch', 'pm']) assert.equal(cell(root, agent.id, kind).getAttribute('data-label'), B[kind]);
 });
+
+// ---- v2.3 매일 이 시간 ----------------------------------------------------------
+
+test('v2.3 the pin copy is as approved', () => {
+  assert.deepEqual([B.pinHelp, B.pin, B.unpin, B.pinned, B.pinnedOff], [
+    '📌를 누르면 그 휴식이 매일 같은 시간으로 고정돼요. 팀장은 고정된 휴식을 피해서 다른 사람 휴식을 짜요.',
+    '매일 이 시간으로 고정', '고정 풀기', '매일',
+    '고정한 {time}이 오늘 근무 시간과 맞지 않아 팀장이 정했어요.']);
+});
+
+test('v2.3 📌 pins and unpins a break, with its mark and pressed state', () => {
+  const { s, agent } = game();
+  const { root, redraw } = draw(s);
+  assert.ok(root.textContent.includes(B.pinHelp));
+  const pin = () => cell(root, agent.id, 'lunch').querySelector('button[data-pin]');
+  assert.equal(pin().getAttribute('aria-pressed'), 'false');
+  assert.equal(pin().getAttribute('aria-label'), `${agent.name} ${B.lunch} ${B.pin}`);
+  click(pin());
+  redraw();
+  assert.equal(pin().getAttribute('aria-pressed'), 'true');
+  assert.equal(pin().getAttribute('aria-label'), `${agent.name} ${B.lunch} ${B.unpin}`);
+  assert.ok(cell(root, agent.id, 'lunch').querySelector('.pinned').textContent.includes(B.pinned));
+  assert.ok(Number.isFinite(s.breakRules[agent.id].lunch));
+  click(pin());
+  redraw();
+  assert.equal(pin().getAttribute('aria-pressed'), 'false');
+  assert.equal(cell(root, agent.id, 'lunch').querySelector('.pinned'), null);
+});
+
+test('v2.3 a rule the day could not use says so in its cell', () => {
+  const { s, agent } = game();
+  const board = view(s).breakBoard;
+  const row = board.rows.find((r) => r.personId === agent.id);
+  const v = { ...view(s), breakBoard: { ...board, rows: [{ ...row, breaks: { ...row.breaks, lunch: { ...row.breaks.lunch, pinned: true, ruleOff: 720 } } }] } };
+  const root = makeRoot();
+  renderPanel(root, v, 'breaks', () => ({ ok: true }));
+  assert.ok(cell(root, agent.id, 'lunch').textContent.includes(fill(B.pinnedOff, { time: formatTime(720) })));
+});

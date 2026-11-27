@@ -266,6 +266,7 @@ def play_viewport(browser, size):
     if size == VIEWPORTS[0]:
         check_card_breaks(page, tag)
         check_break_move(page, tag)
+        check_pins(page, tag)
     page.click('.panel-root .panel-close')  # close the last one
     if page.locator('.panel-root .panel').count() != 0:
         fail(f'{tag}: the close button did not close the panel')
@@ -718,6 +719,52 @@ def check_phone_channels(browser):
     page.screenshot(path=str(OUT / 'phone-channels.png'))
     check_errors(page, tag)
     page.context.close()
+
+
+def check_pins(page, tag):
+    """v2.3: 📌 every lunch on the 휴식표, play into the next day: each pinned
+    lunch is at the same time and still pinned."""
+    def open_breaks():
+        if page.locator('.tabs [data-tab="breaks"][aria-selected="true"]').count() == 0:
+            page.click('.tabs [data-tab="breaks"]')
+        page.wait_for_selector('.panel-root table.breaks')
+
+    def close_breaks():
+        if page.locator('.tabs [data-tab="breaks"][aria-selected="true"]').count():
+            page.click('.tabs [data-tab="breaks"]')
+
+    if speed(page) != 0:
+        page.keyboard.press(' ')
+    open_breaks()
+    pinned = {}
+    for pid in page.eval_on_selector_all('.panel-root tr[data-person]', 'rows => rows.map(r => r.dataset.person)'):
+        btn = page.locator(f'.panel-root tr[data-person="{pid}"] button[data-pin="lunch"]')
+        if btn.count() == 0:
+            continue
+        pinned[pid] = page.locator(f'.panel-root tr[data-person="{pid}"] td[data-break="lunch"] .break-time').text_content()
+        btn.click()
+        page.wait_for_timeout(60)
+        if btn.get_attribute('aria-pressed') != 'true':
+            fail(f'{tag}: 📌 did not pin the lunch of {pid}')
+    close_breaks()
+    start = game_day(page)
+    run_until(page, tag, lambda p: game_day(p) is not None and game_day(p) > start and is_open_hours(p))
+    if speed(page) != 0:
+        page.keyboard.press(' ')
+    open_breaks()
+    seen = 0
+    for pid, before in pinned.items():
+        row = page.locator(f'.panel-root tr[data-person="{pid}"]')
+        if row.count() == 0:
+            continue  # off or ill today
+        seen += 1
+        after = row.locator('td[data-break="lunch"] .break-time').text_content()
+        pressed = row.locator('button[data-pin="lunch"]').get_attribute('aria-pressed')
+        if after != before or pressed != 'true':
+            fail(f'{tag}: pinned lunch of {pid} was {before}, next day {after} (pinned {pressed})')
+    if seen == 0:
+        fail(f'{tag}: nobody with a pinned lunch works the next day')
+    # Left open: the caller closes the last panel with its close button.
 
 
 def check_card_breaks(page, tag):

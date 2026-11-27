@@ -2,17 +2,23 @@ import { MAP, tileAt, baseSeats } from './map.js';
 import { findPath, tilesByDistance } from './path.js';
 import { nowActivity } from '../sim/away.js';
 
-export const WALK_SPEED = 3; // tiles per real second: the floor (paused, or no rate given)
+export const WALK_SPEED = 3; // tiles per real second: the floor (no rate given; v2.0: paused stands still)
 // v1.6: walking keeps pace with game time. 4 tiles per game minute means a
 // 10-tile walk takes 2.5 game minutes at any speed (at 1x in opening hours,
 // 6 game minutes per second, that is 24 tiles per second; 10 tiles in 0.42 s).
 export const WALK_TILES_PER_GAME_MINUTE = 4;
 
+// v2.0: no faster than the 3x opening-hours pace (4 x 6 game minutes per
+// second x 3), so walks stay visible at night (was up to 480 tiles a second).
+export const MAX_WALK_SPEED = WALK_TILES_PER_GAME_MINUTE * 6 * 3;
+
 // Tiles per real second for `rate` game minutes per real second (ui/clock.js
-// gameMinutesFor(1000, speed, view)): max(WALK_SPEED, 4 × rate).
+// gameMinutesFor(1000, speed, view)): min(MAX_WALK_SPEED, max(WALK_SPEED, 4 × rate)).
+// v2.0: rate 0 (paused) stands still; no rate given walks at WALK_SPEED.
 export function walkSpeed(rate) {
+  if (rate === 0) return 0;
   const r = Number.isFinite(rate) && rate > 0 ? rate : 0;
-  return Math.max(WALK_SPEED, WALK_TILES_PER_GAME_MINUTE * r);
+  return Math.min(MAX_WALK_SPEED, Math.max(WALK_SPEED, WALK_TILES_PER_GAME_MINUTE * r));
 }
 
 const TABLE_TASKS = new Set(['coaching', 'research', 'training']);
@@ -137,7 +143,7 @@ export function planTargets(people, map = MAP, seats = baseSeats(map), { minute,
 // walk and spot the break tile held while on break (null otherwise).
 // `seats`: open agent seats (view.office.seats). v1.6 options: `minute`, the
 // current game minute (planTargets); `rate`, game minutes per real second now
-// (walkSpeed; 0 or missing walks at WALK_SPEED).
+// (walkSpeed; 0 stands still (paused, v2.0), missing walks at WALK_SPEED).
 export function stepActors(actors, people, dtMs, map = MAP, seats = baseSeats(map), { minute, rate } = {}) {
   const byId = new Map(actors.map((a) => [a.id, a]));
   const held = new Map(actors.filter((a) => a.spot).map((a) => [a.id, a.spot]));

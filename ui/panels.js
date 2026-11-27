@@ -518,7 +518,7 @@ function breaksPanel({ h, v, run }) {
     const cells = BREAK_KINDS.map((kind) => {
       const b = r.breaks[kind];
       const step = (dir) => h('button', {
-        type: 'button', 'data-step': dir, 'aria-label': `${B[kind]} ${B[dir]}`, title: B[dir],
+        type: 'button', 'data-step': dir, 'aria-label': `${p?.name ?? r.personId} ${B[kind]} ${B[dir]}`, title: B[dir],
         disabled: !b[dir],
         onclick: () => run({ type: 'moveBreak', personId: r.personId, kind, start: b.start + (dir === 'later' ? 15 : -15) }),
       }, dir === 'later' ? '▶' : '◀');

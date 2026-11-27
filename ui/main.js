@@ -288,6 +288,15 @@ export function start({ document, storage, now, requestFrame, seedSource: pickSe
     tab = name;
     for (const b of roots.tabs.querySelectorAll('[data-tab]')) {
       b.setAttribute('aria-selected', String(b.dataset.tab === tab));
+      // v2.2.1: on a phone's one-row tab bar, bring the chosen tab into view
+      // by scrolling the bar sideways only (scrollIntoView could also scroll
+      // the page, e.g. a short desktop window with the bar below the fold).
+      if (b.dataset.tab === tab) {
+        const bar = roots.tabs.getBoundingClientRect();
+        const r = b.getBoundingClientRect();
+        if (r.right > bar.right) roots.tabs.scrollLeft += r.right - bar.right;
+        else if (r.left < bar.left) roots.tabs.scrollLeft -= bar.left - r.left;
+      }
     }
     if (game) drawPanel(view(game));
     else roots.panel.replaceChildren();
@@ -297,6 +306,18 @@ export function start({ document, storage, now, requestFrame, seedSource: pickSe
     type: 'button', role: 'tab', 'data-tab': name, 'aria-selected': 'false', title: UI_TEXT.tabs[name].tip,
     onclick: () => openTab(tab === name ? null : name),
   }, UI_TEXT.tabs[name].name)));
+  // v2.2.1: on a phone the tab bar is one row that may overflow; .more-right
+  // fades its right edge while tabs remain beyond it (style.css).
+  const markMoreTabs = () => {
+    const t = roots.tabs;
+    const last = t.lastElementChild;
+    const cut = last ? last.getBoundingClientRect().right - t.getBoundingClientRect().right : 0;
+    t.classList.toggle('more-right', cut > 1); // the last tab is (partly) beyond the edge
+  };
+  roots.tabs.addEventListener('scroll', markMoreTabs, { passive: true });
+  document.defaultView?.addEventListener?.('resize', markMoreTabs);
+  if (typeof ResizeObserver === 'function') new ResizeObserver(markMoreTabs).observe(roots.tabs);
+  markMoreTabs();
 
   // ---- canvas ----------------------------------------------------------------
 

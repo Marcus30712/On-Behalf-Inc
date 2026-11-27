@@ -138,3 +138,11 @@ test('v2.0.1 the role column has its header', () => {
   const ths = [...draw(s).root.querySelectorAll('thead th')].map((th) => th.textContent);
   assert.equal(ths[1], UI_TEXT.tasks.colRole);
 });
+
+// v2.1: on a phone the table shows as cards; each break cell carries its
+// approved break name for the CSS label (style.css ::before).
+test('v2.1 each break cell is labelled with its break name', () => {
+  const { s, agent } = game();
+  const { root } = draw(s);
+  for (const kind of ['am', 'lunch', 'pm']) assert.equal(cell(root, agent.id, kind).getAttribute('data-label'), B[kind]);
+});

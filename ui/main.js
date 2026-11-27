@@ -268,6 +268,12 @@ export function start({ document, storage, now, requestFrame, seedSource: pickSe
     if (tab && keys.panel !== panelKey(v) && !selectOpen() && free(roots.panel)) drawPanel(v);
   }
 
+  // v2.1: the phone sheet stops below the top bar (style.css --topbar-h); the
+  // bar wraps to more lines on narrow screens, so its height is measured.
+  const topbarHeight = () => document.documentElement.style.setProperty('--topbar-h', `${Math.ceil(roots.topbar.getBoundingClientRect().height)}px`);
+  if (typeof ResizeObserver === 'function') new ResizeObserver(topbarHeight).observe(roots.topbar);
+  topbarHeight();
+
   for (const root of [roots.topbar, roots.metrics, roots.inbox, roots.panel]) {
     root.addEventListener('pointerdown', () => { held = root; });
     root.addEventListener('pointerleave', () => { if (held === root) held = null; });

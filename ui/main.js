@@ -288,8 +288,15 @@ export function start({ document, storage, now, requestFrame, seedSource: pickSe
     tab = name;
     for (const b of roots.tabs.querySelectorAll('[data-tab]')) {
       b.setAttribute('aria-selected', String(b.dataset.tab === tab));
-      // v2.2.1: on a phone's one-row tab bar, bring the chosen tab into view.
-      if (b.dataset.tab === tab) b.scrollIntoView?.({ inline: 'nearest', block: 'nearest' });
+      // v2.2.1: on a phone's one-row tab bar, bring the chosen tab into view
+      // by scrolling the bar sideways only (scrollIntoView could also scroll
+      // the page, e.g. a short desktop window with the bar below the fold).
+      if (b.dataset.tab === tab) {
+        const bar = roots.tabs.getBoundingClientRect();
+        const r = b.getBoundingClientRect();
+        if (r.right > bar.right) roots.tabs.scrollLeft += r.right - bar.right;
+        else if (r.left < bar.left) roots.tabs.scrollLeft -= bar.left - r.left;
+      }
     }
     if (game) drawPanel(view(game));
     else roots.panel.replaceChildren();

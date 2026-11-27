@@ -549,6 +549,34 @@ def check_canvas_flush(page, tag):
         fail(f'{tag}: the office drawing starts {canvas["y"] - stage["y"]:.0f}px below its frame')
 
 
+def check_short_desktop(browser):
+    """v2.2.1: in a short desktop window (tab bar below the fold), clicking a
+    person on the office opens their card without scrolling the page."""
+    size = (1280, 600)
+    tag = where(size)
+    page = open_page(browser, size)
+    new_game(page)
+    page.keyboard.press('1')
+    page.clock.run_for(4000)  # everyone at their seat
+    page.keyboard.press(' ')
+    canvas = page.locator('.stage canvas').bounding_box()
+    seats = page.evaluate("""async () => (await import('./render/map.js')).MAP.spots.seats""")
+    scale = canvas['width'] / 960
+    for sx, sy in seats:
+        before = page.evaluate('scrollY')
+        page.mouse.click(canvas['x'] + (sx * 48 + 24) * scale, canvas['y'] + (sy * 48 + 24) * scale)
+        page.wait_for_timeout(80)
+        if page.locator('.tabs [data-tab="people"][aria-selected="true"]').count():
+            after = page.evaluate('scrollY')
+            if after != before:
+                fail(f'{tag}: clicking a person scrolled the page from {before} to {after}')
+            break
+    else:
+        fail(f'{tag}: no seated person to click')
+    check_errors(page, tag)
+    page.context.close()
+
+
 def check_phone(browser):
     """v2.1: on a phone every tab's panel opens full width without pushing the
     page sideways, and the 휴식표 shows as cards with 44px buttons that move a
@@ -753,6 +781,7 @@ def main():
                 check_channels(browser)
                 check_metrics_fit(browser)
                 check_phone(browser)
+                check_short_desktop(browser)
                 shoot_preview(browser)
             finally:
                 browser.close()

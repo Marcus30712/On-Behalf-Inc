@@ -522,7 +522,16 @@ function breaksPanel({ h, v, run }) {
         disabled: !b[dir],
         onclick: () => run({ type: 'moveBreak', personId: r.personId, kind, start: b.start + (dir === 'later' ? 15 : -15) }),
       }, dir === 'later' ? '▶' : '◀');
-      return h('td', { 'data-break': kind, 'data-label': B[kind] }, step('earlier'), ' ', h('span', { class: 'break-time' }, formatTime(b.start)), ' ', step('later'));
+      // v2.3: 📌 pins the break to its time every day (aria-pressed), "매일" marks it.
+      const who = p?.name ?? r.personId;
+      const pin = h('button', {
+        type: 'button', 'data-pin': kind, 'aria-pressed': String(b.pinned === true),
+        'aria-label': `${who} ${B[kind]} ${b.pinned ? B.unpin : B.pin}`, title: b.pinned ? B.unpin : B.pin,
+        onclick: () => run({ type: b.pinned ? 'unpinBreak' : 'pinBreak', personId: r.personId, kind }),
+      }, '📌');
+      return h('td', { 'data-break': kind, 'data-label': B[kind] }, step('earlier'), ' ', h('span', { class: 'break-time' }, formatTime(b.start)), ' ', step('later'), ' ', pin,
+        b.pinned && h('small', { class: 'pinned' }, ' ', B.pinned),
+        b.ruleOff !== null && b.ruleOff !== undefined && h('small', { class: 'pin-off' }, fill(B.pinnedOff, { time: formatTime(b.ruleOff) })));
     });
     return h('tr', { 'data-person': r.personId },
       h('th', { scope: 'row' }, p?.name ?? r.personId, r.edited && h('small', { class: 'edited' }, ' ', B.edited)),
@@ -532,6 +541,7 @@ function breaksPanel({ h, v, run }) {
   const head = h('thead', {}, h('tr', {}, h('th', {}, UI_TEXT.roster.colName), h('th', {}, UI_TEXT.tasks.colRole), BREAK_KINDS.map((k) => h('th', {}, B[k]))));
   return [title(h, B.title, B.help),
     h('p', { class: 'break-by' }, who),
+    h('p', { class: 'help' }, B.pinHelp),
     h('div', { class: 'break-chart' }, bars),
     h('p', { class: 'help' }, B.legend),
     busy.length > 0 && h('ul', { class: 'break-busy' }, busy),

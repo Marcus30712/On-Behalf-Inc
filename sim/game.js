@@ -6,7 +6,7 @@ import { restoreRng } from './rng.js';
 import { dateOf, upcomingHolidays, holidaysOn, DAYS_PER_MONTH, isCompanyWorkday } from './calendar.js';
 import { stepInterval, answeringClient, channelOf } from './interval.js';
 import { endOfDay, startDay } from './day.js';
-import { breakLookup, workingShift, moveBreak, breakBoard } from './breaks.js';
+import { breakLookup, workingShift, moveBreak, breakBoard, pinBreak, unpinBreak } from './breaks.js';
 import { backlogCount } from './backlog.js';
 import { advanceResearch, advanceBuild, startResearch } from './research.js';
 import { dailyEconomy, monthEnd, reputation } from './economy.js';
@@ -126,6 +126,13 @@ const ACTIONS = {
   // v1.9: move one of today's breaks 15-minute step(s) (sim/breaks.js).
   moveBreak(state, { personId, kind, start }) {
     return moveBreak(state, { personId, kind, start });
+  },
+  // v2.3: pin a break to its time every day, or unpin it (sim/breaks.js).
+  pinBreak(state, { personId, kind }) {
+    return pinBreak(state, { personId, kind });
+  },
+  unpinBreak(state, { personId, kind }) {
+    return unpinBreak(state, { personId, kind });
   },
   resolve(state, { index, choiceId }) {
     if (!Number.isInteger(index) || !state.inbox[index]) return refuse('unknown-event');

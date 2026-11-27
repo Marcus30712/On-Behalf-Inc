@@ -228,7 +228,8 @@ tr.ended { opacity: .55; }
 .roster tfoot td { color: var(--muted); font-size: .85rem; border-bottom: none; }
 
 /* office (in the hiring tab) */
-.office { margin-top: 12px; padding-top: 8px; border-top: 1px solid var(--line); }
+/* v2.2: section.office (the expansion section in a panel), not the canvas.office drawing */
+section.office { margin-top: 12px; padding-top: 8px; border-top: 1px solid var(--line); }
 .office h3 { margin: 0 0 .2em; font-size: 1rem; }
 .office-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; }
 .office-stage { padding: 8px 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; }
@@ -337,6 +338,30 @@ table.breaks .edited { color: var(--accent); }
    a block per person, a line per break labelled by data-label, 44px buttons,
    and the forecast bars scroll sideways in their own strip. */
 @media (max-width: 700px) {
+  /* v2.2: one column — top bar, office (full width), inbox (decisions with
+     deadlines, so before the metrics), client metrics. */
+  .app {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "topbar"
+      "stage"
+      "inbox"
+      "metrics";
+  }
+  .topbar { gap: 6px 10px; padding: 6px 8px; }
+  .stage canvas { max-width: none; }
+  .inbox {
+    height: auto;
+    min-height: 0;
+    max-height: 45vh;
+    border-left: none;
+    border-top: 1px solid var(--line);
+  }
+  .inbox .inbox { max-height: none; } /* the list section inside the aside: the aside scrolls */
+  /* A client per block: name and channel first, its numbers wrap below. */
+  .metrics-list, .metrics-list.compact { flex-direction: column; gap: 6px; padding: 6px 8px; }
+  .metric { flex-wrap: wrap; gap: 2px 10px; }
+  .metric > strong { flex: 1 0 100%; }
   /* The tab bar: one row fixed to the bottom (swipe sideways for more), so
      tabs stay reachable while a panel is open just above it. */
   .app { padding-bottom: 52px; }

@@ -422,14 +422,20 @@ export function createDrawer(makeCanvas = defaultMakeCanvas) {
 
 // The person under a canvas point (canvas pixels), or null: the whole 16x24
 // sprite counts, and where two overlap the lower one (drawn on top) wins.
-export function personAt(actors, x, y) {
-  const hit = actors
-    .filter((a) => !a.gone)
-    .filter((a) => {
-      const left = a.x * TILE_PX;
-      const bottom = (a.y + 1) * TILE_PX;
-      return x >= left && x < left + PERSON_W && y >= bottom - PERSON_H && y < bottom;
-    })
-    .sort((l, r) => r.y - l.y)[0];
-  return hit ? hit.id : null;
+// v2.2: `slop` (canvas px) widens every sprite box on each side for a small,
+// touch-sized canvas; a direct hit still wins, else the person whose sprite
+// centre is nearest. Without slop: exactly the sprite box, as before.
+export function personAt(actors, x, y, slop = 0) {
+  const live = actors.filter((a) => !a.gone);
+  const inBox = (a, pad) => {
+    const left = a.x * TILE_PX;
+    const bottom = (a.y + 1) * TILE_PX;
+    return x >= left - pad && x < left + PERSON_W + pad && y >= bottom - PERSON_H - pad && y < bottom + pad;
+  };
+  const hit = live.filter((a) => inBox(a, 0)).sort((l, r) => r.y - l.y)[0];
+  if (hit) return hit.id;
+  if (!(slop > 0)) return null;
+  const dist = (a) => Math.hypot(x - (a.x * TILE_PX + PERSON_W / 2), y - ((a.y + 1) * TILE_PX - PERSON_H / 2));
+  const near = live.filter((a) => inBox(a, slop)).sort((l, r) => dist(l) - dist(r))[0];
+  return near ? near.id : null;
 }

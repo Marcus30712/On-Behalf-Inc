@@ -80,6 +80,7 @@ test('all 16 seats are reachable from the door', () => {
 // walked on, every spot (seats, lead and QA desks, break room, task table,
 // clinic, door) and the expansion areas stay exactly as they were.
 
+// v2.0: one deliberate change, the pantry counter at (12,10)-(13,10).
 const WALKABLE_PIN = [
   '00000000000000000000',
   '00111111111111111100',
@@ -91,7 +92,7 @@ const WALKABLE_PIN = [
   '01111111111110000010',
   '01100010000111111110',
   '01111110000111111110',
-  '00111111111111000100',
+  '00111111111100000100', // v2.0: the pantry counter (12,10)-(13,10) beside the sofa
   '00000000001000000000',
 ];
 const SPOTS_PIN = '{"seats":[[3,2],[5,2],[7,2],[9,2],[3,5],[5,5],[7,5],[9,5],[13,5],[15,5],[13,8],[15,8],[7,7],[9,7],[7,10],[9,10]],"leadDesk":[13,2],"qaDesk":[16,2],"breakRoom":[[14,9],[15,9],[16,9],[17,10]],"taskTable":[[3,7],[4,7],[5,7]],"clinic":[2,10],"door":[10,11]}';
@@ -185,4 +186,19 @@ test('dividers stand on the original desk bank between facing desks', () => {
       assert.ok(pair.length >= 2, `divider ${x},${y} between facing desks`);
     }
   }
+});
+
+// ---- v2.0 the pantry beside the sofa -------------------------------------------
+
+test('v2.0 the pantry counter stands on the floor just left of the sofa', () => {
+  const counter = MAP.props.find((p) => p.id === 'pantryCounter');
+  assert.deepEqual([counter.x, counter.y], [12, 10]);
+  assert.equal(tileAt(MAP, 12, 10), 'N');
+  assert.equal(tileAt(MAP, 13, 10), 'N');
+  assert.equal(tileAt(MAP, 14, 10), 'S', 'the sofa starts right after it');
+  assert.ok(!MAP.props.some((p) => p.id === 'pantryCounter' && p.y === 0), 'no longer on the back wall');
+});
+
+test('v2.0 every spot is still reachable from the door', () => {
+  for (const spot of allSpots()) assert.ok(findPath(MAP, MAP.spots.door, spot), `door -> ${spot}`);
 });

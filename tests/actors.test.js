@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { MAP } from '../render/map.js';
 import { tileAt } from '../render/map.js';
-import { targetFor, stepActors, planTargets, walkSpeed, WALK_SPEED } from '../render/actors.js';
+import { targetFor, stepActors, planTargets, walkSpeed, WALK_SPEED, MAX_WALK_SPEED } from '../render/actors.js';
 import { findPath } from '../render/path.js';
 import { gameMinutesFor, createClock } from '../ui/clock.js';
 import { createGame } from '../sim/game.js';
@@ -174,14 +174,16 @@ const frames = (actors, people, ms, opts, step = 16) => {
 };
 const same = (a, b) => a[0] === b[0] && a[1] === b[1];
 
-test('v1.6: a 10-tile walk takes at most 3 game minutes at every speed, in and out of opening hours', () => {
+// v2.0: in opening hours only; outside them the walk is capped (MAX_WALK_SPEED),
+// so people no longer vanish in a frame or two at night.
+test('v1.6: a 10-tile walk takes at most 3 game minutes at every speed in opening hours', () => {
   const p = person({ activity: 'phone' });
   const route = findPath(MAP, s.door, s.seats[0]);
   assert.ok(route.length > 11, 'the door is more than 10 tiles from seat 0');
   const from = route.at(-11);
   const start = { id: p.id, x: from[0], y: from[1], path: route.slice(-10).map((t) => [...t]), target: s.seats[0], gone: false };
   for (const speed of [1, 2, 3]) {
-    for (const minute of [600, 1300]) {
+    for (const minute of [600]) {
       const rate = gameMinutesFor(1000, speed, { day: 0, minute });
       const ms = (3 / rate) * 1000; // 3 game minutes in real ms
       const [a] = frames([start], [p], ms, { rate });
@@ -191,8 +193,8 @@ test('v1.6: a 10-tile walk takes at most 3 game minutes at every speed, in and o
   // 1x in opening hours: 3 game minutes are half a real second
   assert.equal(gameMinutesFor(1000, 1, { day: 0, minute: 600 }), 6);
   assert.ok(walkSpeed(6) * 0.5 >= 10, `walkSpeed(6) = ${walkSpeed(6)}`);
-  // paused (rate 0) or no rate given: the old 3 tiles per second
-  assert.equal(walkSpeed(0), WALK_SPEED);
+  // v2.0: paused (rate 0) stands still; no rate given: the old 3 tiles per second
+  assert.equal(walkSpeed(0), 0);
   assert.equal(walkSpeed(undefined), WALK_SPEED);
 });
 
@@ -292,4 +294,30 @@ test('v1.8.1 two people going home both head for the door', () => {
   const t = planTargets([off('l1', 'lead'), off('q1', 'qa')]);
   const door = `${MAP.spots.door[0]},${MAP.spots.door[1]}`;
   assert.deepEqual([t.get('l1'), t.get('q1')].map((x) => x && `${x[0]},${x[1]}`), [door, door]);
+});
+
+// ---- v2.0 calmer at night, still when paused ----------------------------------
+
+test('v2.0 walking is capped at the 3x opening-hours pace', () => {
+  assert.equal(MAX_WALK_SPEED, 4 * 6 * 3, '4 tiles per game minute x 6 game minutes per second x 3');
+  for (const speed of [1, 2, 3]) {
+    assert.equal(walkSpeed(gameMinutesFor(1000, speed, { day: 0, minute: 600 })), 4 * 6 * speed, `open, ${speed}x: unchanged`);
+    assert.equal(walkSpeed(gameMinutesFor(1000, speed, { day: 0, minute: 1300 })), MAX_WALK_SPEED, `night, ${speed}x: capped`);
+  }
+  // At night a 10-tile walk now spans several frames instead of one or two.
+  const p = person({ activity: 'phone' });
+  const route = findPath(MAP, s.door, s.seats[0]);
+  const from = route.at(-11);
+  const start = { id: p.id, x: from[0], y: from[1], path: route.slice(-10).map((t) => [...t]), target: s.seats[0], gone: false };
+  const rate = gameMinutesFor(1000, 1, { day: 0, minute: 1300 });
+  const [a] = frames([start], [p], 16 * 4, { rate });
+  assert.ok(!same([a.x, a.y], s.seats[0]), 'not there after four frames');
+});
+
+test('v2.0 nobody walks while the game is paused', () => {
+  const p = person({ activity: 'phone' });
+  const route = findPath(MAP, s.door, s.seats[0]);
+  const start = { id: p.id, x: s.door[0], y: s.door[1], path: route.slice(1).map((t) => [...t]), target: s.seats[0], gone: false };
+  const [a] = frames([start], [p], 2000, { rate: 0 });
+  assert.deepEqual([a.x, a.y], s.door);
 });

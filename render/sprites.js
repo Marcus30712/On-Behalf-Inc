@@ -60,6 +60,7 @@ const HAIR = [
   ['#e2b85e', '#bf9440'], // blonde
   ['#b9b4b0', '#8f8984'], // grey
 ];
+const GREY_HAIR = '#b9b4b0';
 // [shirt, shade, collar]
 const SHIRT = [
   ['#6f9fd8', '#4f7db6', '#f4f1ea'], // blue
@@ -107,7 +108,10 @@ export function personLook(person) {
   const [skin, skinShade, frame] = pick(SKIN);
   const style = pick(HAIR_STYLES);
   const [shirt, shirtDark, collar] = pick(SHIRT);
-  const [hair, hairDark] = pick(HAIR);
+  let [hair, hairDark] = pick(HAIR);
+  // v2.0: grey is kept on one draw in two, else another colour (the opening
+  // staff p0..p9 had three grey heads); nobody else's look changes.
+  if (hair === GREY_HAIR && !pick([true, false])) [hair, hairDark] = pick(HAIR.filter(([c]) => c !== GREY_HAIR));
   const [pants, pantsDark] = pick(PANTS);
   const glasses = pick([false, false, false, true]);
   return Object.freeze({
@@ -1123,6 +1127,7 @@ export const SPRITES = Object.freeze({
 export const TILE_SPRITES = Object.freeze({
   '#': 'wall', '.': 'floor', D: 'desk', C: 'chair', S: 'sofa', K: 'coffee',
   T: 'table', B: 'bed', P: 'plant', E: 'door',
+  N: 'floor', // v2.0: floor under the pantryCounter prop (render/map.js props)
 });
 
 // Which tiles each research's build occupies.

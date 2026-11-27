@@ -10,6 +10,7 @@
 //   T  task table (blocked)
 //   B  clinic bed (blocked)
 //   P  plant (blocked)
+//   N  pantry counter (blocked; v2.0, drawn as the pantryCounter prop)
 //   E  door in the outer wall (walkable)
 //
 // Spots are walkable tiles: seats and desk chairs are 'C'; break-room, task
@@ -26,7 +27,7 @@ const ROWS = [
   '#......C.C...DDDDP.#',
   '#..TTT.DDDD..C.C...#',
   '#......DDDD........#',
-  '#B.....C.C....SSS.K#',
+  '#B.....C.C..NNSSS.K#',
   '##########E#########',
 ];
 
@@ -51,9 +52,11 @@ const prop = (id, x, y) => Object.freeze({ id, x, y });
 const PROPS = Object.freeze([
   // back wall, left to right
   prop('bin', 3, 0), prop('whiteboard', 4, 0), prop('clock', 8, 0), prop('corkboard', 9, 0),
-  prop('bin', 14, 0), prop('pantryCounter', 15, 0),
-  // plant corners and the corner by the pantry
+  prop('bin', 14, 0),
+  // plant corners and the water cooler in the back corner
   prop('plantTall', 1, 1), prop('cooler', 18, 1), prop('plantBush', 17, 7),
+  // v2.0: the pantry counter beside the sofa (was on the back wall at 15,0)
+  prop('pantryCounter', 12, 10),
   // cubicle dividers between the facing desks of the original bank
   prop('divider', 3, 3), prop('divider', 5, 3), prop('divider', 7, 3), prop('divider', 9, 3),
 ]);

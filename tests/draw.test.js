@@ -216,3 +216,19 @@ test('a back-facing sitter has the chair back drawn over them; front sitters and
   assert.ok(SPRITES.chairRest.rows.slice(0, 10).every((r) => /^\.+$/.test(r)));
   assert.deepEqual(SPRITES.chairRest.rows.slice(10), SPRITES.chairBack.rows.slice(10));
 });
+
+// v2.2: on a phone the office is drawn small; a tap may land beside a person.
+// With slop, the box grows by slop on every side and the person whose sprite
+// centre is nearest wins; without slop nothing changes.
+test('v2.2 personAt with slop picks the nearest person within reach', () => {
+  const a = seated('a', [3, 5]);
+  const b = seated('b', [5, 5]); // b's box starts at 5 tiles; a's ends at 4
+  const y = 5 * TILE_PX; // mid-body
+  const beside = 3 * TILE_PX + 16 * U + 6; // just right of a's sprite
+  assert.equal(personAt([a, b], beside, y), null, 'no slop: a miss');
+  assert.equal(personAt([a, b], beside, y, TILE_PX / 2), 'a', 'within half a tile of a');
+  const between = 5 * TILE_PX - 2; // nearer b's left edge than a
+  assert.equal(personAt([a, b], between, y, TILE_PX / 2), 'b', 'nearest centre wins');
+  assert.equal(personAt([a, b], 3 * TILE_PX + 8 * U, 5 * TILE_PX - 9 * U - TILE_PX, TILE_PX / 2), null, 'beyond reach');
+  assert.equal(personAt([a, b], 3 * TILE_PX + 8 * U, y, TILE_PX / 2), 'a', 'a direct hit still wins');
+});

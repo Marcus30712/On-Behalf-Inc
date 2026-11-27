@@ -220,6 +220,7 @@ def play_viewport(browser, size):
     tag = where(size)
     page = open_page(browser, size)
     new_game(page)
+    check_canvas_flush(page, tag)
     if size == VIEWPORTS[0]:
         check_click_at_1x(page, tag)
 
@@ -539,6 +540,15 @@ def check_break_move(page, tag):
     page.screenshot(path=str(OUT / 'breaks-moved.png'))
 
 
+def check_canvas_flush(page, tag):
+    """v2.2: the office drawing starts at the top of its frame (the panel's
+    section.office style used to push the canvas down by 21px)."""
+    stage = page.locator('.stage').bounding_box()
+    canvas = page.locator('.stage canvas').bounding_box()
+    if abs(canvas['y'] - stage['y']) > 1:
+        fail(f'{tag}: the office drawing starts {canvas["y"] - stage["y"]:.0f}px below its frame')
+
+
 def check_phone(browser):
     """v2.1: on a phone every tab's panel opens full width without pushing the
     page sideways, and the 휴식표 shows as cards with 44px buttons that move a
@@ -552,6 +562,41 @@ def check_phone(browser):
         fail(f'{tag}: a tab is tappable through the start screen: {hit}')
     new_game(page)
     page.keyboard.press(' ')  # pause: the sheet stays still while we look
+    # v2.2: one column — the office fills the width, metrics then the inbox below it.
+    check_canvas_flush(page, tag)
+    canvas = page.locator('.stage canvas').bounding_box()
+    inbox = page.locator('aside.inbox').bounding_box()
+    metrics = page.locator('.metrics').bounding_box()
+    if abs(canvas['width'] - PHONE[0]) > 1:
+        fail(f'{tag}: the office is {canvas["width"]:.0f}px wide, not the screen width')
+    if not (metrics['y'] >= canvas['y'] + canvas['height'] - 1 and inbox['y'] >= metrics['y'] + metrics['height'] - 1):
+        fail(f'{tag}: not office, metrics, inbox from top to bottom: {canvas} {metrics} {inbox}')
+    if abs(inbox['width'] - PHONE[0]) > 1:
+        fail(f'{tag}: the inbox is {inbox["width"]:.0f}px wide, not the screen width')
+    check_no_sideways(page, f'{tag} main')
+    # A tap just beside a person on the small office still opens their card.
+    page.evaluate("""() => { const c = document.querySelector('.stage canvas'); c.scrollIntoView(); }""")
+    # A tap just right of a seated person (beyond the sprite, within half a
+    # tile) opens their card: let people walk to their seats first.
+    page.keyboard.press('1')
+    page.clock.run_for(4000)  # 24 game minutes at 1x: everyone at their seat
+    page.keyboard.press(' ')
+    seats = page.evaluate("""async () => (await import('./render/map.js')).MAP.spots.seats""")
+    scale = canvas['width'] / 960
+    opened = False
+    for sx, sy in seats:
+        x = canvas['x'] + (sx * 48 + 48 + 12) * scale  # 12 canvas px right of the sprite box
+        y = canvas['y'] + (sy * 48 + 24) * scale
+        page.mouse.click(x, y)
+        page.wait_for_timeout(80)
+        if page.locator('.panel-root .person-card, .panel-root [data-card]').count() or page.locator('[data-tab="people"][aria-selected="true"]').count():
+            opened = True
+            break
+    if not opened:
+        fail(f'{tag}: a tap beside a seated person did not open their card')
+    if page.locator('[data-tab="people"][aria-selected="true"]').count():
+        page.click('[data-tab="people"]')  # close
+    page.screenshot(path=str(OUT / 'phone-main.png'))
     tabs = page.eval_on_selector_all('[data-tab]', 'els => els.map(e => e.dataset.tab)')
     for tab in tabs:
         page.click(f'[data-tab="{tab}"]')

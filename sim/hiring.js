@@ -45,10 +45,12 @@ const STAFF = {
   lead: { cost: LEAD_HIRE_COST, wait: LEAD_WAIT_WORKDAYS, event: 'lead-candidate', shift: 'early', task: 'coaching' },
   qa: { cost: QA_HIRE_COST, wait: QA_WAIT_WORKDAYS, event: 'qa-candidate', shift: 'late', task: 'qa' },
 };
+// Own keys only: a damaged save's role 'constructor' is not a staff role.
+const staffOf = (role) => (Object.hasOwn(STAFF, role) ? STAFF[role] : undefined);
 const traitNames = (p) => (p.traits ?? []).map((id) => TRAITS.find((t) => t.id === id)?.name).filter(Boolean);
 
 export function startHiring(state, role = 'agent') {
-  const staff = STAFF[role];
+  const staff = staffOf(role);
   if (state.hiring) return { ok: false, reason: 'already' };
   if (staff && !needsRole(state, role)) return { ok: false, reason: 'no-need' };
   if (!staff && agentCount(state) >= seatsOf(state)) return { ok: false, reason: 'no-seat' };
@@ -69,7 +71,7 @@ function newId(state) {
 export function advanceHiring(state, rng) {
   const h = state.hiring;
   if (state.gameOver || !h || h.candidates) return;
-  const staff = STAFF[h.role];
+  const staff = staffOf(h.role);
   h.waitDays ??= rng.int(...(staff ? staff.wait : WAIT_WORKDAYS));
   h.workdays += 1;
   if (h.workdays < h.waitDays) return;
@@ -108,7 +110,7 @@ function quieterShift(state) {
 export function hireCandidate(state, index) {
   const candidate = state.hiring?.candidates?.[index];
   state.hiring = null;
-  const staff = STAFF[candidate?.role];
+  const staff = staffOf(candidate?.role);
   if (staff) {
     if (!needsRole(state, candidate.role)) return;
     state.people.push(candidate);

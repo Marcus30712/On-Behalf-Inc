@@ -315,3 +315,14 @@ test('v2.4 a hired QA checks calls on the late shift, no probation; never two', 
   hireCandidate(t, 0);
   assert.equal(t.people.length, before);
 });
+
+// v2.4 (final review): a role from a damaged save that names an inherited
+// property ('constructor') is not a staff role: it runs as an agent search.
+test('v2.4 an unknown or inherited role name runs as an agent search', () => {
+  for (const role of ['constructor', 'toString', 'boss']) {
+    const s = makeState();
+    s.hiring = { workdays: 0, role };
+    untilCandidates(s, createRng(5));
+    assert.deepEqual(s.hiring.candidates.map((p) => p.role), ['agent', 'agent'], role);
+  }
+});

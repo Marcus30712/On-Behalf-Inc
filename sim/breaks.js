@@ -73,7 +73,7 @@ export function workingShift(state, person, day) {
   return onShift(state, person, day, SHIFTS[shiftId].start) ? shiftId : undefined;
 }
 
-// { [personId]: { am, lunch, pm, by } } for everyone working `day`; minutes
+// { [personId]: { am, lunch, pm, by, lead? } } for everyone working `day`; minutes
 // since midnight; by 'lead' when a lead works that day, else 'auto'.
 // Deterministic for (state, day); reads the state and changes nothing.
 export function planBreaks(state, day, rngForDay = dayRng(state, day)) {
@@ -142,7 +142,8 @@ export function planBreaks(state, day, rngForDay = dayRng(state, day)) {
       entry[kind] = best;
       placed.push({ id: person.id, from: best, to: best + w.length });
     }
-    plan[person.id] = { ...entry, by };
+    // v2.0.1: a lead's plan names its planner (the 휴식표 header).
+    plan[person.id] = lead ? { ...entry, by, lead: lead.id } : { ...entry, by };
   }
   return plan;
 }
@@ -235,10 +236,13 @@ export function moveBreak(state, { personId, kind, start } = {}) {
   const shiftId = workingShift(state, person, state.day);
   if (!shiftId) return { ok: false, reason: 'not-working' };
   if (!BREAK_KINDS.includes(kind)) return { ok: false, reason: 'bad-break' };
-  const entry = breakLookup(state, { keep: true })(person, shiftId);
-  if (!entry) return { ok: false, reason: 'not-working' };
-  const reason = moveRefusal(state, shiftId, kind, entry[kind], start);
+  // v2.0.1: check against the view's entry first, so a refused move changes
+  // nothing (not even keeping today's plan).
+  const seen = breakLookup(state, { keep: false })(person, shiftId);
+  if (!seen) return { ok: false, reason: 'not-working' };
+  const reason = moveRefusal(state, shiftId, kind, seen[kind], start);
   if (reason) return { ok: false, reason };
+  const entry = breakLookup(state, { keep: true })(person, shiftId);
   state.breaks.plan[person.id] = { ...entry, [kind]: start, edited: true };
   return { ok: true };
 }
@@ -254,14 +258,15 @@ export function breakBoard(state) {
   const lookup = breakLookup(state, { keep: false });
   const rows = [];
   const agentsAway = [];
-  let lead = null;
+  let lead = null; // the first lead working today (plans from before v2.0.1)
+  let planner = null; // v2.0.1: the lead id the plan names
   let by = 'auto';
   for (const p of state.people) {
     const shiftId = workingShift(state, p, day);
     if (!shiftId) continue;
     const entry = lookup(p, shiftId);
     if (!entry) continue;
-    if (entry.by === 'lead') by = 'lead';
+    if (entry.by === 'lead') { by = 'lead'; planner ??= entry.lead; }
     if (p.role === 'lead' && !lead) lead = p.name;
     const breaks = {};
     for (const kind of BREAK_KINDS) {
@@ -291,5 +296,9 @@ export function breakBoard(state) {
   const sorted = slots.map((x) => x.calls).sort((a, b) => b - a);
   const bar = sorted.length > 0 ? sorted[Math.ceil(sorted.length * 0.25) - 1] : Infinity;
   for (const x of slots) x.busy = x.calls > 0 && x.calls >= bar && x.away >= 2;
-  return { slots, rows, by: lead ? by : 'auto', lead };
+  // v2.0.1: the planner named in the plan, even if off shift or gone since;
+  // older plans (no lead id) fall back to the lead working today.
+  const named = planner ? state.people.find((p) => p.id === planner)?.name ?? null : null;
+  const who = named ?? lead;
+  return { slots, rows, by: by === 'lead' && who ? 'lead' : 'auto', lead: who };
 }

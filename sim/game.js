@@ -335,6 +335,18 @@ function inboxRank(e) {
 }
 
 // A frozen copy of what the screen shows. Text is left to the screen.
+// v2.0.1: the 휴식표 board is a lazy getter (computed on first read, then
+// kept on that view): the view is built every animation frame and only the
+// 휴식표 tab reads it.
+function withBreakBoard(v, state) {
+  let board;
+  Object.defineProperty(v, 'breakBoard', {
+    enumerable: true,
+    get() { board ??= freeze(breakBoard(state)); return board; },
+  });
+  return v;
+}
+
 export function view(state) {
   const date = dateOf(state.day);
   const leadNeeded = needsLead(state); // v1.7; computed once (v1.8.1)
@@ -344,7 +356,7 @@ export function view(state) {
     .sort((a, b) => inboxRank(a) - inboxRank(b) || b.index - a.index);
   // Today's kept plan, or one planned for the view alone (nothing is changed).
   const breaksOf = breakLookup(state, { keep: false });
-  return freeze(structuredClone({
+  const v = structuredClone({
     day: state.day,
     minute: state.minute,
     date: { ...date, weekdayLabel: PLANET.weekdays[date.weekday] },
@@ -360,8 +372,7 @@ export function view(state) {
       cost: current?.cost ?? null,
       build: state.research.build,
     },
-    // v1.9: the 휴식표 tab (sim/breaks.js breakBoard).
-    breakBoard: breakBoard(state),
+
     hiring: state.hiring,
     // v1.7: needsLead opens lead hiring; leadLeaving says why while a lead still works.
     needsLead: leadNeeded,
@@ -372,5 +383,8 @@ export function view(state) {
     calendar: calendarAhead(state),
     gameOver: state.gameOver,
     milestones: state.milestones,
-  }));
+  });
+  // v2.0.1: frozen like the rest, with the board added lazily (withBreakBoard).
+  for (const x of Object.values(v)) freeze(x);
+  return Object.freeze(withBreakBoard(v, state));
 }

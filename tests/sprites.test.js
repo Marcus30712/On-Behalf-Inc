@@ -291,10 +291,10 @@ test('the task-table board of stress training keeps its own sprite', () => {
 
 // v2.0: grey hair stays, but rarer: a person who draws grey keeps it on one
 // draw in two. The opening staff (always p0..p9) had three grey heads.
-test('v2.0 grey hair is rarer: at most one among the opening staff, still seen among hires', () => {
+test('v2.0 grey hair is rarer: none among the opening staff, still seen among hires', () => {
   const GREY = '#b9b4b0';
   const opening = Array.from({ length: 10 }, (_, i) => personLook({ id: `p${i}` }).palette.h);
-  assert.ok(opening.filter((h) => h === GREY).length <= 1, `grey on ${opening.filter((h) => h === GREY).length}/10`);
+  assert.equal(opening.filter((h) => h === GREY).length, 0, 'v2.0.1: none, as measured'); // was <= 1
   const hires = ids('h', 400).map((id) => personLook({ id }).palette.h);
   const grey = hires.filter((h) => h === GREY).length;
   assert.ok(grey >= 20 && grey <= 60, `grey on ${grey}/400 (about 1 in 12)`);

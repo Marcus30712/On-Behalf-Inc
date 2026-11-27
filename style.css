@@ -330,3 +330,66 @@ table.breaks button[data-step] { padding: 0 0.4rem; }
 table.breaks button[disabled] { opacity: 0.35; cursor: not-allowed; }
 table.breaks .edited { color: var(--accent); }
 .break-busy .bad { color: var(--bad); }
+
+/* ---------- v2.1 phones (700px and narrower) ----------
+   The tab bar is one row fixed to the bottom; the open panel is a full-width
+   sheet just above it (every tab); wide tables scroll sideways inside it. The 휴식표 table shows as cards:
+   a block per person, a line per break labelled by data-label, 44px buttons,
+   and the forecast bars scroll sideways in their own strip. */
+@media (max-width: 700px) {
+  /* The tab bar: one row fixed to the bottom (swipe sideways for more), so
+     tabs stay reachable while a panel is open just above it. */
+  .app { padding-bottom: 52px; }
+  .tabs {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 11;
+    height: 52px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding: 4px 4px 0;
+    border-top: 1px solid var(--line);
+  }
+  .tabs button { flex: 0 0 auto; min-height: 44px; }
+  .panel-root {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 52px;
+    z-index: 10;
+    height: auto;
+    min-height: 0;
+  }
+  .panel-root > .panel {
+    max-height: calc(100vh - 52px - 64px);
+    overflow-x: auto;
+  }
+  .break-chart { overflow-x: auto; overflow-y: hidden; }
+  .break-slot { flex: 0 0 22px; min-width: 22px; }
+  table.breaks, table.breaks tbody, table.breaks tr, table.breaks th, table.breaks td { display: block; width: 100%; }
+  table.breaks thead { display: none; }
+  table.breaks tr[data-person] {
+    margin: 8px 0;
+    padding: 6px 8px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--surface-2);
+  }
+  table.breaks tr[data-person] > th { padding: 2px 0; text-align: left; }
+  table.breaks tr[data-person] > td:not([data-break]) { color: var(--muted); padding: 0 0 4px; }
+  table.breaks td[data-break] {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 2px 0;
+  }
+  table.breaks td[data-break]::before {
+    content: attr(data-label);
+    flex: 1;
+    color: var(--muted);
+  }
+  table.breaks td[data-break] .break-time { min-width: 3.2em; text-align: center; font-variant-numeric: tabular-nums; }
+  table.breaks button[data-step] { min-width: 44px; min-height: 44px; font-size: 1rem; }
+}

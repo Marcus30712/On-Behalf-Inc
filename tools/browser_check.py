@@ -29,6 +29,7 @@ OUT = ROOT / 'tools' / 'out'
 CHROME = '/usr/bin/google-chrome'
 SAVE_KEY = 'on-behalf-inc:save:v1'
 VIEWPORTS = [(1280, 720), (1024, 640)]
+PHONE = (390, 844)  # v2.1: the panel as a bottom sheet and the 휴식표 cards
 TARGET_DAY = 5
 SEED = 7  # fixed new-game seed for the page (the long-inbox save uses the same one)
 RUN_STEP_MS = 500  # page time run per poll at 3x (frames fire every 16 ms)
@@ -538,6 +539,50 @@ def check_break_move(page, tag):
     page.screenshot(path=str(OUT / 'breaks-moved.png'))
 
 
+def check_phone(browser):
+    """v2.1: on a phone every tab's panel opens full width without pushing the
+    page sideways, and the 휴식표 shows as cards with 44px buttons that move a
+    break 15 minutes."""
+    tag = where(PHONE)
+    page = open_page(browser, PHONE)
+    new_game(page)
+    page.keyboard.press(' ')  # pause: the sheet stays still while we look
+    tabs = page.eval_on_selector_all('[data-tab]', 'els => els.map(e => e.dataset.tab)')
+    for tab in tabs:
+        page.click(f'[data-tab="{tab}"]')
+        page.wait_for_selector('.panel-root .panel')
+        box = page.locator('.panel-root .panel').bounding_box()
+        if not box or abs(box['width'] - PHONE[0]) > 1 or box['y'] + box['height'] > PHONE[1] + 1:
+            fail(f'{tag} {tab}: panel is not a full-width sheet on screen: {box}')
+        check_no_sideways(page, f'{tag} {tab}')
+        if not page.locator('.panel-root .panel-close').is_visible():
+            fail(f'{tag} {tab}: panel close button not visible')
+        if tab == 'breaks':
+            if page.locator('.panel-root table.breaks thead').is_visible():
+                fail(f'{tag}: 휴식표 header row still shown on a phone')
+            for b in page.locator('.panel-root table.breaks button[data-step]').all()[:6]:
+                bb = b.bounding_box()
+                if not bb or bb['height'] < 44 or bb['width'] < 44:
+                    fail(f'{tag}: 휴식표 button smaller than 44x44: {bb}')
+                    break
+            button = page.locator('.panel-root table.breaks button[data-step="later"]:not([disabled])').first
+            pid = button.evaluate("b => b.closest('tr').dataset.person")
+            kind = button.evaluate("b => b.closest('td').dataset.break")
+            cell = f'.panel-root tr[data-person="{pid}"] td[data-break="{kind}"] .break-time'
+            before = page.locator(cell).text_content()
+            button.click()
+            page.wait_for_timeout(150)
+            after = page.locator(cell).text_content()
+            bh, bm = map(int, before.split(':'))
+            ah, am = map(int, after.split(':'))
+            if (ah * 60 + am) - (bh * 60 + bm) != 15:
+                fail(f'{tag}: 휴식표 ▶ moved {kind} of {pid} from {before} to {after}, not 15 minutes later')
+            page.screenshot(path=str(OUT / 'phone-breaks.png'))
+        page.click(f'[data-tab="{tab}"]')  # close
+    check_errors(page, tag)
+    page.context.close()
+
+
 def check_card_breaks(page, tag):
     """v1.6: a working person's card shows the 오늘 휴식 row with three times."""
     page.click('[data-tab="people"]')
@@ -598,6 +643,7 @@ def main():
                 check_expansion_weekend(browser)
                 check_channels(browser)
                 check_metrics_fit(browser)
+                check_phone(browser)
                 shoot_preview(browser)
             finally:
                 browser.close()

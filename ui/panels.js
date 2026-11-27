@@ -522,7 +522,7 @@ function breaksPanel({ h, v, run }) {
         disabled: !b[dir],
         onclick: () => run({ type: 'moveBreak', personId: r.personId, kind, start: b.start + (dir === 'later' ? 15 : -15) }),
       }, dir === 'later' ? '▶' : '◀');
-      return h('td', { 'data-break': kind }, step('earlier'), ' ', h('span', { class: 'break-time' }, formatTime(b.start)), ' ', step('later'));
+      return h('td', { 'data-break': kind, 'data-label': B[kind] }, step('earlier'), ' ', h('span', { class: 'break-time' }, formatTime(b.start)), ' ', step('later'));
     });
     return h('tr', { 'data-person': r.personId },
       h('th', { scope: 'row' }, p?.name ?? r.personId, r.edited && h('small', { class: 'edited' }, ' ', B.edited)),

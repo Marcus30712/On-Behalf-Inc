@@ -35,18 +35,26 @@ export const EVENTS = {
   },
   'resign-notice': {
     title: '{name} 씨의 퇴사 예고',
-    text: '{name} 씨가 {days}근무일 뒤에 그만두겠다고 했어요. 많이 지쳐 보여요.',
+    text: '{name} 씨가 {period} 뒤에 그만두겠다고 했어요. 많이 지쳐 보여요. 지금부터 채용 탭에서 새 사람을 찾을 수 있어요.',
     choices: [
       { id: 'keep-trying', label: '면담하고 붙잡아 본다', result: '따로 시간을 내 이야기를 들어요. 사기가 다시 오르면 마음을 바꿀 수도 있어요.' },
-      { id: 'let-go', label: '보내 준다', result: '마지막 날까지 잘 마무리하도록 도와요. {days}근무일 뒤 {name} 씨가 떠나요.' },
+      { id: 'let-go', label: '보내 준다', result: '마지막 날까지 잘 마무리하도록 도와요. {period} 뒤 {name} 씨가 떠나요.' },
     ],
   },
+  // v2.4: an agent's notice when a lead holds a retention meeting the next day.
+  'resign-meeting': {
+    title: '{name} 씨의 퇴사 예고',
+    text: '{name} 씨가 {period} 뒤에 그만두겠다고 했어요. 많이 지쳐 보여요. 내일 {leadName} 팀장이 면담해서 붙잡아 볼게요. 지금부터 채용 탭에서 새 사람을 찾을 수 있어요.',
+  },
+  'retention-kept': { title: '{name} 씨가 남기로 했어요', text: '{leadName} 팀장과 면담한 뒤 {name} 씨가 마음을 바꿨어요. 퇴사는 없던 일이 됐어요.' },
+  'retention-failed': { title: '{name} 씨의 퇴사가 확정됐어요', text: '{leadName} 팀장이 면담했지만 {name} 씨의 마음은 그대로예요. {date}에 떠나요.' },
+  'hire-cancelled': { title: '채용이 취소됐어요', text: '빈자리가 없어 {name} 씨의 합류가 취소됐어요. 채용 비용은 돌려받지 못해요.' },
   candidate: {
     title: '지원자 두 명이 왔어요',
     text: '{cand1} 씨와 {cand2} 씨가 면접을 봤어요. 누구와 함께할까요?',
     choices: [
-      { id: 'pick-1', label: '{cand1} 씨를 뽑는다', result: '{cand1} 씨가 수습 상담사로 들어와요. 처음 두 주는 교육이 필요해요.' },
-      { id: 'pick-2', label: '{cand2} 씨를 뽑는다', result: '{cand2} 씨가 수습 상담사로 들어와요. 처음 두 주는 교육이 필요해요.' },
+      { id: 'pick-1', label: '{cand1} 씨를 뽑는다', result: '{cand1} 씨가 {date}에 수습 상담사로 들어와요. 처음 두 주는 교육이 필요해요.' },
+      { id: 'pick-2', label: '{cand2} 씨를 뽑는다', result: '{cand2} 씨가 {date}에 수습 상담사로 들어와요. 처음 두 주는 교육이 필요해요.' },
       { id: 'hold', label: '이번엔 보류한다', result: '아무도 뽑지 않아요. 다시 뽑으려면 채용을 새로 시작해야 해요.' },
     ],
   },
@@ -55,9 +63,19 @@ export const EVENTS = {
     title: '팀장 지원자 두 명이 왔어요',
     text: '{cand1} 씨(코칭 {c1} · 스케줄링 {p1})와 {cand2} 씨(코칭 {c2} · 스케줄링 {p2})가 팀장 자리에 지원했어요. 누구와 함께할까요?',
     choices: [
-      { id: 'pick-1', label: '{cand1} 씨를 뽑는다', result: '{cand1} 씨가 팀장으로 들어와요. 휴식표와 코칭을 맡아요.' },
-      { id: 'pick-2', label: '{cand2} 씨를 뽑는다', result: '{cand2} 씨가 팀장으로 들어와요. 휴식표와 코칭을 맡아요.' },
+      { id: 'pick-1', label: '{cand1} 씨를 뽑는다', result: '{cand1} 씨가 {date}에 팀장으로 들어와요. 휴식표와 코칭을 맡아요.' },
+      { id: 'pick-2', label: '{cand2} 씨를 뽑는다', result: '{cand2} 씨가 {date}에 팀장으로 들어와요. 휴식표와 코칭을 맡아요.' },
       { id: 'hold', label: '이번엔 보류한다', result: '아무도 뽑지 않아요. 다시 뽑으려면 팀장 채용을 새로 시작해야 해요.' },
+    ],
+  },
+  // v2.4: a QA search; t1/t2 are trait texts (ui/text.js hiring.qa.traits/noTraits).
+  'qa-candidate': {
+    title: 'QA 지원자 두 명이 왔어요',
+    text: '{cand1} 씨({t1})와 {cand2} 씨({t2})가 QA 자리에 지원했어요. 누구와 함께할까요?',
+    choices: [
+      { id: 'pick-1', label: '{cand1} 씨를 뽑는다', result: '{cand1} 씨가 {date}에 QA로 들어와요. 통화 점검을 맡아요.' },
+      { id: 'pick-2', label: '{cand2} 씨를 뽑는다', result: '{cand2} 씨가 {date}에 QA로 들어와요. 통화 점검을 맡아요.' },
+      { id: 'hold', label: '이번엔 보류한다', result: '아무도 뽑지 않아요. 다시 뽑으려면 QA 채용을 새로 시작해야 해요.' },
     ],
   },
   'client-offer': {

@@ -270,6 +270,7 @@ export function stepInterval(state, rng) {
 
     // People: work, or rest for the time not worked.
     const mods = state.mods ?? {};
+    const hasQa = state.people.some((p) => p.role === 'qa');
     for (const p of state.people) {
       const a = state.assignment[p.id];
       let share = 0;
@@ -283,6 +284,11 @@ export function stepInterval(state, rng) {
         let gain = share;
         if (a.kind === 'research') gain *= researchSkillMul(p);
         if (a.kind === 'qa') gain *= traitMul(p, 'qaMul');
+        if (a.kind === 'coaching' && p.role === 'lead' && !hasQa) {
+          // v2.4: no QA on staff, so a coaching lead spends half on QA.
+          gain /= 2;
+          state.progress.qa = (state.progress.qa ?? 0) + gain * traitMul(p, 'qaMul');
+        }
         state.progress[a.kind] = (state.progress[a.kind] ?? 0) + gain;
       }
       const worked = INTERVAL * share;

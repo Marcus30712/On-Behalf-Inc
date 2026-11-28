@@ -84,7 +84,7 @@ test('two starting clients and three offers; weekday hours Mon-Fri 09:00-21:00 e
   }
 });
 
-const USED_EVENTS = ['sick', 'burnout', 'no-show', 'argument', 'resign-notice', 'holiday-leave', 'friday-off', 'call-spike', 'client-offer', 'churn-warning', 'research-done', 'build-done', 'candidate', 'game-over-cash', 'game-over-clients', 'milestone-big-client', 'milestone-rank-s', 'expansion-done', 'backlog-warning', 'breaks-auto'];
+const USED_EVENTS = ['sick', 'burnout', 'no-show', 'argument', 'resign-notice', 'holiday-leave', 'friday-off', 'call-spike', 'client-offer', 'churn-warning', 'research-done', 'build-done', 'candidate', 'game-over-cash', 'game-over-clients', 'milestone-big-client', 'milestone-rank-s', 'expansion-done', 'backlog-warning', 'breaks-auto', 'resign-meeting', 'retention-kept', 'retention-failed', 'hire-cancelled'];
 // Ids the sim pushes whose copy is not in world/ yet.
 const PENDING_COPY = [];
 // Advisor key where it differs from the event id.

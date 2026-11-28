@@ -441,3 +441,86 @@ test('v1.8.1 a rerender after a click reads the clock again', () => {
   click(root.querySelector('button.back')); // back to the list (a rerender): lunch has begun
   assert.ok(root.querySelector(`[data-person="${p.id}"]`).textContent.includes(UI_TEXT.activity.lunch));
 });
+
+// --- v2.4 QA hiring ---------------------------------------------------------
+import { QA_HIRE_COST } from '../sim/game.js';
+
+function qaGone(seed = 11) {
+  const state = createGame(seed);
+  const qa = state.people.find((p) => p.role === 'qa');
+  state.people = state.people.filter((p) => p !== qa);
+  delete state.roster[qa.id];
+  delete state.assignment[qa.id];
+  return state;
+}
+
+test('v2.4 with no QA the hiring tab offers QA hiring; starting it shows the search', () => {
+  const Q = UI_TEXT.hiring.qa;
+  assert.deepEqual([Q.title, Q.start, Q.cost], ['QA 채용', 'QA 채용 시작', 'QA 채용 비용 💰 {cost}']);
+  const state = qaGone();
+  const root = makeRoot();
+  const onAct = (a) => act(state, a);
+  renderPanel(root, view(state), 'hiring', onAct);
+  const block = root.querySelector('.qa-hiring');
+  assert.ok(block.textContent.includes(Q.missing));
+  assert.ok(block.textContent.includes(fill(Q.cost, { cost: formatMoney(QA_HIRE_COST) })));
+  click(block.querySelector('[data-action="startHiring-qa"]'));
+  assert.equal(view(state).hiring.role, 'qa');
+  renderPanel(root, view(state), 'hiring', onAct);
+  assert.ok(root.querySelector('.qa-hiring').textContent.includes(fill(Q.searching, { n: 0 })));
+  assert.equal(root.querySelector('.state').textContent, UI_TEXT.hiring.lead.busy, 'the agent block waits');
+});
+
+test('v2.4 QA leaving; lead and QA both missing; people warning', () => {
+  const state = createGame(11);
+  const qa = state.people.find((p) => p.role === 'qa');
+  state.leaving.push({ personId: qa.id, day: state.day + 10 });
+  let root = makeRoot();
+  renderPanel(root, view(state), 'hiring', (a) => act(state, a));
+  assert.ok(root.querySelector('.qa-hiring').textContent.includes(UI_TEXT.hiring.qa.leaving));
+  const both = qaGone();
+  both.people = both.people.filter((p) => p.role !== 'lead');
+  root = makeRoot();
+  renderPanel(root, view(both), 'hiring', (a) => act(both, a));
+  const blocks = [...root.querySelectorAll('.lead-hiring, .qa-hiring')].map((b) => b.className);
+  assert.deepEqual(blocks, ['lead-hiring', 'qa-hiring'], 'lead first');
+  root = makeRoot();
+  renderPanel(root, view(qaGone()), 'people', () => ({ ok: true }));
+  assert.ok([...root.querySelectorAll('.warn')].some((w) => w.textContent === UI_TEXT.people.noQa));
+  assert.equal(UI_TEXT.people.noQa, 'QA 없음 · 팀장이 코칭 시간의 절반을 통화 점검에 쓰고 있어요.');
+});
+
+test('v2.4 the task list offers QA to QA and leads, not to agents', () => {
+  const state = createGame(11);
+  const root = makeRoot();
+  renderPanel(root, view(state), 'tasks', () => ({ ok: true }));
+  const offers = (role) => {
+    const p = state.people.find((x) => x.role === role);
+    const sel = root.querySelector(`select[data-person="${p.id}"][data-field="task"]`);
+    return [...sel.options].some((o) => o.value === 'qa');
+  };
+  assert.equal(offers('agent'), false);
+  assert.equal(offers('lead'), true);
+  assert.equal(offers('qa'), true);
+});
+
+test('v2.4 no QA and no lead covering: the people warning says checks stopped', () => {
+  const state = qaGone();
+  const lead = state.people.find((p) => p.role === 'lead');
+  state.assignment[lead.id] = { kind: 'research' };
+  let root = makeRoot();
+  renderPanel(root, view(state), 'people', () => ({ ok: true }));
+  const warns = () => [...root.querySelectorAll('.warn')].map((w) => w.textContent);
+  assert.ok(warns().includes('QA 없음 · 통화 점검이 멈춰 있어요.'));
+  assert.ok(!warns().includes(UI_TEXT.people.noQa));
+  state.people = state.people.filter((p) => p !== lead);
+  root = makeRoot();
+  renderPanel(root, view(state), 'people', () => ({ ok: true }));
+  assert.ok(warns().includes(UI_TEXT.people.noQaStopped), 'no lead at all');
+});
+
+test('v2.4 QA copy: refusal, task tip, hiring note', () => {
+  assert.equal(UI_TEXT.refuse['qa-role'], 'QA 업무는 QA나 팀장만 맡을 수 있어요.');
+  assert.equal(UI_TEXT.task.qa.tip, '통화를 점검해 실수를 줄이고 만족도를 올려요. QA와 팀장만 맡을 수 있어요.');
+  assert.equal(UI_TEXT.hiring.qa.missing, '지금은 QA가 없어요. 팀장이 통화 점검을 대신하느라 코칭이 절반으로 줄었어요.');
+});

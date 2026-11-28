@@ -10,7 +10,7 @@ import { breakLookup, workingShift, moveBreak, breakBoard, pinBreak, unpinBreak 
 import { backlogCount } from './backlog.js';
 import { advanceResearch, advanceBuild, startResearch } from './research.js';
 import { dailyEconomy, monthEnd, reputation } from './economy.js';
-import { advanceHiring, startHiring, needsLead } from './hiring.js';
+import { advanceHiring, startHiring, needsLead, needsQa, onNotice } from './hiring.js';
 import { advanceExpansion, startExpansion, officeView } from './office.js';
 import { resolveEvent } from './events.js';
 import {
@@ -24,7 +24,7 @@ import { NATIONS } from '../world/nations.js';
 
 export const SAVE_KEY = 'on-behalf-inc:save:v1';
 // Agent seats and the hiring cost, for the screen.
-export { SEATS, HIRE_COST, LEAD_HIRE_COST } from './hiring.js';
+export { SEATS, HIRE_COST, LEAD_HIRE_COST, QA_HIRE_COST } from './hiring.js';
 export { SHIFTS } from './schedule.js';
 export { seatsOf, OFFICE_LEVELS } from './office.js';
 // v1.6: a person's 스케줄링 (stored, or derived from id and name), for the card.
@@ -104,6 +104,10 @@ const ACTIONS = {
   assign(state, { personId, kind, clientId }) {
     if (!state.people.some((p) => p.id === personId)) return refuse('unknown-person');
     if (!TASKS.includes(kind)) return refuse('bad-task');
+    // v2.4: QA work is for a QA, or a lead covering for one; never an agent.
+    if (kind === 'qa' && state.people.find((p) => p.id === personId).role === 'agent') return refuse('qa-role');
+    // v2.4 (final review): a new agent beyond the seats trains until one frees.
+    if (kind === 'phone' && state.people.find((p) => p.id === personId).seatWait) return refuse('no-seat-yet');
     if (kind !== 'phone') {
       state.assignment[personId] = { kind };
       return OK();
@@ -118,7 +122,7 @@ const ACTIONS = {
   },
   // v1.7: role 'lead' starts a lead search.
   startHiring(state, { role } = {}) {
-    return startHiring(state, role === 'lead' ? 'lead' : 'agent');
+    return startHiring(state, role === 'lead' || role === 'qa' ? role : 'agent'); // v2.4: 'qa'
   },
   startExpansion(state) {
     return startExpansion(state);
@@ -296,6 +300,8 @@ function personView(state, p, weekday, breaksOf) {
     morale: p.morale,
     health: p.health,
     probationDays: p.probationDays,
+    onNotice: onNotice(state, p), // v2.4: gave notice (hiring may start)
+    seatWait: p.seatWait === true, // v2.4: a new agent waiting for a seat
     rosterShift,
     // Monday to Sunday; days missing from the roster (old saves) are 'off'.
     week: Array.from({ length: WEEKDAYS }, (_, w) => state.roster[p.id]?.[w] ?? 'off'),
@@ -357,6 +363,7 @@ function withBreakBoard(v, state) {
 export function view(state) {
   const date = dateOf(state.day);
   const leadNeeded = needsLead(state); // v1.7; computed once (v1.8.1)
+  const qaNeeded = needsQa(state); // v2.4
   const current = RESEARCH.find((r) => r.id === state.research.current);
   const inbox = state.inbox
     .map((e, index) => ({ ...e, index }))
@@ -381,9 +388,14 @@ export function view(state) {
     },
 
     hiring: state.hiring,
+    // v2.4: picked hires waiting for their join date.
+    joining: (state.joining ?? []).map((j) => ({ name: j.person.name, role: j.person.role, day: j.day })),
     // v1.7: needsLead opens lead hiring; leadLeaving says why while a lead still works.
     needsLead: leadNeeded,
     leadLeaving: leadNeeded && state.people.some((p) => p.role === 'lead'),
+    // v2.4: the same for QA hiring.
+    needsQa: qaNeeded,
+    qaLeaving: qaNeeded && state.people.some((p) => p.role === 'qa'),
     office: officeView(state),
     // weekend: an active client opens on Saturday or Sunday (roster shows those days).
     flags: { weekend: isCenterOpenWeekday(state, 5) || isCenterOpenWeekday(state, 6) },

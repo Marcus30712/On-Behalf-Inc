@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   runPolicy, wornDown, idleYearVerdict, idleCashVerdict, fullFeeShare, expansionVerdict, channelsVerdict, emailLost, emailStruggles, emailKept,
-  leadSkillVerdict, leadHireVerdict,
+  leadSkillVerdict, leadHireVerdict, qaHireVerdict, QA_COMPARE_FROM, CASH_EXTRA_SEEDS,
 } from '../tools/autoplay.js';
 
 const SEEDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
@@ -185,7 +185,11 @@ function channelRuns() {
 test('chat and email clients can be run well and are not a loss', () => {
   const { staff } = channelRuns();
   const { keep } = twoYear();
-  const v = channelsVerdict(staff, keep);
+  const extra = {
+    runs: CASH_EXTRA_SEEDS.map((seed) => runPolicy({ seed, days: 720, policy: 'sensible', expand: 'keep', channels: 'staff' })),
+    keep: CASH_EXTRA_SEEDS.map((seed) => runPolicy({ seed, days: 720, policy: 'sensible', expand: 'keep' })),
+  };
+  const v = channelsVerdict(staff, keep, extra); // v2.4: mean cash over seeds 1-20
   const cash = (runs) => runs.map((r) => Math.round(r.cash)).join(' ');
   assert.ok(v.active >= 8, `both channel clients active at day 720 on ${v.active}/10: ${staff.map((r) => r.clients.join('+')).join(' ')}`);
   assert.equal(v.backlogOk, SEEDS.length,
@@ -193,7 +197,7 @@ test('chat and email clients can be run well and are not a loss', () => {
   assert.ok(v.fees.every((f) => f >= 0.65), `fees in full ${v.fees.map((f) => (f * 100).toFixed(1)).join('% / ')}%`);
   // Money (user decision 2026-11-25): the mean, not seed by seed (near-ties go either way).
   assert.ok(v.meanCash >= v.keepMeanCash,
-    `mean cash ${Math.round(v.meanCash)} vs keep-service ${Math.round(v.keepMeanCash)} (not poorer on ${v.notPoorer}/10): ${cash(staff)} vs ${cash(keep)}`);
+    `mean cash (seeds 1-20) ${Math.round(v.meanCash)} vs keep-service ${Math.round(v.keepMeanCash)} (not poorer on ${v.notPoorer}/10): ${cash(staff)} vs ${cash(keep)}`);
   for (const r of staff) assert.equal(r.gameOver, null, `game over on day ${r.survivedDays}`);
 });
 
@@ -230,4 +234,34 @@ test('rehiring a lead after the lead leaves drops fewer calls than going without
   const without = SEEDS.map((seed) => runPolicy({ seed, days: 360, policy: 'sensible', leadLeavesDay: 30, hireLead: false }));
   const v = leadHireVerdict(rehired, without);
   assert.ok(v.better >= 8, `better on ${v.better}/10: abandoned ${v.seeds.map((x) => `${x.rehired}/${x.without}`).join(' ')}`);
+});
+
+// v2.4: the QA leaves on day 30. Sensible play that hires a new QA (a 꼼꼼함
+// candidate first) keeps clients happier over the year than without one.
+test('rehiring a QA after the QA leaves keeps clients happier than going without (v2.4)', () => {
+  const rehired = SEEDS.map((seed) => runPolicy({ seed, days: 360, policy: 'sensible', qaLeavesDay: 30 }));
+  const without = SEEDS.map((seed) => runPolicy({ seed, days: 360, policy: 'sensible', qaLeavesDay: 30, hireQa: false }));
+  const v = qaHireVerdict(rehired, without);
+  assert.ok(v.better >= 8, `happier on ${v.better}/10: mean satisfaction ${v.seeds.map((x) => `${x.rehired.toFixed(1)}/${x.without.toFixed(1)}`).join(' ')}`);
+});
+
+// v2.4 (11-28): a rehired QA joins 42-70 days after the search starts, so the
+// comparison starts at QA_COMPARE_FROM (day 30 + 70 + 20), once the QA is in.
+test('qaHireVerdict compares satisfaction from QA_COMPARE_FROM on', () => {
+  const run = (early, late) => ({ days: Array.from({ length: 200 }, (_, d) => ({ day: d, clients: { a: { satisfaction: d < QA_COMPARE_FROM ? early : late } } })) });
+  assert.equal(QA_COMPARE_FROM, 120);
+  const v = qaHireVerdict([run(10, 99)], [run(90, 98)]);
+  assert.equal(v.better, 1, 'the days before the QA joins do not count');
+  assert.equal(v.seeds[0].rehired, 99);
+});
+
+// v2.4 (user decision 11-28): the mean-cash bar of the channels check reads
+// seeds 1-20 (CASH_EXTRA_SEEDS adds 11-20); the other bars stay on 1-10.
+test('channelsVerdict: mean cash over the extra seeds too', () => {
+  assert.deepEqual(CASH_EXTRA_SEEDS, [11, 12, 13, 14, 15, 16, 17, 18, 19, 20]);
+  const r = (cash) => ({ cash, clients: [], email: { maxBacklog: 0, perDay: 1 }, feeMonths: [], days: [] });
+  const v = channelsVerdict([r(90)], [r(100)], { runs: [r(130)], keep: [r(100)] });
+  assert.equal(v.meanCash, 110);
+  assert.equal(v.keepMeanCash, 100);
+  assert.equal(v.notPoorer, 0, 'seed by seed: the first ten only');
 });

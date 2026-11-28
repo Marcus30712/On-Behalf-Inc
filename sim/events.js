@@ -24,6 +24,7 @@ const DEFAULT_CHOICE = {
   'resign-notice': 'let-go',
   candidate: 'hold',
   'lead-candidate': 'hold',
+  'qa-candidate': 'hold',
   'client-offer': 'decline',
 };
 
@@ -81,6 +82,12 @@ export const EVENT_EFFECTS = {
   },
   // v1.7: the same choices for a lead search.
   'lead-candidate': {
+    'pick-1'(state) { hireCandidate(state, 0); },
+    'pick-2'(state) { hireCandidate(state, 1); },
+    hold(state) { dropHiring(state); },
+  },
+  // v2.4: and for a QA search.
+  'qa-candidate': {
     'pick-1'(state) { hireCandidate(state, 0); },
     'pick-2'(state) { hireCandidate(state, 1); },
     hold(state) { dropHiring(state); },

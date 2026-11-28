@@ -341,3 +341,27 @@ test('email clients run their backlog, not the call queue', () => {
   assert.equal(r.overdue, 0);
   assert.equal(s.backlog[books.id].openMin, 30);
 });
+
+// v2.4: agents cannot do QA; while there is no QA at all, a lead on coaching
+// spends half of it on QA (scaled by the lead's own QA traits).
+test('v2.4 lead covers QA by halves only while no QA is on staff', () => {
+  const s = makeState({ day: 1, minute: H(10), phoneA: 4 });
+  s.assignment.l1 = { kind: 'coaching' };
+  const lead = s.people.find((p) => p.id === 'l1');
+  lead.traits = [];
+  stepInterval(s, flat);
+  assert.equal(s.progress.coaching, 1, 'QA on staff: full coaching');
+  assert.equal(s.progress.qa, 0);
+  const gone = makeState({ day: 1, minute: H(10), phoneA: 4 });
+  gone.people = gone.people.filter((p) => p.role !== 'qa');
+  gone.assignment.l1 = { kind: 'coaching' };
+  gone.people.find((p) => p.id === 'l1').traits = [];
+  stepInterval(gone, flat);
+  assert.equal(gone.progress.coaching, 0.5);
+  assert.equal(gone.progress.qa, 0.5);
+  const research = makeState({ day: 1, minute: H(10), phoneA: 4 });
+  research.people = research.people.filter((p) => p.role !== 'qa');
+  research.assignment.l1 = { kind: 'research' };
+  stepInterval(research, flat);
+  assert.equal(research.progress.qa, 0, 'a lead on research covers no QA');
+});

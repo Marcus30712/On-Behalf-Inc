@@ -33,6 +33,11 @@ const day = (d, gureumMet, mulbitMet) => ({
   },
 });
 const candidates = (state) => state.inbox.filter((e) => e.id === 'candidate');
+// v2.4: a picked candidate joins on the search's join date.
+function arrive(s, rng = createRng(1)) {
+  s.day = Math.max(s.day, s.joining[0].day);
+  advanceHiring(s, rng);
+}
 
 test('cannot hire without a free seat', () => {
   assert.equal(SEATS, 8);
@@ -85,6 +90,8 @@ test('a hire arrives on probation after a few days', () => {
 
   const before = new Set(s.people.map((p) => p.id));
   assert.equal(resolveEvent(s, s.inbox.indexOf(ev), 'pick-2', rng), true);
+  assert.equal(s.people.length, before.size, 'not before the join date');
+  arrive(s, rng);
   assert.equal(s.people.length, before.size + 1);
   const hire = s.people.at(-1);
   assert.ok(!before.has(hire.id));
@@ -103,6 +110,7 @@ test('a hire arrives on probation after a few days', () => {
     advanceHiring(s, rng);
   }
   resolveEvent(s, s.inbox.length - 1, 'pick-1', rng);
+  arrive(s, rng);
   assert.equal(new Set(s.people.map((p) => p.id)).size, s.people.length);
 });
 
@@ -155,7 +163,7 @@ test('v1.7 needsLead: a lead present, gone, or surely leaving', () => {
   s.leaving = [{ personId: 'l1', day: 10 }];
   assert.equal(needsLead(s), true, 'a lead who was let go is leaving');
   s.leaving = [{ personId: 'l1', day: 10, withdrawIfMoraleAbove: 50 }];
-  assert.equal(needsLead(s), false, 'a lead being talked round may stay');
+  assert.equal(needsLead(s), true, 'v2.4: hiring opens at the notice, even while talking them round');
   assert.equal(needsLead(withoutLead(makeState())), true);
 });
 
@@ -207,6 +215,7 @@ test('v1.7 a hired lead coaches on the early shift, with no probation', () => {
   const [e] = leadOffers(s);
   const chosen = s.hiring.candidates[1];
   resolveEvent(s, s.inbox.indexOf(e), 'pick-2');
+  arrive(s);
   assert.ok(s.people.includes(chosen));
   assert.equal(s.hiring, null);
   assert.deepEqual(s.roster[chosen.id], { 0: 'early', 1: 'early', 2: 'early', 3: 'early', 4: 'early' });
@@ -222,8 +231,10 @@ test('v1.7 no second lead joins while one is in place', () => {
   s.people.push(createPerson(createRng(9), { id: 'l9', role: 'lead', nation: 'veltora' }));
   const before = s.people.length;
   hireCandidate(s, 0);
+  arrive(s);
   assert.equal(s.people.length, before);
   assert.equal(s.hiring, null);
+  assert.equal(s.inbox.filter((e) => e.id === 'hire-cancelled').length, 1);
 });
 
 test('v1.7 unanswered lead candidates are held, like agent ones', () => {
@@ -246,4 +257,85 @@ test('v1.7 a v1.6 save mid-search (no role) still hires an agent', () => {
   assert.deepEqual(s.hiring.candidates.map((p) => p.role), ['agent', 'agent']);
   assert.equal(candidates(s).length, 1);
   assert.equal(leadOffers(s).length, 0);
+});
+
+// --- v2.4 QA hiring ----------------------------------------------------------
+import { needsQa, QA_HIRE_COST } from '../sim/hiring.js';
+import { TRAITS } from '../world/traits.js';
+
+const withoutQa = (s) => { const q = s.people.find((p) => p.role === 'qa'); s.people = s.people.filter((p) => p !== q); delete s.roster[q.id]; delete s.assignment[q.id]; return s; };
+const qaOffers = (state) => state.inbox.filter((e) => e.id === 'qa-candidate');
+const traitText = (p) => p.traits.map((id) => TRAITS.find((t) => t.id === id)?.name).filter(Boolean);
+
+test('v2.4 needsQa: a QA present, gone, or surely leaving', () => {
+  const s = makeState();
+  const qa = s.people.find((p) => p.role === 'qa');
+  assert.equal(needsQa(s), false);
+  s.leaving = [{ personId: qa.id, day: 10 }];
+  assert.equal(needsQa(s), true);
+  s.leaving = [{ personId: qa.id, day: 10, withdrawIfMoraleAbove: 50 }];
+  assert.equal(needsQa(s), true, 'v2.4: hiring opens at the notice');
+  assert.equal(needsQa(withoutQa(makeState())), true);
+});
+
+test('v2.4 starting a QA search: cost, refusals, no seat needed', () => {
+  assert.equal(QA_HIRE_COST, 2000);
+  assert.deepEqual(startHiring(makeState(), 'qa'), { ok: false, reason: 'no-need' });
+  const s = withoutQa(makeState());
+  assert.deepEqual(startHiring(s, 'qa'), { ok: true });
+  assert.equal(s.cash, 10000 - 2000);
+  assert.equal(s.hiring.role, 'qa');
+  assert.deepEqual(startHiring(s, 'lead'), { ok: false, reason: 'already' });
+  assert.deepEqual(startHiring(withoutQa(makeState({ agents: 8 })), 'qa'), { ok: true }, 'the QA has their own desk');
+  assert.deepEqual(startHiring(withoutQa(makeState({ cash: 1999 })), 'qa'), { ok: false, reason: 'no-cash' });
+});
+
+test('v2.4 QA candidates arrive after 4-6 workdays with their traits in the event', () => {
+  for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
+    const s = withoutQa(makeState());
+    startHiring(s, 'qa');
+    const n = untilCandidates(s, createRng(seed));
+    assert.ok(n >= 4 && n <= 6, `seed ${seed}: ${n} workdays`);
+    assert.deepEqual(s.hiring.candidates.map((p) => p.role), ['qa', 'qa']);
+    const [e] = qaOffers(s);
+    const [a, b] = s.hiring.candidates;
+    assert.equal(e.data.cand1, a.name);
+    assert.deepEqual(e.data.t1, traitText(a));
+    assert.deepEqual(e.data.t2, traitText(b));
+  }
+});
+
+test('v2.4 a hired QA checks calls on the late shift, no probation; never two', () => {
+  const s = withoutQa(makeState());
+  startHiring(s, 'qa');
+  untilCandidates(s, createRng(4));
+  const [e] = qaOffers(s);
+  const chosen = s.hiring.candidates[0];
+  resolveEvent(s, s.inbox.indexOf(e), 'pick-1');
+  arrive(s);
+  assert.ok(s.people.includes(chosen));
+  assert.deepEqual(s.roster[chosen.id], { 0: 'late', 1: 'late', 2: 'late', 3: 'late', 4: 'late' });
+  assert.deepEqual(s.assignment[chosen.id], { kind: 'qa' });
+  assert.equal(chosen.probationDays ?? 0, 0);
+  assert.equal(needsQa(s), false);
+  // A second QA does not join while one is in place.
+  const t = withoutQa(makeState());
+  startHiring(t, 'qa');
+  untilCandidates(t, createRng(4));
+  t.people.push(createPerson(createRng(9), { id: 'q9', role: 'qa', nation: 'veltora' }));
+  const before = t.people.length;
+  hireCandidate(t, 0);
+  arrive(t);
+  assert.equal(t.people.length, before);
+});
+
+// v2.4 (final review): a role from a damaged save that names an inherited
+// property ('constructor') is not a staff role: it runs as an agent search.
+test('v2.4 an unknown or inherited role name runs as an agent search', () => {
+  for (const role of ['constructor', 'toString', 'boss']) {
+    const s = makeState();
+    s.hiring = { workdays: 0, role };
+    untilCandidates(s, createRng(5));
+    assert.deepEqual(s.hiring.candidates.map((p) => p.role), ['agent', 'agent'], role);
+  }
 });

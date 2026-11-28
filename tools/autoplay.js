@@ -111,6 +111,7 @@ const mean = (xs) => (xs.length === 0 ? 0 : xs.reduce((s, x) => s + x, 0) / xs.l
 export function runPolicy({
   seed, days, policy, acceptOffers = false, expand = false, channels = false, leadPlanning = null,
   leadLeavesDay = null, hireLead = true,
+  qaLeavesDay = null, hireQa = true, // v2.4: the same for the QA
 }) {
   const state = createGame(seed);
   if (leadPlanning !== null) {
@@ -118,7 +119,7 @@ export function runPolicy({
     lead.skills = { ...lead.skills, planning: leadPlanning };
   }
   const sensible = policy === 'sensible';
-  const plan = sensible ? { ...sensiblePlan(view(state), acceptOffers, expand, channels), hireLead } : null;
+  const plan = sensible ? { ...sensiblePlan(view(state), acceptOffers, expand, channels), hireLead, hireQa } : null;
   const tally = {
     seen: 0, sick: 0, sickDays: 0, burnouts: 0, burnoutLog: [], helped: 0, clinicHelped: 0, helpedNames: [], offers: 0, builtOn: {},
     levelDay: {}, rankSDay: null, sixDay: 0, weekendDays: 0,
@@ -131,6 +132,10 @@ export function runPolicy({
     if (d === leadLeavesDay) {
       const lead = state.people.find((p) => p.role === 'lead');
       if (lead) state.leaving.push({ personId: lead.id, day: state.day });
+    }
+    if (d === qaLeavesDay) {
+      const qa = state.people.find((p) => p.role === 'qa');
+      if (qa) state.leaving.push({ personId: qa.id, day: state.day });
     }
     let v = view(state);
     collect(v, tally);
@@ -296,14 +301,18 @@ export function expansionVerdict(expand, plain) {
 // against the keep-service games on the same seeds (`keep`; the money bar,
 // user decision 2026-11-25), and on how many seeds the cash is not below the
 // same seed's keep-service game (reported, not a bar).
-export function channelsVerdict(runs, keep) {
+// v2.4 (user decision 11-28): the mean cash reads seeds 1-20, so one seed's
+// luck (seed 7 is never offered the email client) does not decide it.
+export const CASH_EXTRA_SEEDS = [11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
+// `extra`: { runs, keep } on CASH_EXTRA_SEEDS, counted in the mean cash only.
+export function channelsVerdict(runs, keep, extra = { runs: [], keep: [] }) {
   return {
     active: runs.filter((r) => r.clients.includes('saebyeol') && r.clients.includes('solbang')).length,
     backlogOk: runs.filter((r) => r.email.maxBacklog <= 2 * r.email.perDay).length,
     fees: [fullFeeShare(runs, 0, 360), fullFeeShare(runs, 360, 720)],
     notPoorer: runs.filter((r, i) => r.cash >= keep[i].cash).length, // reported only
-    meanCash: mean(runs.map((r) => r.cash)),
-    keepMeanCash: mean(keep.map((r) => r.cash)),
+    meanCash: mean([...runs, ...extra.runs].map((r) => r.cash)),
+    keepMeanCash: mean([...keep, ...extra.keep].map((r) => r.cash)),
   };
 }
 
@@ -337,6 +346,21 @@ export function leadHireVerdict(rehired, without) {
   const abandoned = (r) => dayTotal(r, 'abandoned'); // v1.8.1: shared with leadSkillVerdict
   const seeds = rehired.map((r, i) => ({ rehired: abandoned(r), without: abandoned(without[i]) }));
   return { seeds, better: seeds.filter((x) => x.rehired < x.without).length };
+}
+
+// v2.4: seeds where the play that rehired a QA kept a higher mean client
+// satisfaction over the run than the same play without a QA.
+// v2.4 (11-28): the new QA joins 42-70 days after the search (user rule), and
+// before that both runs have no QA, so the comparison starts when the QA is
+// surely in: day 30 + 70 + 20 days to settle.
+export const QA_COMPARE_FROM = 120;
+export function qaHireVerdict(rehired, without) {
+  const mean = (r) => {
+    const all = r.days.filter((d) => d.day >= QA_COMPARE_FROM).flatMap((d) => Object.values(d.clients).map((c) => c.satisfaction));
+    return all.reduce((a, b) => a + b, 0) / Math.max(1, all.length);
+  };
+  const seeds = rehired.map((r, i) => ({ rehired: mean(r), without: mean(without[i]) }));
+  return { seeds, better: seeds.filter((x) => x.rehired > x.without).length };
 }
 
 // v1.3: seeds where the email client was lost at least once.
@@ -462,8 +486,12 @@ function decide(state, v, plan, tally) {
   }
   // v1.7: a missing lead comes first; the lead does the research hours (plan.leadId).
   if (plan.hireLead && v.needsLead && !view(state).hiring) act(state, { type: 'startHiring', role: 'lead' });
+  if (plan.hireQa && v.needsQa && !view(state).hiring) act(state, { type: 'startHiring', role: 'qa' }); // v2.4
   plan.leadId = view(state).people.find((p) => p.role === 'lead')?.id;
-  if (agentsOf(v).length < v.office.seats && !view(state).hiring) act(state, { type: 'startHiring' });
+  // v2.4: a seat counts as free from an agent's notice; a hire already joining takes one.
+  const now = view(state);
+  const agentsAhead = agentsOf(now).filter((p) => !p.onNotice).length + now.joining.filter((j) => j.role === 'agent').length;
+  if (agentsAhead < now.office.seats && !now.hiring) act(state, { type: 'startHiring' });
 }
 
 // v1.2: build the next office level when the cash covers it with a reserve left.
@@ -661,6 +689,7 @@ function answerInbox(state, v, plan) {
     else if (e.id === 'resign-notice') choice = 'keep-trying';
     else if (e.id === 'candidate') choice = 'pick-1';
     else if (e.id === 'lead-candidate') choice = e.data.p1 >= e.data.p2 ? 'pick-1' : 'pick-2'; // v1.7: the better planner
+    else if (e.id === 'qa-candidate') choice = !e.data.t1.includes('꼼꼼함') && e.data.t2.includes('꼼꼼함') ? 'pick-2' : 'pick-1'; // v2.4: 꼼꼼함 first
     else if (e.id === 'client-offer') {
       choice = plan.acceptOffers || (plan.expand && canStaff(v, e.clientId, plan)) ? 'accept' : 'decline';
     }
@@ -831,6 +860,8 @@ function main() {
   const unskilled = SEEDS.map((seed) => runPolicy({ seed, days: 360, policy: 'sensible', leadPlanning: 1 }));
   const rehired = SEEDS.map((seed) => runPolicy({ seed, days: 360, policy: 'sensible', leadLeavesDay: 30 }));
   const leadless = SEEDS.map((seed) => runPolicy({ seed, days: 360, policy: 'sensible', leadLeavesDay: 30, hireLead: false }));
+  const qaRehired = SEEDS.map((seed) => runPolicy({ seed, days: 360, policy: 'sensible', qaLeavesDay: 30 }));
+  const qaless = SEEDS.map((seed) => runPolicy({ seed, days: 360, policy: 'sensible', qaLeavesDay: 30, hireQa: false }));
   printRuns('idle, 360 days', idleYear);
   printRuns('sensible, 360 days', sensible);
   printRuns('sensible taking client offers, 720 days', offers);
@@ -864,13 +895,19 @@ function main() {
   const fee2 = [fullFeeShare(twoYears, 0, 360), fullFeeShare(twoYears, 360, 720)];
   const over2 = twoYears.filter((r) => r.gameOver).length;
   const grown = expansionVerdict(keep, twoYears);
-  const ch = channelsVerdict(channels, keep);
+  const cashExtra = {
+    runs: CASH_EXTRA_SEEDS.map((seed) => runPolicy({ seed, days: 720, policy: 'sensible', expand: 'keep', channels: 'staff' })),
+    keep: CASH_EXTRA_SEEDS.map((seed) => runPolicy({ seed, days: 720, policy: 'sensible', expand: 'keep' })),
+  };
+  const ch = channelsVerdict(channels, keep, cashExtra);
   const lostEmail = emailLost(noStaff);
   const strained = emailStruggles(single);
   const kept = emailKept(pair);
   const dayList = (runs, key) => runs.map((r) => r[key] ?? '-').join(' ');
   const lead = leadSkillVerdict(skilled, unskilled);
   const rehire = leadHireVerdict(rehired, leadless);
+  const qaRehire = qaHireVerdict(qaRehired, qaless);
+  console.log('QA leaves day 30, rehired/without (v2.4): mean satisfaction', qaRehire.seeds.map((x) => `${x.rehired.toFixed(1)}/${x.without.toFixed(1)}`).join(' '));
   console.log('lead leaves day 30, rehired/without (v1.7): abandoned', rehire.seeds.map((x) => `${x.rehired}/${x.without}`).join(' '));
   const pair2 = (f) => lead.seeds.map((s) => `${f(s.high)}/${f(s.low)}`).join(' ');
 
@@ -947,7 +984,7 @@ function main() {
     check(grown.built >= 8 && grown.notPoorer >= 8 && grown.fees.every((f) => f >= 0.65),
       `sensible play that keeps service expands within 720 days on ${grown.built}/10 seeds (>= 8), fees in full year 1 ${pct(grown.fees[0])}, year 2 ${pct(grown.fees[1])} (each >= 65%), not poorer than without on ${grown.notPoorer}/10 (>= 8)`),
     check(ch.active >= 8 && ch.backlogOk === SEEDS.length && ch.fees.every((f) => f >= 0.65) && ch.meanCash >= ch.keepMeanCash,
-      `keeping service with the chat and email clients (v1.3): both active at day 720 on ${ch.active}/10 (>= 8), email backlog within two days of mail on ${ch.backlogOk}/10, fees in full year 1 ${pct(ch.fees[0])}, year 2 ${pct(ch.fees[1])} (each >= 65%), mean cash ${Math.round(ch.meanCash)} vs keeping service without ${Math.round(ch.keepMeanCash)} (>=; not poorer on ${ch.notPoorer}/10, not a bar)`),
+      `keeping service with the chat and email clients (v1.3): both active at day 720 on ${ch.active}/10 (>= 8), email backlog within two days of mail on ${ch.backlogOk}/10, fees in full year 1 ${pct(ch.fees[0])}, year 2 ${pct(ch.fees[1])} (each >= 65%), mean cash over seeds 1-20 ${Math.round(ch.meanCash)} vs keeping service without ${Math.round(ch.keepMeanCash)} (>=; not poorer on ${ch.notPoorer}/10 of seeds 1-10, not a bar)`),
     check(lostEmail >= 8, `an email client nobody answers is lost (v1.3): ${lostEmail}/10 seeds (>= 8)`),
     check(strained >= 8, `one email agent with no cover struggles (lost, or email met under 90%) (v1.3): ${strained}/10 seeds (>= 8)`),
     check(kept >= 8, `two email agents assigned once, no daily stand-in, keep the email client (never lost) (v1.3): ${kept}/10 seeds (>= 8)`),
@@ -957,6 +994,8 @@ function main() {
       `a skilled lead (planning 8) has fewer abandoned calls and an equal or higher service level than an unskilled one (planning 1) on the same seeds (v1.6): ${lead.better}/10 seeds (>= 8)`),
     check(rehire.better >= 8,
       `after the lead leaves (day 30), rehiring a lead drops fewer calls than going without (v1.7): ${rehire.better}/10 seeds (>= 8)`),
+    check(qaRehire.better >= 8,
+      `after the QA leaves (day 30), rehiring a QA keeps clients happier than going without (v2.4; from day ${QA_COMPARE_FROM}, once the new QA is in): ${qaRehire.better}/10 seeds (>= 8)`),
   ];
   console.log(`\n${results.filter(Boolean).length}/${results.length} checks pass (${((Date.now() - t0) / 1000).toFixed(1)} s)`);
   if (!results.every(Boolean)) process.exitCode = 1;

@@ -154,9 +154,11 @@ test('act resolves an inbox choice with the saved random state', () => {
   const name = s.hiring.candidates[0].name;
   assert.equal(act(s, { type: 'resolve', index, choiceId: 'nope' }).ok, false);
   assert.deepEqual(act(s, { type: 'resolve', index, choiceId: 'pick-1' }), { ok: true });
-  assert.ok(s.people.some((p) => p.name === name && p.probationDays === 10));
+  assert.equal(s.joining[0].person.name, name); // v2.4: joins on the join date
   assert.equal(s.hiring, null);
   assert.equal(act(s, { type: 'resolve', index, choiceId: 'pick-1' }).ok, false);
+  assert.ok(advanceUntil(s, (x) => x.joining.length === 0, 50));
+  assert.ok(s.people.some((p) => p.name === name && p.probationDays === 10));
 });
 
 test('act rejects unknown people or clients without changing state', () => {
@@ -478,8 +480,9 @@ test('v1.7 a lead hired while the old one works out notice is the only lead afte
   assert.ok(advanceUntil(s, () => offer() >= 0, 20), 'candidates arrive');
   const chosen = s.hiring.candidates[0];
   assert.deepEqual(act(s, { type: 'resolve', index: offer(), choiceId: 'pick-1' }), { ok: true });
-  assert.equal(view(s).needsLead, false);
-  playDays(s, 20);
+  assert.equal(view(s).joining[0].name, chosen.name, 'v2.4: picked, joining on the join date');
+  assert.equal(view(s).needsLead, false, 'a lead is joining');
+  playDays(s, 80); // v2.4: a lead joins 42-70 days after the search starts
   const leads = s.people.filter((p) => p.role === 'lead');
   assert.deepEqual(leads.map((p) => p.id), [chosen.id]);
   assert.equal(view(s).needsLead, false);
@@ -501,4 +504,41 @@ test('v1.8 view deskActivity: the activity without breaks', () => {
     else assert.ok(['phone', 'task', 'idle'].includes(p.deskActivity), `${p.id}: ${p.deskActivity}`);
   }
   assert.ok(v.people.some((p) => p.activity === 'lunch' || p.activity === 'break'), 'someone is on a break interval at 12:00');
+});
+
+test('v2.4 QA hiring through the game: action role, view flags', () => {
+  const s = createGame(42);
+  assert.deepEqual(act(s, { type: 'startHiring', role: 'qa' }), { ok: false, reason: 'no-need' });
+  assert.deepEqual([view(s).needsQa, view(s).qaLeaving], [false, false]);
+  const qa = s.people.find((p) => p.role === 'qa');
+  s.leaving.push({ personId: qa.id, day: s.day + 10 });
+  assert.deepEqual([view(s).needsQa, view(s).qaLeaving], [true, true]);
+  assert.deepEqual(act(s, { type: 'startHiring', role: 'qa' }), { ok: true });
+  assert.equal(view(s).hiring.role, 'qa');
+});
+
+test('v2.4 only a QA or a lead can take the QA task', () => {
+  const s = createGame(3);
+  const agent = s.people.find((p) => p.role === 'agent');
+  const lead = s.people.find((p) => p.role === 'lead');
+  const qa = s.people.find((p) => p.role === 'qa');
+  const before = structuredClone(s.assignment[agent.id]);
+  assert.deepEqual(act(s, { type: 'assign', personId: agent.id, kind: 'qa' }), { ok: false, reason: 'qa-role' });
+  assert.deepEqual(s.assignment[agent.id], before);
+  assert.deepEqual(act(s, { type: 'assign', personId: lead.id, kind: 'qa' }), { ok: true });
+  assert.deepEqual(act(s, { type: 'assign', personId: qa.id, kind: 'qa' }), { ok: true });
+});
+
+test('v2.4 a save with an agent on QA loads with that agent on the phone', () => {
+  const s = createGame(3);
+  const agent = s.people.find((p) => p.role === 'agent');
+  s.assignment[agent.id] = { kind: 'qa' };
+  const first = s.clients.find((c) => c.active).id;
+  assert.deepEqual(deserialize(serialize(s)).assignment[agent.id], { kind: 'phone', clientId: first });
+  const none = structuredClone(s);
+  none.clients.forEach((c) => { c.active = false; c.lostDay ??= 0; });
+  assert.equal(deserialize(serialize(none)).assignment[agent.id], undefined, 'no client: idle');
+  const lead = s.people.find((p) => p.role === 'lead');
+  s.assignment[lead.id] = { kind: 'qa' };
+  assert.deepEqual(deserialize(serialize(s)).assignment[lead.id], { kind: 'qa' }, 'a lead keeps QA');
 });

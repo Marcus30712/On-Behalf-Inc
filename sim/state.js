@@ -71,6 +71,7 @@ export function newGame(seed) {
     history: [],
     spikes: [],
     leaving: [],
+    joining: [], // v2.4: [{ person, day }] picked hires waiting for their join date
     breakRules: {}, // v2.3: { [personId]: { am?, lunch?, pm? } } pinned break times
     cash: START_CASH,
     gameOver: null,
@@ -158,7 +159,18 @@ export function deserialize(text) {
       const kept = Object.fromEntries(BREAK_KINDS.filter((k) => Number.isFinite(r[k])).map((k) => [k, r[k]]));
       if (Object.keys(kept).length > 0) s.breakRules[id] = kept;
     }
+    // v2.4: agents can no longer do QA; one saved on it answers the first
+    // active client's phone, or waits for a task when there is none.
+    const firstClient = s.clients.find((c) => c.active)?.id;
+    for (const p of s.people) {
+      if (p.role !== 'agent' || s.assignment[p.id]?.kind !== 'qa') continue;
+      if (firstClient) s.assignment[p.id] = { kind: 'phone', clientId: firstClient };
+      else delete s.assignment[p.id];
+    }
     // v1.1 saves: offered held bare ids; they count as offered on the day the save is loaded.
+    // v2.4: picked hires waiting to join; saves before have none, malformed entries are dropped.
+    s.joining = Array.isArray(s.joining)
+      ? s.joining.filter((j) => hasShape(j, 'object') && isPerson(j.person) && Number.isFinite(j.day)) : [];
     s.offered = s.offered.map((o) => (typeof o === 'string' ? { id: o, day: s.day } : o));
     return s;
   } catch {

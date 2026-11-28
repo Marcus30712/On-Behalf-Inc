@@ -12,6 +12,7 @@ import { TRAITS } from '../world/traits.js';
 import { NATIONS } from '../world/nations.js';
 import { CLIENTS } from '../world/clients.js';
 import { PLANET } from '../world/planet.js';
+import { dateOf } from '../sim/calendar.js';
 import { UI_TEXT, fill } from './text.js';
 import { formatDate, formatTime, formatMoney, formatDecimal, formatPct, formatSec, formatTarget, hasChannels, channelLabel } from './format.js';
 import { builder } from './dom.js';
@@ -206,7 +207,9 @@ function peoplePanel(ctx) {
   const P = UI_TEXT.people;
   if (v.people.length === 0) return [title(h, P.title), h('p', {}, P.empty)];
   const noLead = !v.people.some((p) => p.role === 'lead') && h('p', { class: 'warn' }, P.noLead);
-  const noQa = !v.people.some((p) => p.role === 'qa') && h('p', { class: 'warn' }, P.noQa); // v2.4
+  // v2.4: with no QA, a lead on coaching covers half (sim/interval.js); otherwise checks stop.
+  const covered = v.people.some((p) => p.role === 'lead' && p.task?.kind === 'coaching');
+  const noQa = !v.people.some((p) => p.role === 'qa') && h('p', { class: 'warn' }, covered ? P.noQa : P.noQaStopped);
   const cards = v.people.map((p) => h('button', {
     type: 'button', class: 'person', 'data-person': p.id, title: P.open,
     onclick: () => { selected = p.id; rerender(); },
@@ -288,7 +291,7 @@ function tasksPanel({ h, v, run, rerender }) {
       },
     },
     !kind && h('option', { value: '', selected: true, disabled: true }, UI_TEXT.activity.idle),
-    TASK_KINDS.map((k) => h('option', { value: k, selected: k === kind, title: UI_TEXT.task[k].tip }, UI_TEXT.task[k].name)));
+    TASK_KINDS.filter((k) => k !== 'qa' || p.role !== 'agent').map((k) => h('option', { value: k, selected: k === kind, title: UI_TEXT.task[k].tip }, UI_TEXT.task[k].name)));
     const current = p.task?.kind === 'phone' && !pendingPhone.has(p.id) ? p.task.clientId : '';
     const ended = current && !active.some((c) => c.id === current);
     const clientSelect = phone && h('select', {
@@ -311,7 +314,9 @@ function tasksPanel({ h, v, run, rerender }) {
     h('p', { class: 'seats' }, fill(T.seatsOf, { n: seated, seats: v.office.seats }), byClient.length > 0 && ` · ${byClient.join(' · ')}`),
     h('table', { class: 'tasks' },
       h('thead', {}, h('tr', {}, [T.colName, T.colRole, T.colTask, T.colClient].map((c) => h('th', {}, c)))),
-      h('tbody', {}, rows))];
+      h('tbody', {}, rows)),
+    // v2.4: new agents beyond the seats (handover) train until one frees.
+    v.people.filter((p) => p.seatWait).map((p) => h('p', { class: 'help seat-wait' }, fill(T.seatWait, { name: p.name })))];
 }
 
 function researchPanel({ h, v, run }) {
@@ -407,6 +412,12 @@ function officeSection(ctx) {
 // v1.7: lead hiring, shown above agent hiring while the center needs a lead.
 // v1.7 lead / v2.4 QA hiring, shown above agent hiring while the center needs one.
 const STAFF_COST = { lead: LEAD_HIRE_COST, qa: QA_HIRE_COST };
+// v2.4: "{name} 씨가 {date}에 합류해요" for a picked hire waiting to join.
+function joiningText({ name, day }) {
+  const { year, month, date } = dateOf(day);
+  return fill(UI_TEXT.hiring.state.picked, { name, date: fill(UI_TEXT.common.shortDate, { year, month, day: date }) });
+}
+
 function staffHiring({ h, v, run }, role) {
   const L = UI_TEXT.hiring[role];
   const busy = UI_TEXT.hiring.lead.busy;
@@ -429,18 +440,26 @@ function staffHiring({ h, v, run }, role) {
 function hiringPanel(ctx) {
   const { h, v, run } = ctx;
   const H = UI_TEXT.hiring;
-  const free = Math.max(0, v.office.seats - v.people.filter((p) => p.role === 'agent').length);
+  // v2.4: seats of agents on notice count as free (hiring opens at the notice).
+  const agents = v.people.filter((p) => p.role === 'agent');
+  const leavingAgents = agents.filter((p) => p.onNotice).length;
+  const joiners = (v.joining ?? []).filter((j) => j.role === 'agent').length;
+  const free = Math.max(0, v.office.seats - agents.length - joiners + leavingAgents);
+  const soon = Math.min(free, leavingAgents);
   let state;
   if (!v.hiring) state = free > 0 ? H.state.ready : H.noSeats;
   else if (v.hiring.role === 'lead' || v.hiring.role === 'qa') state = H.lead.busy;
   else if (v.hiring.candidates) state = H.state.arrived;
   else state = fill(H.state.searching, { n: v.hiring.workdays });
+  const joining = (v.joining ?? []).length > 0
+    && h('ul', { class: 'joining' }, v.joining.map((j) => h('li', {}, joiningText(j))));
   return [title(h, H.title, H.help),
+    joining,
     v.needsLead && staffHiring(ctx, 'lead'),
     v.needsQa && staffHiring(ctx, 'qa'),
     h('p', { class: 'state' }, state),
     h('p', {}, fill(H.cost, { cost: formatMoney(HIRE_COST) })),
-    (free > 0 || v.hiring) && h('p', {}, free > 0 ? fill(H.seats, { n: free }) : H.noSeats),
+    (free > 0 || v.hiring) && h('p', {}, free > 0 ? fill(H.seats, { n: free }) : H.noSeats, soon > 0 && ` · ${fill(H.seatsSoon, { n: soon })}`),
     !v.hiring && free > 0 && h('button', { type: 'button', 'data-action': 'startHiring', onclick: () => run({ type: 'startHiring' }) }, H.start),
     h('p', { class: 'help' }, H.probationNote),
     h('p', { class: 'help' }, H.noRefund),

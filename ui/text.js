@@ -9,6 +9,7 @@ import { NATIONS } from '../world/nations.js';
 import { CLIENTS } from '../world/clients.js';
 import { formatMoney, formatDecimal } from './money.js';
 import { channelOf } from '../sim/interval.js';
+import { dateOf } from '../sim/calendar.js';
 
 export const UI_TEXT = {
   "topbar": {
@@ -149,6 +150,8 @@ export const UI_TEXT = {
     "hours": "{n}시간",
     "people": "{n}명",
     "money": "💰 {cost}",
+    "shortDate": "{year}년차 {month}월 {day}일",
+    "period": { "1": "한 달", "2": "두 달" },
     "yes": "네",
     "no": "아니요"
   },
@@ -159,7 +162,8 @@ export const UI_TEXT = {
     "open": "자세히",
     "leftNote": "이 사람은 센터를 떠났어요.",
     "noLead": "팀장 없음 · 휴식이 무작위로 정해지고 있어요.",
-    "noQa": "QA 없음 · 통화 점검이 멈춰 있어요. 상담사에게 QA 업무를 맡길 수도 있어요."
+    "noQa": "QA 없음 · 팀장이 코칭 시간의 절반을 통화 점검에 쓰고 있어요.",
+    "noQaStopped": "QA 없음 · 통화 점검이 멈춰 있어요."
   },
   "role": {
     "agent": "상담사",
@@ -290,6 +294,7 @@ export const UI_TEXT = {
     }
   },
   "tasks": {
+    "seatWait": "{name} 씨는 빈 좌석이 날 때까지 교육 테이블에서 일해요.",
     "title": "업무 배치",
     "help": "사람마다 맡을 일을 골라요. 상담 응대는 어느 고객사를 맡을지도 골라요.",
     "colName": "이름",
@@ -316,7 +321,7 @@ export const UI_TEXT = {
     },
     "qa": {
       "name": "QA",
-      "tip": "통화를 점검해 실수를 줄이고 만족도를 올려요."
+      "tip": "통화를 점검해 실수를 줄이고 만족도를 올려요. QA와 팀장만 맡을 수 있어요."
     },
     "research": {
       "name": "연구",
@@ -344,7 +349,8 @@ export const UI_TEXT = {
   },
   "hiring": {
     "title": "채용",
-    "help": "채용을 시작하면 며칠 뒤 지원자 두 명이 와요. 둘 중 한 명을 고를 수 있어요.",
+    "help": "채용을 시작하면 며칠 뒤 지원자 두 명이 와요. 둘 중 한 명을 고를 수 있어요. 합류까지는 3~6주 걸려요.",
+    "seatsSoon": "곧 비는 자리 {n}개 포함",
     "cost": "채용 비용 💰 {cost}",
     "seats": "빈 좌석 {n}개",
     "noSeats": "빈 좌석이 없어요",
@@ -352,7 +358,8 @@ export const UI_TEXT = {
     "state": {
       "ready": "채용할 수 있어요",
       "searching": "지원자를 찾는 중 · {n}근무일째",
-      "arrived": "지원자가 왔어요. 알림에서 골라 주세요."
+      "arrived": "지원자가 왔어요. 알림에서 골라 주세요.",
+      "picked": "{name} 씨가 {date}에 합류해요"
     },
     "probationNote": "새 사람은 처음 두 주 동안 수습이에요. 교육을 맡기면 빨리 늘어요.",
     "noRefund": "보류하면 채용 비용은 돌려받지 못해요.",
@@ -360,7 +367,7 @@ export const UI_TEXT = {
       "title": "팀장 채용",
       "missing": "지금은 팀장이 없어요. 휴식이 무작위로 정해지고 코칭도 멈춰 있어요.",
       "leaving": "팀장이 곧 떠나요. 지금 새 팀장을 찾기 시작할 수 있어요.",
-      "help": "팀장은 휴식표를 짜고 상담사를 코칭해요. 며칠 뒤 지원자 두 명이 오면 한 명을 고를 수 있어요.",
+      "help": "팀장은 휴식표를 짜고 상담사를 코칭해요. 며칠 뒤 지원자 두 명이 오면 한 명을 고를 수 있어요. 합류까지는 6~10주 걸려요.",
       "cost": "팀장 채용 비용 💰 {cost}",
       "start": "팀장 채용 시작",
       "searching": "팀장 지원자를 찾는 중 · {n}근무일째",
@@ -368,9 +375,9 @@ export const UI_TEXT = {
     },
     "qa": {
       "title": "QA 채용",
-      "missing": "지금은 QA가 없어요. 통화 점검이 멈춰서 고객사 만족도가 덜 올라요.",
+      "missing": "지금은 QA가 없어요. 팀장이 통화 점검을 대신하느라 코칭이 절반으로 줄었어요.",
       "leaving": "QA가 곧 떠나요. 지금 새 QA를 찾기 시작할 수 있어요.",
-      "help": "QA는 통화를 점검해 실수를 줄이고 고객사 만족도를 올려요. 며칠 뒤 지원자 두 명이 오면 한 명을 고를 수 있어요.",
+      "help": "QA는 통화를 점검해 실수를 줄이고 고객사 만족도를 올려요. 며칠 뒤 지원자 두 명이 오면 한 명을 고를 수 있어요. 합류까지는 6~10주 걸려요.",
       "cost": "QA 채용 비용 💰 {cost}",
       "start": "QA 채용 시작",
       "searching": "QA 지원자를 찾는 중 · {n}근무일째",
@@ -453,6 +460,7 @@ export const UI_TEXT = {
     "bad-weekday": "근무표는 월~금만 정할 수 있어요.",
     "bad-shift": "이른 조, 늦은 조, 휴무 중에서 골라 주세요.",
     "bad-task": "맡길 수 없는 일이에요.",
+    "qa-role": "QA 업무는 QA나 팀장만 맡을 수 있어요.",
     "bad-choice": "이미 답한 알림이에요.",
     "game-over": "센터가 문을 닫았어요. 새 게임을 시작해 주세요.",
     "default": "지금은 할 수 없어요."
@@ -630,6 +638,9 @@ function valuesFor(event) {
     cand1: d.cand1,
     cand2: d.cand2,
     n: d.n,
+    leadName: d.leadName, // v2.4
+    period: UI_TEXT.common.period[d.months], // v2.4: one or two months of notice
+    date: shortDate(d.joinDay ?? d.leaveDay), // v2.4: a join day, or a confirmed leave day
   };
   // v1.7 lead-candidate: coaching and planning, 2 decimals (display rule).
   for (const k of ['c1', 'c2', 'p1', 'p2']) if (d[k] !== undefined) values[k] = formatDecimal(d[k]);
@@ -649,6 +660,13 @@ function valuesFor(event) {
     values.days = left.length > 0 ? left.join('·') : undefined;
   }
   return values;
+}
+
+// v2.4: a game day as a calendar date, or undefined.
+function shortDate(day) {
+  if (!Number.isFinite(day)) return undefined;
+  const { year, month, date } = dateOf(day);
+  return fill(UI_TEXT.common.shortDate, { year, month, day: date });
 }
 
 const clientDef = (event) => CLIENTS.find((c) => c.id === event.clientId);

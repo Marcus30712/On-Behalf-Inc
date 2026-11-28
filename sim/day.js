@@ -5,7 +5,8 @@
 // every day; everything else only when the center was open that day (Mon-Fri,
 // and Sat-Sun with an active weekend client, v1.2; "workday" below). Rolls use
 // end-of-day values; overnight recovery comes last.
-import { dateOf, holidaysOn } from './calendar.js';
+import { dateOf, holidaysOn, DAYS_PER_MONTH } from './calendar.js';
+import { onNotice, seatWaiters } from './hiring.js';
 import { moraleOf, overnight, wearDay, WEAR } from './people.js';
 import { pushEvent, expireEvents } from './events.js';
 import { backlogWarnings } from './backlog.js';
@@ -27,7 +28,9 @@ const BREAKING_EVENTS = ['no-show', 'argument', 'resign-notice'];
 // An argument is with a caller, so only someone answering for a client has one.
 const BREAKING_EVENTS_OFF_PHONE = ['no-show', 'resign-notice'];
 const ARGUMENT_SATISFACTION = 3;
-const RESIGN_WORKDAYS = 10;
+// v2.4 (user rule): notice is one month for an agent, two months for a lead or QA.
+const NOTICE_DAYS = { agent: DAYS_PER_MONTH, staff: 2 * DAYS_PER_MONTH };
+const RETAIN_MORALE = 15; // morale boost when persuaded to stay, as keep-trying (가상 값)
 const FRIDAY = 4;
 const SPIKE_CHANCE = 0.05;
 const COACH = { handling: 0.05, stress: 1, morale: 2 };
@@ -58,12 +61,6 @@ function isPersonWorkday(state, person, d) {
 function nextPersonWorkday(state, person, day) {
   let d = day + 1;
   while (!isPersonWorkday(state, person, d)) d++;
-  return d;
-}
-
-function addPersonWorkdays(state, person, day, n) {
-  let d = day;
-  for (let i = 0; i < n; i++) d = nextPersonWorkday(state, person, d);
   return d;
 }
 
@@ -121,9 +118,35 @@ function rollHealth(state, person, rng) {
   }
 }
 
-const hasOpenNotice = (state, person) =>
-  (state.leaving ?? []).some((l) => l.personId === person.id)
-  || (state.inbox ?? []).some((e) => e.id === 'resign-notice' && e.personId === person.id && !e.resolved);
+// v2.4: the chance a lead's retention meeting keeps an agent: the lead's
+// communication (the coaching skill) / 10, kept within 10%..90% (가상 값).
+export const retainChance = (lead) => Math.min(0.9, Math.max(0.1, lead.skills.coaching / 10));
+// The lead who holds the meeting: the best communicator.
+const meetingLead = (state) => state.people.filter((p) => p.role === 'lead')
+  .sort((a, b) => b.skills.coaching - a.skills.coaching)[0];
+
+// v2.4: an agent's notice meets the lead the next day (within 24 hours): kept,
+// the notice is withdrawn; refused, the leave stands.
+function holdMeetings(state, rng) {
+  for (const l of state.leaving ?? []) {
+    if (l.meetingDay === undefined || l.meetingDay > state.day) continue;
+    const person = state.people.find((p) => p.id === l.personId);
+    const lead = state.people.find((p) => p.id === l.leadId) ?? meetingLead(state);
+    delete l.meetingDay;
+    delete l.leadId;
+    if (!person) continue;
+    const leadName = lead?.name;
+    if (lead && rng.chance(retainChance(lead))) {
+      l.kept = true;
+      person.moraleBoost = (person.moraleBoost ?? 0) + RETAIN_MORALE;
+      person.morale = moraleOf(person);
+      pushEvent(state, { id: 'retention-kept', personId: person.id, data: { leadName } });
+    } else {
+      pushEvent(state, { id: 'retention-failed', personId: person.id, data: { leadName, leaveDay: l.day } });
+    }
+  }
+  state.leaving = (state.leaving ?? []).filter((l) => !l.kept);
+}
 
 function rollBreakingPoint(state, person, rng) {
   if (moraleOf(person) >= BREAKING_MORALE || !rng.chance(BREAKING_CHANCE)) return;
@@ -138,13 +161,21 @@ function rollBreakingPoint(state, person, rng) {
     // Task 11's reputation reads this as a deduction.
     state.reputationPenalty = (state.reputationPenalty ?? 0) + 1;
     pushEvent(state, { id: kind, personId: person.id, clientId });
-  } else if (!hasOpenNotice(state, person)) {
-    const leaveDay = addPersonWorkdays(state, person, state.day, RESIGN_WORKDAYS);
+  } else if (!onNotice(state, person)) {
+    const days = person.role === 'agent' ? NOTICE_DAYS.agent : NOTICE_DAYS.staff;
+    const leaveDay = state.day + days;
+    const months = days / DAYS_PER_MONTH;
+    const lead = person.role === 'agent' ? meetingLead(state) : undefined;
+    if (lead) {
+      (state.leaving ??= []).push({ personId: person.id, day: leaveDay, meetingDay: state.day + 1, leadId: lead.id });
+      pushEvent(state, { id: 'resign-meeting', personId: person.id, data: { months, leaveDay, leadName: lead.name } });
+      return;
+    }
     pushEvent(state, {
       id: kind,
       personId: person.id,
       // v1.7: lead marks a lead's notice (Kim Miso's advice differs).
-      data: { days: RESIGN_WORKDAYS, leaveDay, ...(person.role === 'lead' && { lead: true }), ...(person.role === 'qa' && { qa: true }) },
+      data: { months, leaveDay, ...(person.role === 'lead' && { lead: true }), ...(person.role === 'qa' && { qa: true }) },
       deadlineDay: leaveDay,
     });
   }
@@ -268,7 +299,9 @@ export function endOfDay(state, rng) {
   state.spikes = (state.spikes ?? []).filter((s) => s.day >= state.day);
   state.absences ??= [];
   expireEvents(state, rng);
+  holdMeetings(state, rng);
   processLeaving(state);
+  seatWaiters(state); // v2.4: a freed seat goes to a new agent waiting for one
 
   const wellAtStart = new Set(state.people.filter((p) => p.health.kind === 'well'));
   for (const p of state.people) countDownHealth(p);

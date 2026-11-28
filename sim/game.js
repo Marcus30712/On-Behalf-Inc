@@ -10,7 +10,7 @@ import { breakLookup, workingShift, moveBreak, breakBoard, pinBreak, unpinBreak 
 import { backlogCount } from './backlog.js';
 import { advanceResearch, advanceBuild, startResearch } from './research.js';
 import { dailyEconomy, monthEnd, reputation } from './economy.js';
-import { advanceHiring, startHiring, needsLead, needsQa } from './hiring.js';
+import { advanceHiring, startHiring, needsLead, needsQa, onNotice } from './hiring.js';
 import { advanceExpansion, startExpansion, officeView } from './office.js';
 import { resolveEvent } from './events.js';
 import {
@@ -104,6 +104,8 @@ const ACTIONS = {
   assign(state, { personId, kind, clientId }) {
     if (!state.people.some((p) => p.id === personId)) return refuse('unknown-person');
     if (!TASKS.includes(kind)) return refuse('bad-task');
+    // v2.4: QA work is for a QA, or a lead covering for one; never an agent.
+    if (kind === 'qa' && state.people.find((p) => p.id === personId).role === 'agent') return refuse('qa-role');
     if (kind !== 'phone') {
       state.assignment[personId] = { kind };
       return OK();
@@ -296,6 +298,8 @@ function personView(state, p, weekday, breaksOf) {
     morale: p.morale,
     health: p.health,
     probationDays: p.probationDays,
+    onNotice: onNotice(state, p), // v2.4: gave notice (hiring may start)
+    seatWait: p.seatWait === true, // v2.4: a new agent waiting for a seat
     rosterShift,
     // Monday to Sunday; days missing from the roster (old saves) are 'off'.
     week: Array.from({ length: WEEKDAYS }, (_, w) => state.roster[p.id]?.[w] ?? 'off'),
@@ -382,6 +386,8 @@ export function view(state) {
     },
 
     hiring: state.hiring,
+    // v2.4: picked hires waiting for their join date.
+    joining: (state.joining ?? []).map((j) => ({ name: j.person.name, role: j.person.role, day: j.day })),
     // v1.7: needsLead opens lead hiring; leadLeaving says why while a lead still works.
     needsLead: leadNeeded,
     leadLeaving: leadNeeded && state.people.some((p) => p.role === 'lead'),

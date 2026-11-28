@@ -346,9 +346,13 @@ export function leadHireVerdict(rehired, without) {
 
 // v2.4: seeds where the play that rehired a QA kept a higher mean client
 // satisfaction over the run than the same play without a QA.
+// v2.4 (11-28): the new QA joins 42-70 days after the search (user rule), and
+// before that both runs have no QA, so the comparison starts when the QA is
+// surely in: day 30 + 70 + 20 days to settle.
+export const QA_COMPARE_FROM = 120;
 export function qaHireVerdict(rehired, without) {
   const mean = (r) => {
-    const all = r.days.flatMap((d) => Object.values(d.clients).map((c) => c.satisfaction));
+    const all = r.days.filter((d) => d.day >= QA_COMPARE_FROM).flatMap((d) => Object.values(d.clients).map((c) => c.satisfaction));
     return all.reduce((a, b) => a + b, 0) / Math.max(1, all.length);
   };
   const seeds = rehired.map((r, i) => ({ rehired: mean(r), without: mean(without[i]) }));
@@ -480,7 +484,10 @@ function decide(state, v, plan, tally) {
   if (plan.hireLead && v.needsLead && !view(state).hiring) act(state, { type: 'startHiring', role: 'lead' });
   if (plan.hireQa && v.needsQa && !view(state).hiring) act(state, { type: 'startHiring', role: 'qa' }); // v2.4
   plan.leadId = view(state).people.find((p) => p.role === 'lead')?.id;
-  if (agentsOf(v).length < v.office.seats && !view(state).hiring) act(state, { type: 'startHiring' });
+  // v2.4: a seat counts as free from an agent's notice; a hire already joining takes one.
+  const now = view(state);
+  const agentsAhead = agentsOf(now).filter((p) => !p.onNotice).length + now.joining.filter((j) => j.role === 'agent').length;
+  if (agentsAhead < now.office.seats && !now.hiring) act(state, { type: 'startHiring' });
 }
 
 // v1.2: build the next office level when the cash covers it with a reserve left.
@@ -980,7 +987,7 @@ function main() {
     check(rehire.better >= 8,
       `after the lead leaves (day 30), rehiring a lead drops fewer calls than going without (v1.7): ${rehire.better}/10 seeds (>= 8)`),
     check(qaRehire.better >= 8,
-      `after the QA leaves (day 30), rehiring a QA keeps clients happier than going without (v2.4): ${qaRehire.better}/10 seeds (>= 8)`),
+      `after the QA leaves (day 30), rehiring a QA keeps clients happier than going without (v2.4; from day ${QA_COMPARE_FROM}, once the new QA is in): ${qaRehire.better}/10 seeds (>= 8)`),
   ];
   console.log(`\n${results.filter(Boolean).length}/${results.length} checks pass (${((Date.now() - t0) / 1000).toFixed(1)} s)`);
   if (!results.every(Boolean)) process.exitCode = 1;

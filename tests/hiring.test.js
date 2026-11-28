@@ -33,6 +33,11 @@ const day = (d, gureumMet, mulbitMet) => ({
   },
 });
 const candidates = (state) => state.inbox.filter((e) => e.id === 'candidate');
+// v2.4: a picked candidate joins on the search's join date.
+function arrive(s, rng = createRng(1)) {
+  s.day = Math.max(s.day, s.joining[0].day);
+  advanceHiring(s, rng);
+}
 
 test('cannot hire without a free seat', () => {
   assert.equal(SEATS, 8);
@@ -85,6 +90,8 @@ test('a hire arrives on probation after a few days', () => {
 
   const before = new Set(s.people.map((p) => p.id));
   assert.equal(resolveEvent(s, s.inbox.indexOf(ev), 'pick-2', rng), true);
+  assert.equal(s.people.length, before.size, 'not before the join date');
+  arrive(s, rng);
   assert.equal(s.people.length, before.size + 1);
   const hire = s.people.at(-1);
   assert.ok(!before.has(hire.id));
@@ -103,6 +110,7 @@ test('a hire arrives on probation after a few days', () => {
     advanceHiring(s, rng);
   }
   resolveEvent(s, s.inbox.length - 1, 'pick-1', rng);
+  arrive(s, rng);
   assert.equal(new Set(s.people.map((p) => p.id)).size, s.people.length);
 });
 
@@ -155,7 +163,7 @@ test('v1.7 needsLead: a lead present, gone, or surely leaving', () => {
   s.leaving = [{ personId: 'l1', day: 10 }];
   assert.equal(needsLead(s), true, 'a lead who was let go is leaving');
   s.leaving = [{ personId: 'l1', day: 10, withdrawIfMoraleAbove: 50 }];
-  assert.equal(needsLead(s), false, 'a lead being talked round may stay');
+  assert.equal(needsLead(s), true, 'v2.4: hiring opens at the notice, even while talking them round');
   assert.equal(needsLead(withoutLead(makeState())), true);
 });
 
@@ -207,6 +215,7 @@ test('v1.7 a hired lead coaches on the early shift, with no probation', () => {
   const [e] = leadOffers(s);
   const chosen = s.hiring.candidates[1];
   resolveEvent(s, s.inbox.indexOf(e), 'pick-2');
+  arrive(s);
   assert.ok(s.people.includes(chosen));
   assert.equal(s.hiring, null);
   assert.deepEqual(s.roster[chosen.id], { 0: 'early', 1: 'early', 2: 'early', 3: 'early', 4: 'early' });
@@ -222,8 +231,10 @@ test('v1.7 no second lead joins while one is in place', () => {
   s.people.push(createPerson(createRng(9), { id: 'l9', role: 'lead', nation: 'veltora' }));
   const before = s.people.length;
   hireCandidate(s, 0);
+  arrive(s);
   assert.equal(s.people.length, before);
   assert.equal(s.hiring, null);
+  assert.equal(s.inbox.filter((e) => e.id === 'hire-cancelled').length, 1);
 });
 
 test('v1.7 unanswered lead candidates are held, like agent ones', () => {
@@ -263,7 +274,7 @@ test('v2.4 needsQa: a QA present, gone, or surely leaving', () => {
   s.leaving = [{ personId: qa.id, day: 10 }];
   assert.equal(needsQa(s), true);
   s.leaving = [{ personId: qa.id, day: 10, withdrawIfMoraleAbove: 50 }];
-  assert.equal(needsQa(s), false, 'a QA being talked round may stay');
+  assert.equal(needsQa(s), true, 'v2.4: hiring opens at the notice');
   assert.equal(needsQa(withoutQa(makeState())), true);
 });
 
@@ -301,6 +312,7 @@ test('v2.4 a hired QA checks calls on the late shift, no probation; never two', 
   const [e] = qaOffers(s);
   const chosen = s.hiring.candidates[0];
   resolveEvent(s, s.inbox.indexOf(e), 'pick-1');
+  arrive(s);
   assert.ok(s.people.includes(chosen));
   assert.deepEqual(s.roster[chosen.id], { 0: 'late', 1: 'late', 2: 'late', 3: 'late', 4: 'late' });
   assert.deepEqual(s.assignment[chosen.id], { kind: 'qa' });
@@ -313,6 +325,7 @@ test('v2.4 a hired QA checks calls on the late shift, no probation; never two', 
   t.people.push(createPerson(createRng(9), { id: 'q9', role: 'qa', nation: 'veltora' }));
   const before = t.people.length;
   hireCandidate(t, 0);
+  arrive(t);
   assert.equal(t.people.length, before);
 });
 

@@ -25,8 +25,12 @@ const REPRESENTATIVE = {
   'milestone-rank-s': {},
   'holiday-leave': { data: { name: '하나', holidayId: 'harvest', nationId: 'veltora' } },
   'friday-off': { data: { name: '하나', nationId: 'kamuen', fridayDay: 4 } },
-  'resign-notice': { data: { name: '하나', days: 3, leaveDay: 9 } },
-  candidate: { data: { cand1: '가을', cand2: '나무' } },
+  'resign-notice': { data: { name: '하나', months: 1, leaveDay: 9 } },
+  'resign-meeting': { data: { name: '하나', months: 1, leaveDay: 34, leadName: '가을' } },
+  'retention-kept': { data: { name: '하나', leadName: '가을' } },
+  'retention-failed': { data: { name: '하나', leadName: '가을', leaveDay: 34 } },
+  'hire-cancelled': { data: { name: '나무' } },
+  candidate: { data: { cand1: '가을', cand2: '나무', joinDay: 40 } },
   'lead-candidate': { data: { cand1: '가을', cand2: '나무', c1: 6, c2: 7.5, p1: 4.7, p2: 3 } },
   'qa-candidate': { data: { cand1: '가을', cand2: '나무', t1: ['꼼꼼함'], t2: [] } },
   'client-offer': { data: { client: '달빛몰' }, clientId: 'dalbit-mall' },
@@ -101,7 +105,7 @@ test('friday-off takes the nation name from nationId', () => {
 });
 
 test('candidate choices carry the candidate names', () => {
-  const out = eventText({ id: 'candidate', day: 2, data: { cand1: '가을', cand2: '나무' } });
+  const out = eventText({ id: 'candidate', day: 2, data: { cand1: '가을', cand2: '나무', joinDay: 30 } });
   assert.deepEqual(out.choices.map((c) => c.id), ['pick-1', 'pick-2', 'hold']);
   assert.equal(out.choices[0].label, '가을 씨를 뽑는다');
   assert.equal(out.choices[1].result.startsWith('나무 씨가'), true);

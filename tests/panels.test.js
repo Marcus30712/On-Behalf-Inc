@@ -487,5 +487,40 @@ test('v2.4 QA leaving; lead and QA both missing; people warning', () => {
   root = makeRoot();
   renderPanel(root, view(qaGone()), 'people', () => ({ ok: true }));
   assert.ok([...root.querySelectorAll('.warn')].some((w) => w.textContent === UI_TEXT.people.noQa));
-  assert.equal(UI_TEXT.people.noQa, 'QA 없음 · 통화 점검이 멈춰 있어요. 상담사에게 QA 업무를 맡길 수도 있어요.');
+  assert.equal(UI_TEXT.people.noQa, 'QA 없음 · 팀장이 코칭 시간의 절반을 통화 점검에 쓰고 있어요.');
+});
+
+test('v2.4 the task list offers QA to QA and leads, not to agents', () => {
+  const state = createGame(11);
+  const root = makeRoot();
+  renderPanel(root, view(state), 'tasks', () => ({ ok: true }));
+  const offers = (role) => {
+    const p = state.people.find((x) => x.role === role);
+    const sel = root.querySelector(`select[data-person="${p.id}"][data-field="task"]`);
+    return [...sel.options].some((o) => o.value === 'qa');
+  };
+  assert.equal(offers('agent'), false);
+  assert.equal(offers('lead'), true);
+  assert.equal(offers('qa'), true);
+});
+
+test('v2.4 no QA and no lead covering: the people warning says checks stopped', () => {
+  const state = qaGone();
+  const lead = state.people.find((p) => p.role === 'lead');
+  state.assignment[lead.id] = { kind: 'research' };
+  let root = makeRoot();
+  renderPanel(root, view(state), 'people', () => ({ ok: true }));
+  const warns = () => [...root.querySelectorAll('.warn')].map((w) => w.textContent);
+  assert.ok(warns().includes('QA 없음 · 통화 점검이 멈춰 있어요.'));
+  assert.ok(!warns().includes(UI_TEXT.people.noQa));
+  state.people = state.people.filter((p) => p !== lead);
+  root = makeRoot();
+  renderPanel(root, view(state), 'people', () => ({ ok: true }));
+  assert.ok(warns().includes(UI_TEXT.people.noQaStopped), 'no lead at all');
+});
+
+test('v2.4 QA copy: refusal, task tip, hiring note', () => {
+  assert.equal(UI_TEXT.refuse['qa-role'], 'QA 업무는 QA나 팀장만 맡을 수 있어요.');
+  assert.equal(UI_TEXT.task.qa.tip, '통화를 점검해 실수를 줄이고 만족도를 올려요. QA와 팀장만 맡을 수 있어요.');
+  assert.equal(UI_TEXT.hiring.qa.missing, '지금은 QA가 없어요. 팀장이 통화 점검을 대신하느라 코칭이 절반으로 줄었어요.');
 });

@@ -154,8 +154,8 @@ test('breaking-point effects: no-show absence, argument costs satisfaction, resi
   set(s2.people[0], { stress: 100, fatigue: 100 });
   endOfDay(s2, pickAt(2));
   const notice = ids(s2, 'resign-notice')[0];
-  assert.deepEqual(notice.data, { days: 10, leaveDay: 18, name: s2.people[0].name }); // 10 workdays after Friday day 4
-  assert.equal(notice.deadlineDay, 18);
+  assert.deepEqual(notice.data, { months: 1, leaveDay: 34, name: s2.people[0].name }); // v2.4: one month (30 days) after day 4
+  assert.equal(notice.deadlineDay, 34);
   s2.day = 7;
   endOfDay(s2, pickAt(2));
   assert.equal(ids(s2, 'resign-notice').length, 1, 'no second notice while one is open');

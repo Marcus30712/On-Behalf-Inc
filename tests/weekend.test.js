@@ -225,11 +225,12 @@ test('a Friday no-show is missed on the person\'s own next working day', () => {
   assert.deepEqual(s.absences.find((x) => x.personId === b.id), { personId: b.id, day: SAT }, 'weekend shift: Saturday');
 });
 
-test('a resignation notice counts the person\'s own working days', () => {
+// v2.4: notice is one calendar month for every agent, weekend shift or not.
+test('a resignation notice is a calendar month for weekday and weekend workers alike', () => {
   const { s, a, b } = fridayBreakingPoint((list) => list.at(-1));
   const leaveDay = (p) => s.inbox.find((e) => e.id === 'resign-notice' && e.personId === p.id).data.leaveDay;
-  assert.equal(leaveDay(a), 18, 'ten weekdays after Friday day 4');
-  assert.equal(leaveDay(b), 14, 'Sat and Sun count for a weekend worker');
+  assert.equal(leaveDay(a), 34);
+  assert.equal(leaveDay(b), 34);
 });
 
 test('only people working the weekend are asked for leave over a Sat-Sun holiday', () => {

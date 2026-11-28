@@ -106,6 +106,8 @@ const ACTIONS = {
     if (!TASKS.includes(kind)) return refuse('bad-task');
     // v2.4: QA work is for a QA, or a lead covering for one; never an agent.
     if (kind === 'qa' && state.people.find((p) => p.id === personId).role === 'agent') return refuse('qa-role');
+    // v2.4 (final review): a new agent beyond the seats trains until one frees.
+    if (kind === 'phone' && state.people.find((p) => p.id === personId).seatWait) return refuse('no-seat-yet');
     if (kind !== 'phone') {
       state.assignment[personId] = { kind };
       return OK();

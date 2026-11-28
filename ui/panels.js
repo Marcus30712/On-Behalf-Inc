@@ -291,7 +291,7 @@ function tasksPanel({ h, v, run, rerender }) {
       },
     },
     !kind && h('option', { value: '', selected: true, disabled: true }, UI_TEXT.activity.idle),
-    TASK_KINDS.filter((k) => k !== 'qa' || p.role !== 'agent').map((k) => h('option', { value: k, selected: k === kind, title: UI_TEXT.task[k].tip }, UI_TEXT.task[k].name)));
+    TASK_KINDS.filter((k) => (k !== 'qa' || p.role !== 'agent') && (k !== 'phone' || !p.seatWait)).map((k) => h('option', { value: k, selected: k === kind, title: UI_TEXT.task[k].tip }, UI_TEXT.task[k].name)));
     const current = p.task?.kind === 'phone' && !pendingPhone.has(p.id) ? p.task.clientId : '';
     const ended = current && !active.some((c) => c.id === current);
     const clientSelect = phone && h('select', {

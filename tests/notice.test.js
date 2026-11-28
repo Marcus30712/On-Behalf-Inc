@@ -8,7 +8,7 @@ import { createRng } from '../sim/rng.js';
 import { createPerson, moraleOf } from '../sim/people.js';
 import { defaultRoster } from '../sim/schedule.js';
 import { endOfDay, retainChance } from '../sim/day.js';
-import { createGame } from '../sim/game.js';
+import { createGame, act } from '../sim/game.js';
 import {
   startHiring, advanceHiring, hireCandidate, needsLead, seatWaiters,
 } from '../sim/hiring.js';
@@ -264,4 +264,28 @@ test('a save from before the joining list loads with an empty one', async () => 
   assert.deepEqual(deserialize(serialize(s)).joining, []);
   s.joining = [{ person: null, day: 3 }, 'x', { person: s.people[0], day: 'y' }];
   assert.deepEqual(deserialize(serialize(s)).joining, [], 'malformed entries are dropped');
+});
+
+test('final review: a new agent waiting for a seat cannot take the phone until one frees', () => {
+  const s = createGame(5);
+  s.cash = 100000;
+  const leaver = s.people.find((p) => p.role === 'agent');
+  s.leaving.push({ personId: leaver.id, day: 40 });
+  startHiring(s);
+  pickedAgent(s);
+  s.day = s.joining[0].day;
+  const picked = s.joining[0].person;
+  advanceHiring(s, lowInt());
+  const client = s.clients.find((c) => c.active).id;
+  assert.deepEqual(act(s, { type: 'assign', personId: picked.id, kind: 'phone', clientId: client }), { ok: false, reason: 'no-seat-yet' });
+  assert.deepEqual(s.assignment[picked.id], { kind: 'training' });
+  assert.deepEqual(act(s, { type: 'assign', personId: picked.id, kind: 'coaching' }), { ok: true }, 'other tasks are fine');
+  const r = root();
+  renderPanel(r, view(s), 'tasks', () => ({ ok: true }));
+  const sel = r.querySelector(`select[data-person="${picked.id}"][data-field="task"]`);
+  assert.ok(![...sel.options].some((o) => o.value === 'phone'), 'no phone option while waiting');
+  assert.equal(UI_TEXT.refuse['no-seat-yet'], '빈 좌석이 날 때까지는 상담을 맡길 수 없어요. 그동안 교육을 받아요.');
+  s.people = s.people.filter((p) => p !== leaver);
+  seatWaiters(s);
+  assert.deepEqual(act(s, { type: 'assign', personId: picked.id, kind: 'phone', clientId: client }), { ok: true });
 });
